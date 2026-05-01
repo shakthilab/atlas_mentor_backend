@@ -80,10 +80,11 @@ public class AuthService {
         user.setVerificationToken(verificationToken);
         user.setVerificationTokenExpiresAt(LocalDateTime.now().plusHours(24));
 
+        // Assign STUDENT role to registered users before saving
+        Role studentRole = roleService.findRole("STUDENT");
+        user.setRole(studentRole);
+
         User savedUser = userRepository.save(user);
-        
-        // Assign STUDENT role to registered users
-        roleService.assignRolesToUser(savedUser.getId(), "STUDENT");
         
         emailService.sendVerificationEmail(savedUser.getEmail(), verificationToken);
         

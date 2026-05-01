@@ -71,7 +71,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("SELECT u FROM User u WHERE u.role.name IN ('JUNIOR_COUNSELLOR', 'COUNSELLOR')")
     List<User> findAllJuniorCounsellors();
     
-    @Query("SELECT COUNT(s) FROM Student s WHERE s.assignedBy = :counsellorId")
+    @Query("SELECT COUNT(s) FROM Student s WHERE s.assignedBy.id = :counsellorId")
     Long countStudentsByCounsellorId(@Param("counsellorId") Long counsellorId);
     
     @Query("SELECT u FROM User u WHERE u.role.name NOT IN :excludedRoles AND (:roleId IS NULL OR u.role.id = :roleId)")

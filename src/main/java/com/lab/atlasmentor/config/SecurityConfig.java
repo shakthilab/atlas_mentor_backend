@@ -51,6 +51,8 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/api/mobile-country-codes/**").permitAll()
                 .requestMatchers("/api/students/register").permitAll()
+                .requestMatchers("/api/countries").permitAll()
+                .requestMatchers("/api/universities/country/**").permitAll()
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 .requestMatchers("/api/manager/**").hasAnyRole("ADMIN", "MANAGER")
                 .requestMatchers("/api/employee/**").hasAnyRole("ADMIN", "MANAGER", "EMPLOYEE")

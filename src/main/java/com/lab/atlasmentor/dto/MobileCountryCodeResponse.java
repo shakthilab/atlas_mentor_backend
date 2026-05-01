@@ -15,6 +15,8 @@ public class MobileCountryCodeResponse {
     private String isoAlpha2;
     private String isoAlpha3;
     private Boolean isActive;
+    private String flagUrl;
+    private Integer mobileNumberLength;
     
     public static MobileCountryCodeResponse fromEntity(com.lab.atlasmentor.model.MobileCountryCode entity) {
         MobileCountryCodeResponse response = new MobileCountryCodeResponse();
@@ -25,6 +27,8 @@ public class MobileCountryCodeResponse {
         response.setIsoAlpha2(entity.getIsoAlpha2());
         response.setIsoAlpha3(entity.getIsoAlpha3());
         response.setIsActive(entity.getIsActive());
+        response.setFlagUrl(entity.getFlagUrl());
+        response.setMobileNumberLength(entity.getMobileNumberLength());
         return response;
     }
 }

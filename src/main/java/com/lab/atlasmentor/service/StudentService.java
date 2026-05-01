@@ -4,9 +4,17 @@ import com.lab.atlasmentor.dto.StudentRegistrationRequest;
 import com.lab.atlasmentor.model.Student;
 import com.lab.atlasmentor.model.StudentNote;
 import com.lab.atlasmentor.model.User;
+import com.lab.atlasmentor.model.Country;
+import com.lab.atlasmentor.model.University;
+import com.lab.atlasmentor.model.Branch;
+import com.lab.atlasmentor.model.MobileCountryCode;
 import com.lab.atlasmentor.repository.StudentRepository;
 import com.lab.atlasmentor.repository.StudentNoteRepository;
 import com.lab.atlasmentor.repository.UserRepository;
+import com.lab.atlasmentor.repository.CountryRepository;
+import com.lab.atlasmentor.repository.UniversityRepository;
+import com.lab.atlasmentor.repository.BranchRepository;
+import com.lab.atlasmentor.repository.MobileCountryCodeRepository;
 import com.lab.atlasmentor.enums.StudentStatus;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -29,6 +37,18 @@ public class StudentService {
     @Autowired
     private AuthService authService;
 
+    @Autowired
+    private CountryRepository countryRepository;
+
+    @Autowired
+    private UniversityRepository universityRepository;
+
+    @Autowired
+    private BranchRepository branchRepository;
+
+    @Autowired
+    private MobileCountryCodeRepository mobileCountryCodeRepository;
+
     @Transactional
     public Student registerStudent(StudentRegistrationRequest request) {
         // First register the user account
@@ -43,13 +63,39 @@ public class StudentService {
         
         // Create student record
         Student student = new Student();
-        student.setFirstName(request.getFirstName());
-        student.setLastName(request.getLastName());
+        student.setUser(user);
         student.setEmail(request.getEmail());
         student.setPhone(request.getPhone());
         student.setStatus(StudentStatus.LEAD);
-        student.setBranchId(1L); // Default branch - you may want to make this configurable
+        
+        // Branch is optional for students - leave as null for now
+        
         student.setCreatedBy(user);
+        
+        // Set mobile country code if provided
+        if (request.getMobileCountryCodeId() != null) {
+            MobileCountryCode mobileCountryCode = mobileCountryCodeRepository.findById(request.getMobileCountryCodeId())
+                .orElseThrow(() -> new RuntimeException("Mobile country code not found with id: " + request.getMobileCountryCodeId()));
+            student.setMobileCountryCode(mobileCountryCode);
+        }
+        
+        // Set country and university if provided
+        if (request.getCountryId() != null) {
+            Country country = countryRepository.findById(request.getCountryId())
+                .orElseThrow(() -> new RuntimeException("Country not found with id: " + request.getCountryId()));
+            student.setCountry(country);
+        }
+        
+        if (request.getUniversityId() != null) {
+            University university = universityRepository.findById(request.getUniversityId())
+                .orElseThrow(() -> new RuntimeException("University not found with id: " + request.getUniversityId()));
+            student.setUniversity(university);
+        }
+        
+        // Set notes if provided
+        if (request.getNotes() != null && !request.getNotes().trim().isEmpty()) {
+            student.setNotes(request.getNotes());
+        }
         
         Student savedStudent = studentRepository.save(student);
         
@@ -68,8 +114,8 @@ public class StudentService {
     }
 
     private boolean hasAcademicData(StudentRegistrationRequest request) {
-        return (request.getPreferredCountry() != null && !request.getPreferredCountry().trim().isEmpty()) ||
-               (request.getPreferredUniversity() != null && !request.getPreferredUniversity().trim().isEmpty()) ||
+        return (request.getCountryId() != null) ||
+               (request.getUniversityId() != null) ||
                (request.getCourse() != null && !request.getCourse().trim().isEmpty()) ||
                (request.getIntake() != null && !request.getIntake().trim().isEmpty()) ||
                (request.getReferralCode() != null && !request.getReferralCode().trim().isEmpty()) ||
@@ -86,8 +132,6 @@ public class StudentService {
         note.setCreatedBy(student.getCreatedBy());
         
         // Set individual fields directly
-        note.setPreferredCountry(request.getPreferredCountry());
-        note.setPreferredUniversity(request.getPreferredUniversity());
         note.setCourse(request.getCourse());
         note.setIntake(request.getIntake());
         note.setReferralCode(request.getReferralCode());

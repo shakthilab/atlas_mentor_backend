@@ -30,6 +30,12 @@ public class MobileCountryCode extends BaseEntity {
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
     
+    @Column(name = "flag_url", length = 254)
+    private String flagUrl;
+    
+    @Column(name = "mobile_number_length")
+    private Integer mobileNumberLength;
+    
     public MobileCountryCode() {}
     
     public MobileCountryCode(String countryName, String countryCode, String mobileCode, 
