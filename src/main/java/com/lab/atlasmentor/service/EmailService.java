@@ -4,7 +4,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
+import jakarta.mail.internet.MimeMessage;
 
 @Service
 public class EmailService {
@@ -21,16 +23,26 @@ public class EmailService {
     public void sendVerificationEmail(String toEmail, String verificationToken) {
         String verificationLink = frontendUrl + "/verify-email?token=" + verificationToken;
         
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setFrom(fromEmail);
-        message.setTo(toEmail);
-        message.setSubject("Email Verification - Atlas Mentor");
-        message.setText("Please click the following link to verify your email address:\n\n" +
-                       verificationLink + "\n\n" +
-                       "This link will expire in 24 hours.\n\n" +
-                       "If you did not create an account, please ignore this email.");
-        
-        mailSender.send(message);
+        try {
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true);
+            
+            helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject("Email Verification - Atlas Mentor");
+            
+            String htmlContent = "<html><body>" +
+                    "<p>Please click the following link to verify your email address:</p>" +
+                    "<p><a href=\"" + verificationLink + "\">Verify Email Address</a></p>" +
+                    "<p>This link will expire in 24 hours.</p>" +
+                    "<p>If you did not create an account, please ignore this email.</p>" +
+                    "</body></html>";
+            
+            helper.setText(htmlContent, true);
+            mailSender.send(mimeMessage);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to send verification email", e);
+        }
     }
 
     public void sendPasswordResetEmail(String toEmail, String resetToken) {
