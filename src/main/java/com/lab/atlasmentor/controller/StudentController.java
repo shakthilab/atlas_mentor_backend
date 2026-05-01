@@ -8,6 +8,11 @@ import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import com.lab.atlasmentor.enums.StudentStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -43,4 +48,22 @@ public class StudentController {
             return ResponseEntity.badRequest().body(response);
         }
     }
+
+    @GetMapping
+    public ResponseEntity<ApiResponse<Page<Student>>> getAllStudents(
+            @RequestParam(required = false) StudentStatus status,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "createdAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String direction) {
+        
+        Sort sort = direction.equalsIgnoreCase("asc") ? Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
+        Pageable pageable = PageRequest.of(page, size, sort);
+        
+        Page<Student> students = studentService.getAllStudents(status, search, pageable);
+        ApiResponse<Page<Student>> response = ApiResponse.success("Students retrieved successfully", students);
+        return ResponseEntity.ok(response);
+    }
 }
+

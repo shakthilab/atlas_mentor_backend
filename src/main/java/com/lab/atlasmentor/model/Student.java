@@ -2,6 +2,7 @@ package com.lab.atlasmentor.model;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import com.lab.atlasmentor.model.MobileCountryCode;
 import com.lab.atlasmentor.enums.StudentStatus;
 
@@ -10,6 +11,7 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "students")
 @Data
+@EqualsAndHashCode(callSuper = true)
 public class Student extends BaseEntity {
     
     @Id
@@ -53,7 +55,14 @@ public class Student extends BaseEntity {
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
     
+    @OneToMany(mappedBy = "student", cascade = CascadeType.ALL, orphanRemoval = true)
+    private java.util.List<StudentAcademicHistory> academicHistories;
+    
+    @OneToMany(mappedBy = "student", cascade = CascadeType.ALL, orphanRemoval = true)
+    private java.util.List<Document> documents;
+    
     public Student() {}
+
     
     public Student(User user, Branch branch, User createdBy) {
         this.user = user;

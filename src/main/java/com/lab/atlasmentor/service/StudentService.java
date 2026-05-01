@@ -17,6 +17,8 @@ import com.lab.atlasmentor.repository.BranchRepository;
 import com.lab.atlasmentor.repository.MobileCountryCodeRepository;
 import com.lab.atlasmentor.enums.StudentStatus;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -113,7 +115,16 @@ public class StudentService {
                 .orElseThrow(() -> new RuntimeException("Student not found with id: " + id));
     }
 
+    public Page<Student> getAllStudents(StudentStatus status, String search, Pageable pageable) {
+        String searchParam = (search != null && !search.trim().isEmpty()) ? "%" + search.toLowerCase() + "%" : "%";
+        return studentRepository.findByFilters(status, searchParam, pageable);
+    }
+
+
+
+
     private boolean hasAcademicData(StudentRegistrationRequest request) {
+
         return (request.getCountryId() != null) ||
                (request.getUniversityId() != null) ||
                (request.getCourse() != null && !request.getCourse().trim().isEmpty()) ||

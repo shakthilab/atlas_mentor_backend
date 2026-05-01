@@ -40,7 +40,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
            "WHERE (:role IS NULL OR r.name = :role) " +
            "AND (:branch IS NULL OR u.branch_id = :branch) " +
            "AND (:search IS NULL OR " +
-           "CAST(u.name AS TEXT) LIKE CONCAT('%', :search, '%') OR " +
+           "CAST(u.first_name AS TEXT) LIKE CONCAT('%', :search, '%') OR " +
+           "CAST(u.last_name AS TEXT) LIKE CONCAT('%', :search, '%') OR " +
            "CAST(u.email AS TEXT) LIKE CONCAT('%', :search, '%') OR " +
            "CAST(r.name AS TEXT) LIKE CONCAT('%', :search, '%')) " +
            "AND r.name IN :employeeRoleNames", 
