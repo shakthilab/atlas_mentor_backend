@@ -76,10 +76,23 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("SELECT COUNT(s) FROM Student s WHERE s.assignedBy.id = :counsellorId")
     Long countStudentsByCounsellorId(@Param("counsellorId") Long counsellorId);
     
+    @Query("SELECT u FROM User u WHERE u.role.name NOT IN :excludedRoles AND (:roleId IS NULL OR u.role.id = :roleId) AND (:branchId IS NULL OR u.branch.id = :branchId)")
+    List<User> findUsersExcludingRolesWithRoleIdAndBranchId(@Param("excludedRoles") List<String> excludedRoles, @Param("roleId") Long roleId, @Param("branchId") Long branchId);
+    
     @Query("SELECT u FROM User u WHERE u.role.name NOT IN :excludedRoles AND (:roleId IS NULL OR u.role.id = :roleId)")
     List<User> findUsersExcludingRolesWithRoleId(@Param("excludedRoles") List<String> excludedRoles, @Param("roleId") Long roleId);
     
+    @Query("SELECT u FROM User u WHERE u.role.name NOT IN :excludedRoles AND (:branchId IS NULL OR u.branch.id = :branchId)")
+    List<User> findUsersExcludingRolesWithBranchId(@Param("excludedRoles") List<String> excludedRoles, @Param("branchId") Long branchId);
+    
     @Query("SELECT u FROM User u WHERE u.role.name NOT IN :excludedRoles")
     List<User> findUsersExcludingRoles(@Param("excludedRoles") List<String> excludedRoles);
+    
+    // Count methods for staff and students
+    @Query("SELECT COUNT(u) FROM User u WHERE u.branch.id = :branchId AND u.role.name IN :staffRoles")
+    Long countStaffsByBranchId(@Param("branchId") Long branchId, @Param("staffRoles") List<String> staffRoles);
+    
+    @Query("SELECT COUNT(u) FROM User u WHERE u.branch.id = :branchId AND u.role.name = 'STUDENT'")
+    Long countStudentsByBranchId(@Param("branchId") Long branchId);
     
 }

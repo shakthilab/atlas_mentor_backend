@@ -66,6 +66,10 @@ public class BranchService {
         return branchRepository.findAll();
     }
 
+    public List<Branch> getAllBranchesIncludingInactive() {
+        return branchRepository.findAll();
+    }
+
     public Branch updateBranch(Long id, Branch branchDetails, Long managerId) {
         Optional<Branch> optionalBranch = branchRepository.findById(id);
         if (optionalBranch.isEmpty()) {

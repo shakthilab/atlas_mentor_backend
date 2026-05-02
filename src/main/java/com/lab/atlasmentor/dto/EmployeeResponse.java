@@ -20,13 +20,14 @@ public class EmployeeResponse {
     private User createdBy;
     private User updatedBy;
     private MobileCountryCodeDto mobileCountryCode;
+    private TaskCount taskCount;
 
     public EmployeeResponse() {}
 
     public EmployeeResponse(Long id, String name, String email, String phone, Long branchId, BranchDto branch,
                          String status, Boolean isVerified, RoleDto role, 
                          LocalDateTime createdAt, LocalDateTime updatedAt, User createdBy, User updatedBy,
-                         MobileCountryCodeDto mobileCountryCode) {
+                         MobileCountryCodeDto mobileCountryCode, TaskCount taskCount) {
         this.id = id;
         this.name = name;
         this.email = email;
@@ -41,6 +42,7 @@ public class EmployeeResponse {
         this.createdBy = createdBy;
         this.updatedBy = updatedBy;
         this.mobileCountryCode = mobileCountryCode;
+        this.taskCount = taskCount;
     }
 
     // Getters and Setters
@@ -85,6 +87,33 @@ public class EmployeeResponse {
 
     public MobileCountryCodeDto getMobileCountryCode() { return mobileCountryCode; }
     public void setMobileCountryCode(MobileCountryCodeDto mobileCountryCode) { this.mobileCountryCode = mobileCountryCode; }
+
+    public TaskCount getTaskCount() { return taskCount; }
+    public void setTaskCount(TaskCount taskCount) { this.taskCount = taskCount; }
+
+    // TaskCount nested class
+    public static class TaskCount {
+        private Long pending;
+        private Long inProgress;
+        private Long completed;
+
+        public TaskCount() {}
+
+        public TaskCount(Long pending, Long inProgress, Long completed) {
+            this.pending = pending;
+            this.inProgress = inProgress;
+            this.completed = completed;
+        }
+
+        public Long getPending() { return pending; }
+        public void setPending(Long pending) { this.pending = pending; }
+
+        public Long getInProgress() { return inProgress; }
+        public void setInProgress(Long inProgress) { this.inProgress = inProgress; }
+
+        public Long getCompleted() { return completed; }
+        public void setCompleted(Long completed) { this.completed = completed; }
+    }
 
     // RoleDto nested class
     public static class RoleDto {

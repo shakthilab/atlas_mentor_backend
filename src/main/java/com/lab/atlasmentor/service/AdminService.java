@@ -88,12 +88,16 @@ public class AdminService {
                 .collect(Collectors.toList());
     }
 
-    public List<UserResponse> getUsersExcludingAdminAndStudent(Long roleId) {
+    public List<UserResponse> getUsersExcludingAdminAndStudent(Long roleId, Long branchId) {
         List<String> excludedRoles = List.of("ADMIN", "STUDENT");
         List<User> users;
         
-        if (roleId != null) {
+        if (roleId != null && branchId != null) {
+            users = userRepository.findUsersExcludingRolesWithRoleIdAndBranchId(excludedRoles, roleId, branchId);
+        } else if (roleId != null) {
             users = userRepository.findUsersExcludingRolesWithRoleId(excludedRoles, roleId);
+        } else if (branchId != null) {
+            users = userRepository.findUsersExcludingRolesWithBranchId(excludedRoles, branchId);
         } else {
             users = userRepository.findUsersExcludingRoles(excludedRoles);
         }
@@ -103,8 +107,12 @@ public class AdminService {
                 .collect(Collectors.toList());
     }
 
+    public List<UserResponse> getUsersExcludingAdminAndStudent(Long roleId) {
+        return getUsersExcludingAdminAndStudent(roleId, null);
+    }
+
     public List<UserResponse> getUsersExcludingAdminAndStudent() {
-        return getUsersExcludingAdminAndStudent(null);
+        return getUsersExcludingAdminAndStudent(null, null);
     }
 
     public List<UserResponse> getUsersByRole(String roleName) {
@@ -510,6 +518,18 @@ public class AdminService {
             lastName = null; // Companies don't need lastName
         }
         
+        // Get staff and student counts for companies
+        UserResponse.UserCounts userCounts = null;
+        if (primaryRole != null && "COMPANY".equals(primaryRole.getName()) && user.getBranchId() != null) {
+            // Define staff roles (excluding ADMIN as they don't belong to branches)
+            List<String> staffRoles = List.of("MANAGER", "VIDEO_EDITOR", "JUNIOR_COUNSELLOR", "SENIOR_COUNSELLOR", "COUNSELLOR");
+            
+            Long totalStaffs = userRepository.countStaffsByBranchId(user.getBranchId(), staffRoles);
+            Long totalStudents = userRepository.countStudentsByBranchId(user.getBranchId());
+            
+            userCounts = new UserResponse.UserCounts(totalStaffs, totalStudents);
+        }
+        
         return new UserResponse(
                 user.getId(),
                 firstName,
@@ -524,7 +544,8 @@ public class AdminService {
                 user.getUpdatedAt(),
                 referralType,
                 companyDetails,
-                assignedToUsername
+                assignedToUsername,
+                userCounts
         );
     }
 

@@ -11,6 +11,7 @@ public class BranchResponse {
     private UserStatus status;
     private LocalDateTime createdAt;
     private ManagerInfo manager;
+    private UserCounts userCounts;
     
     public static class ManagerInfo {
         private Long id;
@@ -60,6 +61,15 @@ public class BranchResponse {
         this.createdAt = createdAt;
     }
 
+    public BranchResponse(Long id, String name, String location, UserStatus status, LocalDateTime createdAt, UserCounts userCounts) {
+        this.id = id;
+        this.name = name;
+        this.location = location;
+        this.status = status;
+        this.createdAt = createdAt;
+        this.userCounts = userCounts;
+    }
+
     public Long getId() {
         return id;
     }
@@ -106,5 +116,32 @@ public class BranchResponse {
 
     public void setManager(ManagerInfo manager) {
         this.manager = manager;
+    }
+
+    public UserCounts getUserCounts() {
+        return userCounts;
+    }
+
+    public void setUserCounts(UserCounts userCounts) {
+        this.userCounts = userCounts;
+    }
+
+    // UserCounts nested class
+    public static class UserCounts {
+        private Long totalStaffs;
+        private Long totalStudents;
+
+        public UserCounts() {}
+
+        public UserCounts(Long totalStaffs, Long totalStudents) {
+            this.totalStaffs = totalStaffs;
+            this.totalStudents = totalStudents;
+        }
+
+        public Long getTotalStaffs() { return totalStaffs; }
+        public void setTotalStaffs(Long totalStaffs) { this.totalStaffs = totalStaffs; }
+
+        public Long getTotalStudents() { return totalStudents; }
+        public void setTotalStudents(Long totalStudents) { this.totalStudents = totalStudents; }
     }
 }

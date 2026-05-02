@@ -7,6 +7,7 @@ import com.lab.atlasmentor.dto.EmployeeResponse;
 import com.lab.atlasmentor.dto.LoginRequest;
 import com.lab.atlasmentor.dto.RegisterRequest;
 import com.lab.atlasmentor.enums.EmployeeType;
+import com.lab.atlasmentor.enums.TaskStatus;
 import com.lab.atlasmentor.enums.UserStatus;
 import com.lab.atlasmentor.model.Branch;
 import com.lab.atlasmentor.model.EmployeeDetails;
@@ -15,6 +16,7 @@ import com.lab.atlasmentor.model.Role;
 import com.lab.atlasmentor.model.User;
 import com.lab.atlasmentor.repository.EmployeeDetailsRepository;
 import com.lab.atlasmentor.repository.MobileCountryCodeRepository;
+import com.lab.atlasmentor.repository.TaskRepository;
 import com.lab.atlasmentor.repository.UserRepository;
 import com.lab.atlasmentor.service.BranchCacheService;
 import com.lab.atlasmentor.service.BranchService;
@@ -72,6 +74,9 @@ public class AuthService {
     
     @Autowired
     private MobileCountryCodeRepository mobileCountryCodeRepository;
+
+    @Autowired
+    private TaskRepository taskRepository;
 
     public User register(RegisterRequest registerRequest) {
         if (userRepository.existsByEmail(registerRequest.getEmail())) {
@@ -339,6 +344,15 @@ public class AuthService {
                 )
                 : null;
             
+            // Get task counts for the employee
+            Long pendingTaskCount = taskRepository.countByAssignedToIdAndStatus(user.getId(), TaskStatus.TO_DO);
+            Long inProgressTaskCount = taskRepository.countByAssignedToIdAndStatus(user.getId(), TaskStatus.IN_PROGRESS);
+            Long completedTaskCount = taskRepository.countByAssignedToIdAndStatus(user.getId(), TaskStatus.DONE);
+            
+            EmployeeResponse.TaskCount taskCount = new EmployeeResponse.TaskCount(
+                pendingTaskCount, inProgressTaskCount, completedTaskCount
+            );
+            
             return new EmployeeResponse(
                 user.getId(),
                 user.getFullName(),
@@ -353,7 +367,8 @@ public class AuthService {
                 user.getUpdatedAt(),
                 user.getCreatedBy(),
                 user.getUpdatedBy(),
-                mccDto
+                mccDto,
+                taskCount
             );
         });
     }
@@ -428,6 +443,15 @@ public class AuthService {
             )
             : null;
         
+        // Get task counts for the employee
+        Long pendingTaskCount = taskRepository.countByAssignedToIdAndStatus(user.getId(), TaskStatus.TO_DO);
+        Long inProgressTaskCount = taskRepository.countByAssignedToIdAndStatus(user.getId(), TaskStatus.IN_PROGRESS);
+        Long completedTaskCount = taskRepository.countByAssignedToIdAndStatus(user.getId(), TaskStatus.DONE);
+        
+        EmployeeResponse.TaskCount taskCount = new EmployeeResponse.TaskCount(
+            pendingTaskCount, inProgressTaskCount, completedTaskCount
+        );
+        
         return new EmployeeResponse(
             user.getId(),
             user.getFullName(),
@@ -442,7 +466,8 @@ public class AuthService {
             user.getUpdatedAt(),
             user.getCreatedBy(),
             user.getUpdatedBy(),
-            mccDto
+            mccDto,
+            taskCount
         );
     }
     

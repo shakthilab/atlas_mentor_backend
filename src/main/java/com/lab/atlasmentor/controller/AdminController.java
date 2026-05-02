@@ -80,9 +80,10 @@ public class AdminController {
 
     @GetMapping("/get-all-employee")
     public ResponseEntity<ApiResponse<List<UserResponse>>> getUsersExcludingAdminAndStudent(
-            @RequestParam(required = false) Long roleId) {
+            @RequestParam(required = false) Long roleId,
+            @RequestParam(required = false) Long branchId) {
         try {
-            List<UserResponse> users = adminService.getUsersExcludingAdminAndStudent(roleId);
+            List<UserResponse> users = adminService.getUsersExcludingAdminAndStudent(roleId, branchId);
             ApiResponse<List<UserResponse>> response = ApiResponse.success("Users retrieved successfully", users);
             return ResponseEntity.ok(response);
         } catch (Exception e) {

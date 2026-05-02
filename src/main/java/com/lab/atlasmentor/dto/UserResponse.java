@@ -24,11 +24,12 @@ public class UserResponse {
     private ReferralType referralType;
     private CompanyDetailsResponse companyDetails;
     private String assignedToUsername;
+    private UserCounts userCounts;
     
     public UserResponse(Long id, String firstName, String lastName, String email, String phone, Role role, 
                        UserStatus status, Boolean isVerified, BranchResponse branch, 
                        LocalDateTime createdAt, LocalDateTime updatedAt, ReferralType referralType, 
-                       CompanyDetailsResponse companyDetails, String assignedToUsername) {
+                       CompanyDetailsResponse companyDetails, String assignedToUsername, UserCounts userCounts) {
         this.id = id;
         this.firstName = firstName;
         this.lastName = lastName;
@@ -43,5 +44,25 @@ public class UserResponse {
         this.referralType = referralType;
         this.companyDetails = companyDetails;
         this.assignedToUsername = assignedToUsername;
+        this.userCounts = userCounts;
+    }
+    
+    // UserCounts nested class
+    public static class UserCounts {
+        private Long totalStaffs;
+        private Long totalStudents;
+
+        public UserCounts() {}
+
+        public UserCounts(Long totalStaffs, Long totalStudents) {
+            this.totalStaffs = totalStaffs;
+            this.totalStudents = totalStudents;
+        }
+
+        public Long getTotalStaffs() { return totalStaffs; }
+        public void setTotalStaffs(Long totalStaffs) { this.totalStaffs = totalStaffs; }
+
+        public Long getTotalStudents() { return totalStudents; }
+        public void setTotalStudents(Long totalStudents) { this.totalStudents = totalStudents; }
     }
 }

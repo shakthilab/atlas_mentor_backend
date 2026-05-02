@@ -91,6 +91,9 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
     @Query("SELECT COUNT(t) FROM Task t WHERE t.isDeleted = false")
     long countAllActiveTasks();
 
+    @Query("SELECT COUNT(t) FROM Task t WHERE t.isDeleted = false AND t.assignedTo.id = :userId AND t.status = :status")
+    long countByAssignedToIdAndStatus(@Param("userId") Long userId, @Param("status") TaskStatus status);
+
     // Search functionality
     @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND (t.title LIKE %:keyword% OR t.description LIKE %:keyword%)")
     List<Task> searchByKeyword(@Param("keyword") String keyword);

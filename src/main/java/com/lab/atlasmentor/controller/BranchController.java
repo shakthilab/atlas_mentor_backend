@@ -10,6 +10,7 @@ import com.lab.atlasmentor.dto.UnassignedEmployeeResponse;
 import com.lab.atlasmentor.enums.UserStatus;
 import com.lab.atlasmentor.model.Branch;
 import com.lab.atlasmentor.model.User;
+import com.lab.atlasmentor.repository.UserRepository;
 import com.lab.atlasmentor.service.BranchService;
 import com.lab.atlasmentor.service.AdminService;
 import com.lab.atlasmentor.util.SecurityUtil;
@@ -35,6 +36,9 @@ public class BranchController {
 
     @Autowired
     private SecurityUtil securityUtil;
+
+    @Autowired
+    private UserRepository userRepository;
 
     @PostMapping
     public ResponseEntity<ApiResponse<BranchResponse>> createBranch(
@@ -80,9 +84,15 @@ public class BranchController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<BranchResponse>>> getAllBranches() {
+    public ResponseEntity<ApiResponse<List<BranchResponse>>> getAllBranches(
+            @RequestParam(defaultValue = "false") boolean includeInactive) {
         try {
-            List<Branch> branches = branchService.getAllBranches();
+            List<Branch> branches;
+            if (includeInactive) {
+                branches = branchService.getAllBranchesIncludingInactive();
+            } else {
+                branches = branchService.getAllBranches();
+            }
             List<BranchResponse> branchResponses = branches.stream()
                     .map(this::convertToBranchResponse)
                     .collect(Collectors.toList());
@@ -156,12 +166,21 @@ public class BranchController {
     }
 
     private BranchResponse convertToBranchResponse(Branch branch) {
+        // Get staff and student counts for the branch
+        List<String> staffRoles = List.of("MANAGER", "VIDEO_EDITOR", "JUNIOR_COUNSELLOR", "SENIOR_COUNSELLOR", "COUNSELLOR");
+        
+        Long totalStaffs = userRepository.countStaffsByBranchId(branch.getId(), staffRoles);
+        Long totalStudents = userRepository.countStudentsByBranchId(branch.getId());
+        
+        BranchResponse.UserCounts userCounts = new BranchResponse.UserCounts(totalStaffs, totalStudents);
+        
         BranchResponse response = new BranchResponse(
                 branch.getId(),
                 branch.getName(),
                 branch.getLocation(),
                 branch.getStatus(),
-                branch.getCreatedAt()
+                branch.getCreatedAt(),
+                userCounts
         );
         
         // Set manager information if present
