@@ -101,4 +101,18 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
     // Soft delete support
     @Query("SELECT t FROM Task t WHERE t.id = :id AND t.isDeleted = false")
     Optional<Task> findActiveTaskById(@Param("id") Long id);
+    
+    // Branch-based access control methods
+    @Query(value = "SELECT t.* FROM tasks t WHERE t.is_deleted = false AND " +
+            "(:isAdmin = true OR (:isAdmin = false AND t.assigned_to = :currentUserId))", nativeQuery = true)
+    List<Task> findAllWithAccess(@Param("isAdmin") boolean isAdmin, @Param("branchId") Long branchId, @Param("currentUserId") Long currentUserId);
+    
+    @Query(value = "SELECT t.* FROM tasks t WHERE (:isAdmin = true OR t.branch_id = :branchId) AND t.is_deleted = false AND t.status = :status", nativeQuery = true)
+    List<Task> findByStatusWithAccess(@Param("status") String status, @Param("isAdmin") boolean isAdmin, @Param("branchId") Long branchId);
+    
+    @Query(value = "SELECT t.* FROM tasks t WHERE (:isAdmin = true OR t.branch_id = :branchId) AND t.is_deleted = false AND t.assigned_to = :userId", nativeQuery = true)
+    List<Task> findByAssignedToIdWithAccess(@Param("userId") Long userId, @Param("isAdmin") boolean isAdmin, @Param("branchId") Long branchId);
+    
+    @Query(value = "SELECT COUNT(t) FROM tasks t WHERE (:isAdmin = true OR t.branch_id = :branchId) AND t.is_deleted = false AND t.status = :status", nativeQuery = true)
+    long countByStatusWithAccess(@Param("status") String status, @Param("isAdmin") boolean isAdmin, @Param("branchId") Long branchId);
 }

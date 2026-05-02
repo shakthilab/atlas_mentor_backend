@@ -5,7 +5,7 @@ import com.lab.atlasmentor.enums.TaskStatus;
 import com.lab.atlasmentor.enums.Priority;
 import com.lab.atlasmentor.model.User;
 import com.lab.atlasmentor.service.TaskService;
-import com.lab.atlasmentor.util.SecurityUtil;
+import com.lab.atlasmentor.security.SecurityUtils;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,8 +25,7 @@ public class TaskController {
 
     private final TaskService taskService;
 
-    @Autowired
-    private SecurityUtil securityUtil;
+    // SecurityUtil removed - now using SecurityUtils directly
 
     @PostMapping
     public ResponseEntity<TaskResponse> createTask(
@@ -34,11 +33,17 @@ public class TaskController {
             @Valid @RequestBody CreateTaskRequest request) {
         log.info("Create task request: {}", request.getTitle());
         
-        // Extract current user from token
-        User currentUser = securityUtil.extractUserFromToken(token);
-        
-        TaskResponse response = taskService.createTask(request, currentUser.getId());
-        return ResponseEntity.ok(response);
+        try {
+            // Extract current user using SecurityUtils
+            Long currentUserId = SecurityUtils.getCurrentUserId();
+            log.info("Current user ID extracted: {}", currentUserId);
+            
+            TaskResponse response = taskService.createTask(request, currentUserId);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Error creating task: {}", e.getMessage(), e);
+            return ResponseEntity.status(500).body(null);
+        }
     }
 
     @GetMapping
@@ -83,10 +88,10 @@ public class TaskController {
             @Valid @RequestBody UpdateTaskStatusRequest request) {
         log.info("Update task status request for ID: {} to status: {}", id, request.getStatus());
         
-        // Extract current user from token
-        User currentUser = securityUtil.extractUserFromToken(token);
+        // Extract current user using SecurityUtils
+        Long currentUserId = SecurityUtils.getCurrentUserId();
         
-        TaskResponse response = taskService.updateTaskStatus(id, request.getStatus(), currentUser.getId());
+        TaskResponse response = taskService.updateTaskStatus(id, request.getStatus(), currentUserId);
         return ResponseEntity.ok(response);
     }
 
@@ -97,10 +102,10 @@ public class TaskController {
             @Valid @RequestBody AssignTaskRequest request) {
         log.info("Assign task request for ID: {} to user: {}", id, request.getAssignedToId());
         
-        // Extract current user from token
-        User currentUser = securityUtil.extractUserFromToken(token);
+        // Extract current user using SecurityUtils
+        Long currentUserId = SecurityUtils.getCurrentUserId();
         
-        TaskResponse response = taskService.assignTask(id, request.getAssignedToId(), currentUser.getId());
+        TaskResponse response = taskService.assignTask(id, request.getAssignedToId(), currentUserId);
         return ResponseEntity.ok(response);
     }
 
@@ -111,10 +116,10 @@ public class TaskController {
             @Valid @RequestBody UpdatePriorityRequest request) {
         log.info("Update task priority request for ID: {} to priority: {}", id, request.getPriority());
         
-        // Extract current user from token
-        User currentUser = securityUtil.extractUserFromToken(token);
+        // Extract current user using SecurityUtils
+        Long currentUserId = SecurityUtils.getCurrentUserId();
         
-        TaskResponse response = taskService.updateTaskPriority(id, request.getPriority(), currentUser.getId());
+        TaskResponse response = taskService.updateTaskPriority(id, request.getPriority(), currentUserId);
         return ResponseEntity.ok(response);
     }
 
@@ -125,10 +130,10 @@ public class TaskController {
             @Valid @RequestBody UpdateDueDateRequest request) {
         log.info("Update task due date request for ID: {} to date: {}", id, request.getDueDate());
         
-        // Extract current user from token
-        User currentUser = securityUtil.extractUserFromToken(token);
+        // Extract current user using SecurityUtils
+        Long currentUserId = SecurityUtils.getCurrentUserId();
         
-        TaskResponse response = taskService.updateTaskDueDate(id, request.getDueDate(), currentUser.getId());
+        TaskResponse response = taskService.updateTaskDueDate(id, request.getDueDate(), currentUserId);
         return ResponseEntity.ok(response);
     }
 
@@ -146,10 +151,10 @@ public class TaskController {
             @Valid @RequestBody AddCommentRequest request) {
         log.info("Add comment request for task ID: {}", id);
         
-        // Extract current user from token
-        User currentUser = securityUtil.extractUserFromToken(token);
+        // Extract current user using SecurityUtils
+        Long currentUserId = SecurityUtils.getCurrentUserId();
         
-        TaskCommentResponse response = taskService.addComment(id, request, currentUser.getId());
+        TaskCommentResponse response = taskService.addComment(id, request, currentUserId);
         return ResponseEntity.ok(response);
     }
 
@@ -166,10 +171,11 @@ public class TaskController {
             @RequestHeader("Authorization") String token) {
         log.info("Delete task request for ID: {}", id);
         
-        // Extract current user from token
-        User currentUser = securityUtil.extractUserFromToken(token);
+        // Extract current user using SecurityUtils
+        Long currentUserId = SecurityUtils.getCurrentUserId();
         
-        taskService.deleteTask(id, currentUser.getId());
+        taskService.deleteTask(id, currentUserId);
         return ResponseEntity.noContent().build();
     }
-}
+    
+    }

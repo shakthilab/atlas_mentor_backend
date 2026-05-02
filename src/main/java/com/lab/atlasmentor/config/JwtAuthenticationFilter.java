@@ -1,5 +1,6 @@
 package com.lab.atlasmentor.config;
 
+import com.lab.atlasmentor.security.CustomUserDetails;
 import com.lab.atlasmentor.service.JwtService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -7,13 +8,11 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.List;
 
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
@@ -37,6 +36,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
             String token = authorizationHeader.substring(7);
             
+            logger.info("JWT token extracted: " + token.substring(0, Math.min(50, token.length())) + "...");
+            
             // Check if token is empty or null after stripping "Bearer "
             if (token == null || token.trim().isEmpty()) {
                 logger.warn("JWT token is empty after Bearer prefix - proceeding without authentication");
@@ -47,16 +48,26 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             try {
                 String email = jwtService.extractUsername(token);
                 String role = jwtService.extractRole(token);
+                Long userId = jwtService.extractUserId(token);
+                Long branchId = jwtService.extractBranchId(token);
+                
+                logger.info("JWT claims extracted: email=" + email + ", role=" + role + ", userId=" + userId + ", branchId=" + branchId);
                 
                 if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-                    // Create authentication token with role
+                    // Create CustomUserDetails with all claims
+                    CustomUserDetails userDetails = new CustomUserDetails(userId, email, role, branchId);
+                    
+                    logger.info("Created CustomUserDetails: userId=" + userDetails.getUserId() + ", role=" + userDetails.getRole() + ", branchId=" + userDetails.getBranchId() + ", isAdmin=" + userDetails.isAdmin());
+                    
+                    // Create authentication token with CustomUserDetails as principal
                     UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                        email, 
+                        userDetails, 
                         null, 
-                        List.of(new SimpleGrantedAuthority("ROLE_" + role))
+                        userDetails.getAuthorities()
                     );
                     
                     SecurityContextHolder.getContext().setAuthentication(authToken);
+                    logger.info("Authentication set in SecurityContext for user: " + email);
                 }
             } catch (io.jsonwebtoken.ExpiredJwtException e) {
                 // JWT expired - return 401 error

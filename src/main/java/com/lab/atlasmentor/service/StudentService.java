@@ -1,5 +1,6 @@
 package com.lab.atlasmentor.service;
 
+import com.lab.atlasmentor.dto.PageResponse;
 import com.lab.atlasmentor.dto.StudentRegistrationRequest;
 import com.lab.atlasmentor.model.Student;
 import com.lab.atlasmentor.model.StudentNote;
@@ -16,6 +17,7 @@ import com.lab.atlasmentor.repository.UniversityRepository;
 import com.lab.atlasmentor.repository.BranchRepository;
 import com.lab.atlasmentor.repository.MobileCountryCodeRepository;
 import com.lab.atlasmentor.enums.StudentStatus;
+import com.lab.atlasmentor.security.SecurityUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -115,9 +117,19 @@ public class StudentService {
                 .orElseThrow(() -> new RuntimeException("Student not found with id: " + id));
     }
 
-    public Page<Student> getAllStudents(StudentStatus status, String search, Pageable pageable) {
-        String searchParam = (search != null && !search.trim().isEmpty()) ? "%" + search.toLowerCase() + "%" : "%";
-        return studentRepository.findByFilters(status, searchParam, pageable);
+    public PageResponse<Student> getAllStudents(StudentStatus status, String search, Pageable pageable) {
+        var currentUser = SecurityUtils.getCurrentUser();
+        
+        if (status != null || (search != null && !search.trim().isEmpty())) {
+            // Use existing filter method for complex searches
+            String searchParam = (search != null && !search.trim().isEmpty()) ? "%" + search.toLowerCase() + "%" : "%";
+            Page<Student> students = studentRepository.findByFilters(status, searchParam, pageable);
+            return PageResponse.of(students.getContent(), students.getNumber(), students.getSize(), students.getTotalElements());
+        } else {
+            // Use branch-based access control for simple getAll
+            Page<Student> students = studentRepository.findAllWithAccess(currentUser.isAdmin(), currentUser.getBranchId(), pageable);
+            return PageResponse.of(students.getContent(), students.getNumber(), students.getSize(), students.getTotalElements());
+        }
     }
 
 

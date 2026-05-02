@@ -60,6 +60,8 @@ public class SecurityConfig {
                 .requestMatchers("/api/referral/**").hasAnyRole("ADMIN", "MANAGER")
                 .requestMatchers("/api/students/**").hasAnyRole("ADMIN", "MANAGER", "EMPLOYEE")
                 .requestMatchers("/api/student/**").hasAnyRole("ADMIN", "MANAGER", "EMPLOYEE", "STUDENT")
+                .requestMatchers("/api/tasks/**").hasAnyRole("ADMIN", "MANAGER", "EMPLOYEE", "SENIOR_COUNSELLOR", "JUNIOR_COUNSELLOR", "VIDEO_EDITOR")
+                .requestMatchers("/api/debug/**").hasAnyRole("ADMIN", "MANAGER", "EMPLOYEE")
                 .anyRequest().authenticated()
 
             )

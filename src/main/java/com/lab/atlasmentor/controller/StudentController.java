@@ -1,6 +1,7 @@
 package com.lab.atlasmentor.controller;
 
 import com.lab.atlasmentor.dto.ApiResponse;
+import com.lab.atlasmentor.dto.PageResponse;
 import com.lab.atlasmentor.dto.StudentRegistrationRequest;
 import com.lab.atlasmentor.model.Student;
 import com.lab.atlasmentor.service.StudentService;
@@ -50,7 +51,7 @@ public class StudentController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<Page<Student>>> getAllStudents(
+    public ResponseEntity<ApiResponse<PageResponse<Student>>> getAllStudents(
             @RequestParam(required = false) StudentStatus status,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
@@ -61,8 +62,8 @@ public class StudentController {
         Sort sort = direction.equalsIgnoreCase("asc") ? Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
         Pageable pageable = PageRequest.of(page, size, sort);
         
-        Page<Student> students = studentService.getAllStudents(status, search, pageable);
-        ApiResponse<Page<Student>> response = ApiResponse.success("Students retrieved successfully", students);
+        PageResponse<Student> students = studentService.getAllStudents(status, search, pageable);
+        ApiResponse<PageResponse<Student>> response = ApiResponse.success("Students retrieved successfully", students);
         return ResponseEntity.ok(response);
     }
 }

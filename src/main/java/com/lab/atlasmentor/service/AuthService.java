@@ -5,6 +5,7 @@ import com.lab.atlasmentor.dto.EmployeeEditRequest;
 import com.lab.atlasmentor.dto.EmployeeRequest;
 import com.lab.atlasmentor.dto.EmployeeResponse;
 import com.lab.atlasmentor.dto.LoginRequest;
+import com.lab.atlasmentor.dto.PageResponse;
 import com.lab.atlasmentor.dto.RegisterRequest;
 import com.lab.atlasmentor.enums.EmployeeType;
 import com.lab.atlasmentor.enums.TaskStatus;
@@ -18,11 +19,12 @@ import com.lab.atlasmentor.repository.EmployeeDetailsRepository;
 import com.lab.atlasmentor.repository.MobileCountryCodeRepository;
 import com.lab.atlasmentor.repository.TaskRepository;
 import com.lab.atlasmentor.repository.UserRepository;
+import lombok.extern.slf4j.Slf4j;
 import com.lab.atlasmentor.service.BranchCacheService;
 import com.lab.atlasmentor.service.BranchService;
 import com.lab.atlasmentor.service.RoleService;
 import com.lab.atlasmentor.util.PasswordGenerator;
-import com.lab.atlasmentor.util.SecurityUtil;
+import com.lab.atlasmentor.security.SecurityUtils;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -39,6 +41,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 public class AuthService {
 
@@ -57,8 +60,7 @@ public class AuthService {
     @Autowired
     private RoleService roleService;
 
-    @Autowired
-    private SecurityUtil securityUtil;
+    // SecurityUtil removed - now using SecurityUtils directly
 
     @Autowired
     private BranchService branchService;
@@ -142,7 +144,8 @@ public class AuthService {
         // Set createdBy from current admin user
         String token = request.getHeader("Authorization");
         if (token != null && token.startsWith("Bearer ")) {
-            User currentUser = securityUtil.extractUserFromToken(token);
+            User currentUser = userRepository.findById(SecurityUtils.getCurrentUserId())
+                .orElseThrow(() -> new RuntimeException("Current user not found"));
             user.setCreatedBy(currentUser);
             user.setUpdatedBy(currentUser);
         }
@@ -205,7 +208,8 @@ public class AuthService {
         
         // Set createdBy and updatedBy from current admin user
         if (token != null && token.startsWith("Bearer ")) {
-            User currentUser = securityUtil.extractUserFromToken(token);
+            User currentUser = userRepository.findById(SecurityUtils.getCurrentUserId())
+                .orElseThrow(() -> new RuntimeException("Current user not found"));
             employeeDetails.setCreatedBy(currentUser);
             employeeDetails.setUpdatedBy(currentUser);
         }
@@ -239,12 +243,14 @@ public class AuthService {
             throw new RuntimeException("Your account is not active. Please contact administrator.");
         }
 
-        String userRole = roleService.getUserRole(user.getId());
-        String primaryRole = userRole != null ? userRole : "USER";
+        String primaryRole = user.getRole() != null ? user.getRole().getName() : "USER";
         
-        String token = jwtService.generateToken(user.getEmail(), user.getId(), primaryRole);
+        // Check if the role is marked as employee
+        boolean isEmployee = user.getRole() != null && user.getRole().getIsEmployee();
+        
+        String token = jwtService.generateToken(user.getEmail(), user.getId(), primaryRole, user.getBranchId());
 
-        return new AuthResponse(token, user.getId(), user.getFullName(), user.getEmail(), primaryRole);
+        return new AuthResponse(token, user.getId(), user.getFullName(), user.getEmail(), primaryRole, isEmployee);
     }
 
     @Transactional
@@ -302,17 +308,30 @@ public class AuthService {
         userRepository.resetPassword(user.getId(), encodedPassword);
     }
 
-    public Page<EmployeeResponse> getAllEmployees(int page, int size, String role, Long branch, String search) {
-        // Define all roles
-        List<String> employeeRoleNames = List.of("ADMIN", "MANAGER", "VIDEO_EDITOR", "JUNIOR_COUNSELLOR", "SENIOR_COUNSELLOR", "COUNSELLOR");
+    public PageResponse<EmployeeResponse> getAllEmployees(int page, int size, String role, Long branch, String search) {
+        try {
+            // Get current user for branch-based filtering
+            var currentUser = SecurityUtils.getCurrentUser();
+            log.info("Getting employees with branch-based access control: userId={}, role={}, branchId={}, isAdmin={}", 
+                currentUser.getUserId(), currentUser.getRole(), currentUser.getBranchId(), currentUser.isAdmin());
+            
+            // Apply branch-based filtering for non-admin users
+            Long effectiveBranch = branch;
+            if (!currentUser.isAdmin() && branch == null) {
+                effectiveBranch = currentUser.getBranchId();
+            }
+            
+            // Define all roles
+            List<String> employeeRoleNames = List.of("ADMIN", "MANAGER", "VIDEO_EDITOR", "JUNIOR_COUNSELLOR", "SENIOR_COUNSELLOR", "COUNSELLOR");
+            
+            // Convert search to lowercase for case-insensitive search
+            String searchLower = search != null ? search.toLowerCase() : null;
+            
+            Pageable pageable = PageRequest.of(page, size);
+            Page<User> employees = userRepository.findEmployeesWithFilters(role, effectiveBranch, searchLower, employeeRoleNames, pageable);
         
-        // Convert search to lowercase for case-insensitive search
-        String searchLower = search != null ? search.toLowerCase() : null;
-        
-        Pageable pageable = PageRequest.of(page, size);
-        Page<User> employees = userRepository.findEmployeesWithFilters(role, branch, searchLower, employeeRoleNames, pageable);
-        
-        return employees.map(user -> {
+        // Convert Page<User> to List<EmployeeResponse>
+        List<EmployeeResponse> employeeResponses = employees.getContent().stream().map(user -> {
             List<EmployeeResponse.RoleDto> roleDtos = List.of(
                 new EmployeeResponse.RoleDto(user.getRole().getId(), user.getRole().getName(), user.getRole().getDescription())
             );
@@ -365,12 +384,63 @@ public class AuthService {
                 roleDtos.get(0),
                 user.getCreatedAt(),
                 user.getUpdatedAt(),
-                user.getCreatedBy(),
-                user.getUpdatedBy(),
+                user.getCreatedBy() != null ? user.getCreatedBy().getId() : null,
+                user.getUpdatedBy() != null ? user.getUpdatedBy().getId() : null,
                 mccDto,
                 taskCount
             );
-        });
+        }).collect(Collectors.toList());
+        
+        // Create and return PageResponse
+        return PageResponse.of(
+            employeeResponses,
+            employees.getNumber(),
+            employees.getSize(),
+            employees.getTotalElements()
+        );
+        } catch (Exception e) {
+            log.error("Error getting current user for employee filtering: {}", e.getMessage(), e);
+            // Fallback to original behavior without branch filtering
+            List<String> employeeRoleNames = List.of("ADMIN", "MANAGER", "VIDEO_EDITOR", "JUNIOR_COUNSELLOR", "SENIOR_COUNSELLOR", "COUNSELLOR");
+            String searchLower = search != null ? search.toLowerCase() : null;
+            Pageable pageable = PageRequest.of(page, size);
+            Page<User> employees = userRepository.findEmployeesWithFilters(role, branch, searchLower, employeeRoleNames, pageable);
+            
+            // Convert to EmployeeResponse list
+            List<EmployeeResponse> employeeResponses = employees.getContent().stream()
+                .map(user -> {
+                    // Simplified mapping for fallback
+                    List<EmployeeResponse.RoleDto> roleDtos = List.of(
+                        new EmployeeResponse.RoleDto(user.getRole().getId(), user.getRole().getName(), user.getRole().getDescription())
+                    );
+                    return new EmployeeResponse(
+                        user.getId(),
+                        user.getFullName(),
+                        user.getEmail(),
+                        user.getPhone(),
+                        user.getBranchId(),
+                        null, // branchDto
+                        user.getStatus().name(),
+                        user.getIsVerified(),
+                        roleDtos.get(0),
+                        user.getCreatedAt(),
+                        user.getUpdatedAt(),
+                        user.getCreatedBy() != null ? user.getCreatedBy().getId() : null,
+                        user.getUpdatedBy() != null ? user.getUpdatedBy().getId() : null,
+                        null, // mccDto
+                        null  // taskCount
+                    );
+                })
+                .collect(Collectors.toList());
+            
+            // Return PageResponse for fallback
+            return PageResponse.of(
+                employeeResponses,
+                employees.getNumber(),
+                employees.getSize(),
+                employees.getTotalElements()
+            );
+        }
     }
     
     @Transactional
@@ -464,8 +534,8 @@ public class AuthService {
             roleDto,
             user.getCreatedAt(),
             user.getUpdatedAt(),
-            user.getCreatedBy(),
-            user.getUpdatedBy(),
+            user.getCreatedBy() != null ? user.getCreatedBy().getId() : null,
+            user.getUpdatedBy() != null ? user.getUpdatedBy().getId() : null,
             mccDto,
             taskCount
         );

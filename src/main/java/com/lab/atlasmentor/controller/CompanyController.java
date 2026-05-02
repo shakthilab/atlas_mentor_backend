@@ -2,6 +2,7 @@ package com.lab.atlasmentor.controller;
 
 import com.lab.atlasmentor.dto.CompanyEditRequest;
 import com.lab.atlasmentor.dto.CompanyRequest;
+import com.lab.atlasmentor.dto.PageResponse;
 import com.lab.atlasmentor.dto.UserResponse;
 import com.lab.atlasmentor.model.User;
 import com.lab.atlasmentor.service.AdminService;
@@ -33,13 +34,14 @@ public class CompanyController {
 
     @GetMapping("/list")
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
-    public ResponseEntity<?> getCompanies(
+    public ResponseEntity<PageResponse<UserResponse>> getCompanies(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) Long branchId) {
         
-        return ResponseEntity.ok(adminService.getCompanies(page, size, search, branchId));
+        PageResponse<UserResponse> companies = adminService.getCompanies(page, size, search, branchId);
+        return ResponseEntity.ok(companies);
     }
 
     @GetMapping("/{id}")

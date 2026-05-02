@@ -6,6 +6,7 @@ import com.lab.atlasmentor.enums.TaskStatus;
 import com.lab.atlasmentor.enums.Priority;
 import com.lab.atlasmentor.model.*;
 import com.lab.atlasmentor.repository.*;
+import com.lab.atlasmentor.security.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -36,11 +37,17 @@ public class TaskService {
         User assignedBy = userRepository.findById(createdByUserId)
                 .orElseThrow(() -> new RuntimeException("Creator user not found"));
 
-        Branch branch = null;
-        if (request.getBranchId() != null) {
-            branch = branchRepository.findById(request.getBranchId())
-                    .orElseThrow(() -> new RuntimeException("Branch not found"));
+        // Auto-assign branch from assigned user
+        Branch branch = assignedTo.getBranch();
+        
+        // If admin is assigning to another admin, keep branch null (admin sees all tasks)
+        if (branch == null && !assignedBy.hasRole("ADMIN")) {
+            // For non-admin assigners, ensure task has a branch
+            log.warn("Task assigned to user {} who has no branch assignment", assignedTo.getEmail());
         }
+        
+        log.info("Task creation: assigned_to={}, branch_id={}, created_by={}", 
+            assignedTo.getEmail(), branch != null ? branch.getId() : "null", assignedBy.getEmail());
 
         Task task = new Task(
                 request.getTitle(),
@@ -248,10 +255,19 @@ public class TaskService {
 
     @Transactional(readOnly = true)
     public List<TaskResponse> getAllTasks() {
-        log.info("Getting all tasks");
-        return taskRepository.findAllActiveTasks().stream()
-                .map(this::convertToTaskResponse)
-                .collect(Collectors.toList());
+        log.info("Getting all tasks with branch-based access control");
+        
+        try {
+            var currentUser = SecurityUtils.getCurrentUser();
+            log.info("Current user: userId={}, role={}, branchId={}, isAdmin={}", 
+                currentUser.getUserId(), currentUser.getRole(), currentUser.getBranchId(), currentUser.isAdmin());
+            return taskRepository.findAllWithAccess(currentUser.isAdmin(), currentUser.getBranchId(), currentUser.getUserId()).stream()
+                    .map(this::convertToTaskResponse)
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.error("Error getting current user: {}", e.getMessage(), e);
+            throw new RuntimeException("SecurityUtils error: " + e.getMessage(), e);
+        }
     }
 
     @Transactional(readOnly = true)
@@ -261,6 +277,11 @@ public class TaskService {
                                                   String assignedDateFrom, String assignedDateTo) {
         log.info("Getting tasks with filters: status={}, assigneeId={}, branchId={}, priority={}, createdBy={}, keyword={}, overdue={}, search={}, dueDateFrom={}, dueDateTo={}, assignedDateFrom={}, assignedDateTo={}",
                 status, assigneeId, branchId, priority, createdBy, keyword, overdue, search, dueDateFrom, dueDateTo, assignedDateFrom, assignedDateTo);
+
+        // Get current user for branch-based filtering
+        var currentUser = SecurityUtils.getCurrentUser();
+        log.info("Current user: userId={}, role={}, branchId={}, isAdmin={}", 
+            currentUser.getUserId(), currentUser.getRole(), currentUser.getBranchId(), currentUser.isAdmin());
 
         final LocalDate dueDateFromParsed;
         final LocalDate dueDateToParsed;
@@ -277,16 +298,8 @@ public class TaskService {
             return List.of();
         }
 
-        List<Task> tasks = taskRepository.findTasksWithFilters(
-                status != null ? status.name() : null,
-                assigneeId,
-                branchId,
-                priority != null ? priority.name() : null,
-                createdBy,
-                keyword,
-                overdue,
-                search
-        );
+        // Use branch-based filtering instead of the old method
+        List<Task> tasks = taskRepository.findAllWithAccess(currentUser.isAdmin(), currentUser.getBranchId(), currentUser.getUserId());
 
         return tasks.stream()
                 .filter(task -> {

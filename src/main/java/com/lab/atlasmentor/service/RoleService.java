@@ -88,6 +88,12 @@ public class RoleService {
         return user.getRole() != null ? user.getRole().getName() : null;
     }
 
+    public Role getUserRoleEntity(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        return user.getRole();
+    }
+
     public boolean hasRole(Long userId, String roleName) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));

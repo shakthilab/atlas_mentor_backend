@@ -17,8 +17,8 @@ public class EmployeeResponse {
     private RoleDto role;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
-    private User createdBy;
-    private User updatedBy;
+    private Long createdBy;
+    private Long updatedBy;
     private MobileCountryCodeDto mobileCountryCode;
     private TaskCount taskCount;
 
@@ -26,7 +26,7 @@ public class EmployeeResponse {
 
     public EmployeeResponse(Long id, String name, String email, String phone, Long branchId, BranchDto branch,
                          String status, Boolean isVerified, RoleDto role, 
-                         LocalDateTime createdAt, LocalDateTime updatedAt, User createdBy, User updatedBy,
+                         LocalDateTime createdAt, LocalDateTime updatedAt, Long createdBy, Long updatedBy,
                          MobileCountryCodeDto mobileCountryCode, TaskCount taskCount) {
         this.id = id;
         this.name = name;
@@ -79,11 +79,11 @@ public class EmployeeResponse {
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 
-    public User getCreatedBy() { return createdBy; }
-    public void setCreatedBy(User createdBy) { this.createdBy = createdBy; }
+    public Long getCreatedBy() { return createdBy; }
+    public void setCreatedBy(Long createdBy) { this.createdBy = createdBy; }
 
-    public User getUpdatedBy() { return updatedBy; }
-    public void setUpdatedBy(User updatedBy) { this.updatedBy = updatedBy; }
+    public Long getUpdatedBy() { return updatedBy; }
+    public void setUpdatedBy(Long updatedBy) { this.updatedBy = updatedBy; }
 
     public MobileCountryCodeDto getMobileCountryCode() { return mobileCountryCode; }
     public void setMobileCountryCode(MobileCountryCodeDto mobileCountryCode) { this.mobileCountryCode = mobileCountryCode; }

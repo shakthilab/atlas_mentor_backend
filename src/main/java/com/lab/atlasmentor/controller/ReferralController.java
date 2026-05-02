@@ -1,6 +1,7 @@
 package com.lab.atlasmentor.controller;
 
 import com.lab.atlasmentor.enums.ReferralType;
+import com.lab.atlasmentor.dto.PageResponse;
 import com.lab.atlasmentor.dto.ReferralRequest;
 import com.lab.atlasmentor.dto.UserResponse;
 import com.lab.atlasmentor.model.User;
@@ -37,14 +38,15 @@ public class ReferralController {
 
     @GetMapping("/list")
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
-    public ResponseEntity<?> getReferrals(
+    public ResponseEntity<PageResponse<UserResponse>> getReferrals(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String referralType,
             @RequestParam(required = false) Long branchId) {
         
-        return ResponseEntity.ok(adminService.getReferrals(page, size, search, referralType, branchId));
+        PageResponse<UserResponse> referrals = adminService.getReferrals(page, size, search, referralType, branchId);
+        return ResponseEntity.ok(referrals);
     }
 
     @GetMapping("/types")

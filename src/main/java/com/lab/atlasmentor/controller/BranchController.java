@@ -13,7 +13,7 @@ import com.lab.atlasmentor.model.User;
 import com.lab.atlasmentor.repository.UserRepository;
 import com.lab.atlasmentor.service.BranchService;
 import com.lab.atlasmentor.service.AdminService;
-import com.lab.atlasmentor.util.SecurityUtil;
+import com.lab.atlasmentor.security.SecurityUtils;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -34,8 +34,7 @@ public class BranchController {
     @Autowired
     private AdminService adminService;
 
-    @Autowired
-    private SecurityUtil securityUtil;
+    // SecurityUtil removed - now using SecurityUtils directly
 
     @Autowired
     private UserRepository userRepository;
@@ -45,8 +44,12 @@ public class BranchController {
             @RequestHeader("Authorization") String token,
             @Valid @RequestBody BranchRequest branchRequest) {
         try {
-            securityUtil.validateAdminRole(token);
-            User currentUser = securityUtil.extractUserFromToken(token);
+            // Validate admin role using SecurityUtils
+            if (!SecurityUtils.isCurrentUserAdmin()) {
+                throw new RuntimeException("Access denied. Admin role required.");
+            }
+            User currentUser = userRepository.findById(SecurityUtils.getCurrentUserId())
+                .orElseThrow(() -> new RuntimeException("Current user not found"));
             
             Branch branch = new Branch();
             branch.setName(branchRequest.getName());
@@ -110,8 +113,12 @@ public class BranchController {
             @PathVariable Long id, 
             @Valid @RequestBody BranchRequest branchRequest) {
         try {
-            securityUtil.validateAdminRole(token);
-            User currentUser = securityUtil.extractUserFromToken(token);
+            // Validate admin role using SecurityUtils
+            if (!SecurityUtils.isCurrentUserAdmin()) {
+                throw new RuntimeException("Access denied. Admin role required.");
+            }
+            User currentUser = userRepository.findById(SecurityUtils.getCurrentUserId())
+                .orElseThrow(() -> new RuntimeException("Current user not found"));
             
             Branch branchDetails = new Branch();
             branchDetails.setName(branchRequest.getName());
@@ -135,7 +142,10 @@ public class BranchController {
             @RequestHeader("Authorization") String token,
             @PathVariable Long id) {
         try {
-            securityUtil.validateAdminRole(token);
+            // Validate admin role using SecurityUtils
+            if (!SecurityUtils.isCurrentUserAdmin()) {
+                throw new RuntimeException("Access denied. Admin role required.");
+            }
             branchService.deleteBranch(id);
             ApiResponse<Void> response = ApiResponse.success("Branch deleted successfully", null);
             return ResponseEntity.ok(response);
@@ -151,8 +161,12 @@ public class BranchController {
             @PathVariable Long id,
             @Valid @RequestBody BranchStatusRequest statusRequest) {
         try {
-            securityUtil.validateAdminRole(token);
-            User currentUser = securityUtil.extractUserFromToken(token);
+            // Validate admin role using SecurityUtils
+            if (!SecurityUtils.isCurrentUserAdmin()) {
+                throw new RuntimeException("Access denied. Admin role required.");
+            }
+            User currentUser = userRepository.findById(SecurityUtils.getCurrentUserId())
+                .orElseThrow(() -> new RuntimeException("Current user not found"));
             
             Branch updatedBranch = branchService.changeBranchStatus(id, statusRequest.getStatus(), currentUser);
             

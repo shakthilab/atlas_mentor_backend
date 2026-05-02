@@ -6,7 +6,8 @@ import com.lab.atlasmentor.exception.UserNotFoundException;
 import com.lab.atlasmentor.model.*;
 import com.lab.atlasmentor.repository.*;
 import com.lab.atlasmentor.util.PasswordGenerator;
-import com.lab.atlasmentor.util.SecurityUtil;
+import com.lab.atlasmentor.security.SecurityUtils;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -23,6 +24,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 
+@Slf4j
 @Service
 public class AdminService {
 
@@ -44,8 +46,7 @@ public class AdminService {
     @Autowired
     private BranchRepository branchRepository;
 
-    @Autowired
-    private SecurityUtil securityUtil;
+    // SecurityUtil removed - now using SecurityUtils directly
 
     @Autowired
     private CompanyDetailsRepository companyDetailsRepository;
@@ -139,23 +140,51 @@ public class AdminService {
     }
 
     public List<UnassignedEmployeeResponse> getUnassignedEmployees() {
-        // Get all employee IDs that are assigned to managers
-        List<Long> assignedEmployeeIds = managerEmployeeHierarchyRepository.findAll().stream()
-                .map(ManagerEmployeeHierarchy::getEmployeeId)
-                .collect(Collectors.toList());
-        
-        // Get all users with employee roles (excluding managers and senior counselors)
-        List<String> employeeRoles = List.of(
-            "JUNIOR_COUNSELLOR",
-            "VIDEO_EDITOR"
-        );
-        
-        return userRepository.findAll().stream()
-                .filter(user -> user.getStatus() == com.lab.atlasmentor.enums.UserStatus.ACTIVE)
-                .filter(user -> !assignedEmployeeIds.contains(user.getId()))
-                .filter(user -> user.getRole() != null && employeeRoles.contains(user.getRole().getName()))
-                .map(this::convertToUnassignedEmployeeResponse)
-                .collect(Collectors.toList());
+        try {
+            // Get current user for branch-based filtering
+            var currentUser = SecurityUtils.getCurrentUser();
+            log.info("Getting unassigned employees with branch-based access control: userId={}, role={}, branchId={}, isAdmin={}", 
+                currentUser.getUserId(), currentUser.getRole(), currentUser.getBranchId(), currentUser.isAdmin());
+            
+            // Get all employee IDs that are assigned to managers
+            List<Long> assignedEmployeeIds = managerEmployeeHierarchyRepository.findAll().stream()
+                    .map(ManagerEmployeeHierarchy::getEmployeeId)
+                    .collect(Collectors.toList());
+            
+            // Get all users with employee roles (excluding managers and senior counselors)
+            List<String> employeeRoles = List.of(
+                "JUNIOR_COUNSELLOR",
+                "VIDEO_EDITOR"
+            );
+            
+            return userRepository.findAll().stream()
+                    .filter(user -> user.getStatus() == com.lab.atlasmentor.enums.UserStatus.ACTIVE)
+                    .filter(user -> !assignedEmployeeIds.contains(user.getId()))
+                    .filter(user -> user.getRole() != null && employeeRoles.contains(user.getRole().getName()))
+                    // Apply branch-based filtering for non-admin users
+                    .filter(user -> currentUser.isAdmin() || 
+                        (user.getBranchId() != null && user.getBranchId().equals(currentUser.getBranchId())))
+                    .map(this::convertToUnassignedEmployeeResponse)
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.error("Error getting current user for unassigned employees: {}", e.getMessage(), e);
+            // Fallback to original behavior without branch filtering
+            List<Long> assignedEmployeeIds = managerEmployeeHierarchyRepository.findAll().stream()
+                    .map(ManagerEmployeeHierarchy::getEmployeeId)
+                    .collect(Collectors.toList());
+            
+            List<String> employeeRoles = List.of(
+                "JUNIOR_COUNSELLOR",
+                "VIDEO_EDITOR"
+            );
+            
+            return userRepository.findAll().stream()
+                    .filter(user -> user.getStatus() == com.lab.atlasmentor.enums.UserStatus.ACTIVE)
+                    .filter(user -> !assignedEmployeeIds.contains(user.getId()))
+                    .filter(user -> user.getRole() != null && employeeRoles.contains(user.getRole().getName()))
+                    .map(this::convertToUnassignedEmployeeResponse)
+                    .collect(Collectors.toList());
+        }
     }
 
     public UserResponse updateUser(Long userId, CreateUserRequest request, String createdByRoleName) {
@@ -260,7 +289,8 @@ public class AdminService {
         String token = request.getHeader("Authorization");
         User currentUser = null;
         if (token != null && token.startsWith("Bearer ")) {
-            currentUser = securityUtil.extractUserFromToken(token);
+            currentUser = userRepository.findById(SecurityUtils.getCurrentUserId())
+                .orElseThrow(() -> new RuntimeException("Current user not found"));
             user.setCreatedBy(currentUser);
             user.setUpdatedBy(currentUser);
         }
@@ -338,7 +368,8 @@ public class AdminService {
         // Set createdBy from current admin/manager user
         String token = request.getHeader("Authorization");
         if (token != null && token.startsWith("Bearer ")) {
-            User currentUser = securityUtil.extractUserFromToken(token);
+            User currentUser = userRepository.findById(SecurityUtils.getCurrentUserId())
+                .orElseThrow(() -> new RuntimeException("Current user not found"));
             user.setCreatedBy(currentUser);
             user.setUpdatedBy(currentUser);
         }
@@ -363,7 +394,8 @@ public class AdminService {
         
         // Set createdBy and updatedBy for CompanyDetails
         if (token != null && token.startsWith("Bearer ")) {
-            User currentUser = securityUtil.extractUserFromToken(token);
+            User currentUser = userRepository.findById(SecurityUtils.getCurrentUserId())
+                .orElseThrow(() -> new RuntimeException("Current user not found"));
             companyDetails.setCreatedBy(currentUser);
             companyDetails.setUpdatedBy(currentUser);
         }
@@ -380,7 +412,19 @@ public class AdminService {
         return savedUser;
     }
 
-    public Page<UserResponse> getReferrals(int page, int size, String search, String referralType, Long branchId) {
+    public PageResponse<UserResponse> getReferrals(int page, int size, String search, String referralType, Long branchId) {
+        try {
+            // Get current user for branch-based filtering
+            var currentUser = SecurityUtils.getCurrentUser();
+            log.info("Getting referrals with branch-based access control: userId={}, role={}, branchId={}, isAdmin={}", 
+                currentUser.getUserId(), currentUser.getRole(), currentUser.getBranchId(), currentUser.isAdmin());
+            
+            // Apply branch-based filtering for non-admin users
+            Long effectiveBranchId = branchId;
+            if (!currentUser.isAdmin() && branchId == null) {
+                effectiveBranchId = currentUser.getBranchId();
+            }
+        
         Pageable pageable = PageRequest.of(page, size);
         
         // Get user IDs filtered by referral type if provided
@@ -390,18 +434,19 @@ public class AdminService {
                 com.lab.atlasmentor.enums.ReferralType type = com.lab.atlasmentor.enums.ReferralType.valueOf(referralType.toUpperCase());
                 filteredUserIds = referralDetailsRepository.findUserIdsByReferralType(type);
             } catch (IllegalArgumentException e) {
-                return new org.springframework.data.domain.PageImpl<>(List.of(), pageable, 0);
+                return PageResponse.of(List.of(), page, size, 0);
             }
         }
         
         // Create effectively final copy for lambda expression
         final List<Long> finalFilteredUserIds = filteredUserIds;
+        final Long finalEffectiveBranchId = effectiveBranchId;
         
         // Get users with REFERRAL role
         Page<User> referrals = userRepository.findAll().stream()
                 .filter(user -> user.hasRole("REFERRAL"))
                 .filter(user -> finalFilteredUserIds == null || finalFilteredUserIds.contains(user.getId()))
-                .filter(user -> branchId == null || user.getBranchId() != null && user.getBranchId().equals(branchId))
+                .filter(user -> finalEffectiveBranchId == null || user.getBranchId() != null && user.getBranchId().equals(finalEffectiveBranchId))
                 .filter(user -> search == null || search.isEmpty() || 
                         user.getFullName().toLowerCase().contains(search.toLowerCase()) ||
                         user.getEmail().toLowerCase().contains(search.toLowerCase()))
@@ -417,32 +462,153 @@ public class AdminService {
                         }
                 ));
         
-        return referrals.map(this::convertToUserResponse);
+        // Convert Page<User> to PageResponse<UserResponse>
+        List<UserResponse> userResponses = referrals.getContent().stream()
+            .map(this::convertToUserResponse)
+            .collect(Collectors.toList());
+        
+        return PageResponse.of(
+            userResponses,
+            referrals.getNumber(),
+            referrals.getSize(),
+            referrals.getTotalElements()
+        );
+        } catch (Exception e) {
+            log.error("Error getting current user for referral filtering: {}", e.getMessage(), e);
+            // Fallback to original behavior without branch filtering
+            Pageable pageable = PageRequest.of(page, size);
+            
+            // Get user IDs filtered by referral type if provided
+            List<Long> filteredUserIds = null;
+            if (referralType != null && !referralType.isEmpty()) {
+                try {
+                    com.lab.atlasmentor.enums.ReferralType type = com.lab.atlasmentor.enums.ReferralType.valueOf(referralType.toUpperCase());
+                    filteredUserIds = referralDetailsRepository.findUserIdsByReferralType(type);
+                } catch (IllegalArgumentException ex) {
+                    return PageResponse.of(List.of(), page, size, 0);
+                }
+            }
+            
+            final List<Long> finalFilteredUserIds = filteredUserIds;
+            
+            // Get users with REFERRAL role using original logic
+            Page<User> referrals = userRepository.findAll().stream()
+                    .filter(user -> user.hasRole("REFERRAL"))
+                    .filter(user -> finalFilteredUserIds == null || finalFilteredUserIds.contains(user.getId()))
+                    .filter(user -> branchId == null || user.getBranchId() != null && user.getBranchId().equals(branchId))
+                    .filter(user -> search == null || search.isEmpty() || 
+                            user.getFullName().toLowerCase().contains(search.toLowerCase()) ||
+                            user.getEmail().toLowerCase().contains(search.toLowerCase()))
+                    .collect(Collectors.collectingAndThen(
+                            Collectors.toList(),
+                            list -> {
+                                int start = page * size;
+                                int end = Math.min(start + size, list.size());
+                                if (start >= list.size()) {
+                                    return new org.springframework.data.domain.PageImpl<>(List.of(), pageable, list.size());
+                                }
+                                return new org.springframework.data.domain.PageImpl<>(list.subList(start, end), pageable, list.size());
+                            }
+                    ));
+            
+            // Convert Page<User> to PageResponse<UserResponse>
+            List<UserResponse> userResponses = referrals.getContent().stream()
+                .map(this::convertToUserResponse)
+                .collect(Collectors.toList());
+            
+            return PageResponse.of(
+                userResponses,
+                referrals.getNumber(),
+                referrals.getSize(),
+                referrals.getTotalElements()
+            );
+        }
     }
 
-    public Page<UserResponse> getCompanies(int page, int size, String search, Long branchId) {
-        Pageable pageable = PageRequest.of(page, size);
-        
-        // Get users with COMPANY role
-        Page<User> companies = userRepository.findAll().stream()
-                .filter(user -> user.hasRole("COMPANY"))
-                .filter(user -> branchId == null || user.getBranchId() != null && user.getBranchId().equals(branchId))
-                .filter(user -> search == null || search.isEmpty() || 
-                        user.getFullName().toLowerCase().contains(search.toLowerCase()) ||
-                        user.getEmail().toLowerCase().contains(search.toLowerCase()))
-                .collect(Collectors.collectingAndThen(
-                        Collectors.toList(),
-                        list -> {
-                            int start = page * size;
-                            int end = Math.min(start + size, list.size());
-                            if (start >= list.size()) {
-                                return new org.springframework.data.domain.PageImpl<>(List.of(), pageable, list.size());
+    public PageResponse<UserResponse> getCompanies(int page, int size, String search, Long branchId) {
+        try {
+            // Get current user for branch-based filtering
+            var currentUser = SecurityUtils.getCurrentUser();
+            log.info("Getting companies with branch-based access control: userId={}, role={}, branchId={}, isAdmin={}", 
+                currentUser.getUserId(), currentUser.getRole(), currentUser.getBranchId(), currentUser.isAdmin());
+            
+            // Apply branch-based filtering for non-admin users
+            Long effectiveBranchId = branchId;
+            if (!currentUser.isAdmin() && branchId == null) {
+                effectiveBranchId = currentUser.getBranchId();
+            }
+            
+            final Long finalEffectiveBranchId = effectiveBranchId;
+            final String finalSearch = search;
+            
+            Pageable pageable = PageRequest.of(page, size);
+            
+            // Get users with COMPANY role
+            Page<User> companies = userRepository.findAll().stream()
+                    .filter(user -> user.hasRole("COMPANY"))
+                    .filter(user -> finalEffectiveBranchId == null || user.getBranchId() != null && user.getBranchId().equals(finalEffectiveBranchId))
+                    .filter(user -> finalSearch == null || finalSearch.isEmpty() || 
+                            user.getFullName().toLowerCase().contains(finalSearch.toLowerCase()) ||
+                            user.getEmail().toLowerCase().contains(finalSearch.toLowerCase()))
+                    .collect(Collectors.collectingAndThen(
+                            Collectors.toList(),
+                            list -> {
+                                int start = page * size;
+                                int end = Math.min(start + size, list.size());
+                                if (start >= list.size()) {
+                                    return new org.springframework.data.domain.PageImpl<>(List.of(), pageable, list.size());
+                                }
+                                return new org.springframework.data.domain.PageImpl<>(list.subList(start, end), pageable, list.size());
                             }
-                            return new org.springframework.data.domain.PageImpl<>(list.subList(start, end), pageable, list.size());
-                        }
-                ));
-        
-        return companies.map(this::convertToUserResponse);
+                    ));
+            
+            // Convert Page<User> to PageResponse<UserResponse>
+            List<UserResponse> userResponses = companies.getContent().stream()
+                .map(this::convertToUserResponse)
+                .collect(Collectors.toList());
+            
+            return PageResponse.of(
+                userResponses,
+                companies.getNumber(),
+                companies.getSize(),
+                companies.getTotalElements()
+            );
+        } catch (Exception e) {
+            log.error("Error getting current user for company filtering: {}", e.getMessage(), e);
+            // Fallback to original behavior without branch filtering
+            Pageable pageable = PageRequest.of(page, size);
+            
+            // Get users with COMPANY role using original logic
+            Page<User> companies = userRepository.findAll().stream()
+                    .filter(user -> user.hasRole("COMPANY"))
+                    .filter(user -> branchId == null || user.getBranchId() != null && user.getBranchId().equals(branchId))
+                    .filter(user -> search == null || search.isEmpty() || 
+                            user.getFullName().toLowerCase().contains(search.toLowerCase()) ||
+                            user.getEmail().toLowerCase().contains(search.toLowerCase()))
+                    .collect(Collectors.collectingAndThen(
+                            Collectors.toList(),
+                            list -> {
+                                int start = page * size;
+                                int end = Math.min(start + size, list.size());
+                                if (start >= list.size()) {
+                                    return new org.springframework.data.domain.PageImpl<>(List.of(), pageable, list.size());
+                                }
+                                return new org.springframework.data.domain.PageImpl<>(list.subList(start, end), pageable, list.size());
+                            }
+                    ));
+            
+            // Convert Page<User> to PageResponse<UserResponse>
+            List<UserResponse> userResponses = companies.getContent().stream()
+                .map(this::convertToUserResponse)
+                .collect(Collectors.toList());
+            
+            return PageResponse.of(
+                userResponses,
+                companies.getNumber(),
+                companies.getSize(),
+                companies.getTotalElements()
+            );
+        }
     }
 
     public User getCompanyById(Long companyId) {

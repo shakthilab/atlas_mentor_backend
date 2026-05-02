@@ -95,4 +95,14 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("SELECT COUNT(u) FROM User u WHERE u.branch.id = :branchId AND u.role.name = 'STUDENT'")
     Long countStudentsByBranchId(@Param("branchId") Long branchId);
     
+    // Branch-based access control methods
+    @Query(value = "SELECT u.* FROM users u WHERE (:isAdmin = true OR u.branch_id = :branchId)", nativeQuery = true)
+    List<User> findAllWithAccess(@Param("isAdmin") boolean isAdmin, @Param("branchId") Long branchId);
+    
+    @Query(value = "SELECT u.* FROM users u WHERE (:isAdmin = true OR u.branch_id = :branchId) AND u.is_deleted = false", nativeQuery = true)
+    List<User> findAllActiveWithAccess(@Param("isAdmin") boolean isAdmin, @Param("branchId") Long branchId);
+    
+    @Query(value = "SELECT u.* FROM users u WHERE (:isAdmin = true OR u.branch_id = :branchId) AND u.role_id IN (SELECT r.id FROM roles r WHERE r.name IN :roleNames)", nativeQuery = true)
+    List<User> findByRoleNamesWithAccess(@Param("roleNames") List<String> roleNames, @Param("isAdmin") boolean isAdmin, @Param("branchId") Long branchId);
+    
 }

@@ -48,6 +48,15 @@ public class SecurityUtil {
         return jwtService.extractUserId(jwt);
     }
 
+    public Long extractBranchIdFromToken(String token) {
+        if (token == null || !token.startsWith("Bearer ")) {
+            throw new RuntimeException("Invalid or missing authorization token");
+        }
+        
+        String jwt = token.substring(7);
+        return jwtService.extractBranchId(jwt);
+    }
+
     public void validateAdminRole(String token) {
         String role = extractRoleFromToken(token);
         if (!"ADMIN".equals(role)) {

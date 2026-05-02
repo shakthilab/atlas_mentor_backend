@@ -5,6 +5,7 @@ import com.lab.atlasmentor.dto.EmployeeEditRequest;
 import com.lab.atlasmentor.dto.EmployeeRequest;
 import com.lab.atlasmentor.dto.EmployeeResponse;
 import com.lab.atlasmentor.dto.EmployeeStatusUpdateRequest;
+import com.lab.atlasmentor.dto.PageResponse;
 import com.lab.atlasmentor.model.User;
 import com.lab.atlasmentor.service.AuthService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -25,7 +26,7 @@ public class EmployeeController {
     private AuthService authService;
 
     @GetMapping
-    public ResponseEntity<ApiResponse<Page<EmployeeResponse>>> getAllEmployees(
+    public ResponseEntity<ApiResponse<PageResponse<EmployeeResponse>>> getAllEmployees(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String role,
@@ -33,11 +34,11 @@ public class EmployeeController {
             @RequestParam(required = false) String search) {
         try {
             String roleStr = role != null ? role : null;
-            Page<EmployeeResponse> employees = authService.getAllEmployees(page, size, roleStr, branch, search);
-            ApiResponse<Page<EmployeeResponse>> response = ApiResponse.success("Employees retrieved successfully", employees);
+            PageResponse<EmployeeResponse> employees = authService.getAllEmployees(page, size, roleStr, branch, search);
+            ApiResponse<PageResponse<EmployeeResponse>> response = ApiResponse.success("Employees retrieved successfully", employees);
             return ResponseEntity.ok(response);
         } catch (RuntimeException e) {
-            ApiResponse<Page<EmployeeResponse>> response = ApiResponse.error(e.getMessage());
+            ApiResponse<PageResponse<EmployeeResponse>> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
     }
