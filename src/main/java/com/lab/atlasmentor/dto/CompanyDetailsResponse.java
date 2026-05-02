@@ -18,7 +18,7 @@ public class CompanyDetailsResponse {
     private String address;
     private String website;
     private String industry;
-    private Long assignedTo;
+    private UserResponse assignedTo;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

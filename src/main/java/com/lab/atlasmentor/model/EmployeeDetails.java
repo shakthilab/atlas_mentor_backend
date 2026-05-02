@@ -28,6 +28,10 @@ public class EmployeeDetails extends BaseEntity {
     @JoinColumn(name = "manager_id", referencedColumnName = "id")
     private User manager;
     
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "assigned_to", referencedColumnName = "id")
+    private User assignedTo;
+    
     public EmployeeDetails() {}
     
     public EmployeeDetails(User user, EmployeeType employeeType, User manager) {

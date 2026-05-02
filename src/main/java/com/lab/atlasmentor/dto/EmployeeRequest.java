@@ -35,6 +35,8 @@ public class EmployeeRequest {
     private Long managerId;
     
     private Boolean isSenior = false;
+    
+    private Long mobileCountryCodeId;
 
     // Getters and Setters
     public String getFirstName() { return firstName; }
@@ -63,4 +65,7 @@ public class EmployeeRequest {
     
     public Boolean getIsSenior() { return isSenior; }
     public void setIsSenior(Boolean isSenior) { this.isSenior = isSenior; }
+    
+    public Long getMobileCountryCodeId() { return mobileCountryCodeId; }
+    public void setMobileCountryCodeId(Long mobileCountryCodeId) { this.mobileCountryCodeId = mobileCountryCodeId; }
 }

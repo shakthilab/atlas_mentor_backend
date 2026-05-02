@@ -49,11 +49,16 @@ public class TaskController {
             @RequestParam(required = false) Priority priority,
             @RequestParam(required = false) Long createdBy,
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) Boolean overdue) {
-        log.info("Get tasks with filters: status={}, assigneeId={}, branchId={}, priority={}, createdBy={}, keyword={}, overdue={}", 
-                status, assigneeId, branchId, priority, createdBy, keyword, overdue);
+            @RequestParam(required = false) Boolean overdue,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String dueDateFrom,
+            @RequestParam(required = false) String dueDateTo,
+            @RequestParam(required = false) String assignedDateFrom,
+            @RequestParam(required = false) String assignedDateTo) {
+        log.info("Get tasks with filters: status={}, assigneeId={}, branchId={}, priority={}, createdBy={}, keyword={}, overdue={}, search={}, dueDateFrom={}, dueDateTo={}, assignedDateFrom={}, assignedDateTo={}", 
+                status, assigneeId, branchId, priority, createdBy, keyword, overdue, search, dueDateFrom, dueDateTo, assignedDateFrom, assignedDateTo);
         
-        List<TaskResponse> tasks = taskService.getTasksWithFilters(status, assigneeId, branchId, priority, createdBy, keyword, overdue);
+        List<TaskResponse> tasks = taskService.getTasksWithFilters(status, assigneeId, branchId, priority, createdBy, keyword, overdue, search, dueDateFrom, dueDateTo, assignedDateFrom, assignedDateTo);
         return ResponseEntity.ok(tasks);
     }
 
@@ -71,7 +76,7 @@ public class TaskController {
         return ResponseEntity.ok(response);
     }
 
-    @PatchMapping("/{id}/status")
+    @PutMapping("/{id}/status")
     public ResponseEntity<TaskResponse> updateTaskStatus(
             @PathVariable Long id,
             @RequestHeader("Authorization") String token,
@@ -85,7 +90,7 @@ public class TaskController {
         return ResponseEntity.ok(response);
     }
 
-    @PatchMapping("/{id}/assignee")
+    @PutMapping("/{id}/assignee")
     public ResponseEntity<TaskResponse> assignTask(
             @PathVariable Long id,
             @RequestHeader("Authorization") String token,
@@ -99,7 +104,7 @@ public class TaskController {
         return ResponseEntity.ok(response);
     }
 
-    @PatchMapping("/{id}/priority")
+    @PutMapping("/{id}/priority")
     public ResponseEntity<TaskResponse> updateTaskPriority(
             @PathVariable Long id,
             @RequestHeader("Authorization") String token,
@@ -113,7 +118,7 @@ public class TaskController {
         return ResponseEntity.ok(response);
     }
 
-    @PatchMapping("/{id}/due-date")
+    @PutMapping("/{id}/due-date")
     public ResponseEntity<TaskResponse> updateTaskDueDate(
             @PathVariable Long id,
             @RequestHeader("Authorization") String token,

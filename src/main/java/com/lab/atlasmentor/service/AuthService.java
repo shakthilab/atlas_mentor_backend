@@ -8,11 +8,15 @@ import com.lab.atlasmentor.dto.LoginRequest;
 import com.lab.atlasmentor.dto.RegisterRequest;
 import com.lab.atlasmentor.enums.EmployeeType;
 import com.lab.atlasmentor.enums.UserStatus;
+import com.lab.atlasmentor.model.Branch;
 import com.lab.atlasmentor.model.EmployeeDetails;
+import com.lab.atlasmentor.model.MobileCountryCode;
 import com.lab.atlasmentor.model.Role;
 import com.lab.atlasmentor.model.User;
 import com.lab.atlasmentor.repository.EmployeeDetailsRepository;
+import com.lab.atlasmentor.repository.MobileCountryCodeRepository;
 import com.lab.atlasmentor.repository.UserRepository;
+import com.lab.atlasmentor.service.BranchCacheService;
 import com.lab.atlasmentor.service.BranchService;
 import com.lab.atlasmentor.service.RoleService;
 import com.lab.atlasmentor.util.PasswordGenerator;
@@ -58,10 +62,16 @@ public class AuthService {
     private BranchService branchService;
     
     @Autowired
+    private BranchCacheService branchCacheService;
+    
+    @Autowired
     private EmployeeDetailsRepository employeeDetailsRepository;
     
     @Autowired
     private RoleCacheService roleCacheService;
+    
+    @Autowired
+    private MobileCountryCodeRepository mobileCountryCodeRepository;
 
     public User register(RegisterRequest registerRequest) {
         if (userRepository.existsByEmail(registerRequest.getEmail())) {
@@ -91,7 +101,7 @@ public class AuthService {
         return savedUser;
     }
 
-    public User createEmployee(EmployeeRequest employeeRequest, HttpServletRequest request) {
+    public EmployeeResponse createEmployee(EmployeeRequest employeeRequest, HttpServletRequest request) {
         if (userRepository.existsByEmail(employeeRequest.getEmail())) {
             throw new RuntimeException("Email already exists");
         }
@@ -105,8 +115,24 @@ public class AuthService {
         user.setEmail(employeeRequest.getEmail());
         user.setPassword(passwordEncoder.encode(generatedPassword));
         user.setPhone(employeeRequest.getPhone());
-        user.setBranchId(employeeRequest.getBranchId());
-        user.setIsVerified(true); // Employees are pre-verified
+        user.setIsVerified(true);
+        
+        // Set branch if provided
+        if (employeeRequest.getBranchId() != null) {
+            Branch branch = branchCacheService.getBranchById(employeeRequest.getBranchId());
+            user.setBranch(branch);
+        }
+        
+        // Set mobile country code if provided
+        if (employeeRequest.getMobileCountryCodeId() != null) {
+            MobileCountryCode mcc = mobileCountryCodeRepository.findById(employeeRequest.getMobileCountryCodeId())
+                .orElseThrow(() -> new RuntimeException("Mobile country code not found with id: " + employeeRequest.getMobileCountryCodeId()));
+            user.setMobileCountryCode(mcc);
+        }
+        
+        // Set role before saving to satisfy NOT NULL constraint
+        Role role = roleCacheService.getRoleById(employeeRequest.getRoleId());
+        user.setRole(role);
         
         // Set createdBy from current admin user
         String token = request.getHeader("Authorization");
@@ -118,9 +144,6 @@ public class AuthService {
         
         User savedUser = userRepository.save(user);
         
-        // Assign specified role to new employee using roleId
-        roleService.assignRoleToUserById(savedUser.getId(), employeeRequest.getRoleId());
-        
         // Create EmployeeDetails record
         EmployeeDetails employeeDetails = new EmployeeDetails();
         employeeDetails.setUser(savedUser);
@@ -128,11 +151,16 @@ public class AuthService {
         // Determine employeeType from roleId
         EmployeeType employeeType = employeeRequest.getEmployeeType();
         if (employeeType == null) {
-            Role role = roleCacheService.getRoleById(employeeRequest.getRoleId());
             String roleName = role.getName();
             
             // Map role names to employee types
             switch (roleName) {
+                case "ADMIN":
+                    employeeType = EmployeeType.ADMIN;
+                    break;
+                case "MANAGER":
+                    employeeType = EmployeeType.MANAGER;
+                    break;
                 case "JUNIOR_COUNSELLOR":
                     employeeType = EmployeeType.JUNIOR_COUNSELLOR;
                     break;
@@ -186,7 +214,8 @@ public class AuthService {
             generatedPassword
         );
         
-        return savedUser;
+        // Convert to EmployeeResponse to avoid lazy loading issues
+        return convertToEmployeeResponse(savedUser);
     }
 
     public AuthResponse login(LoginRequest loginRequest) {
@@ -295,6 +324,21 @@ public class AuthService {
                     .orElse(null)
                 : null;
             
+            // Create mobile country code DTO if exists
+            EmployeeResponse.MobileCountryCodeDto mccDto = user.getMobileCountryCode() != null
+                ? new EmployeeResponse.MobileCountryCodeDto(
+                    user.getMobileCountryCode().getId(),
+                    user.getMobileCountryCode().getCountryName(),
+                    user.getMobileCountryCode().getCountryCode(),
+                    user.getMobileCountryCode().getMobileCode(),
+                    user.getMobileCountryCode().getIsoAlpha2(),
+                    user.getMobileCountryCode().getIsoAlpha3(),
+                    user.getMobileCountryCode().getIsActive(),
+                    user.getMobileCountryCode().getFlagUrl(),
+                    user.getMobileCountryCode().getMobileNumberLength()
+                )
+                : null;
+            
             return new EmployeeResponse(
                 user.getId(),
                 user.getFullName(),
@@ -308,13 +352,14 @@ public class AuthService {
                 user.getCreatedAt(),
                 user.getUpdatedAt(),
                 user.getCreatedBy(),
-                user.getUpdatedBy()
+                user.getUpdatedBy(),
+                mccDto
             );
         });
     }
     
     @Transactional
-    public User editEmployee(Long employeeId, EmployeeEditRequest editRequest) {
+    public EmployeeResponse editEmployee(Long employeeId, EmployeeEditRequest editRequest) {
         User employee = userRepository.findById(employeeId)
             .orElseThrow(() -> new RuntimeException("Employee not found with id: " + employeeId));
         
@@ -330,12 +375,75 @@ public class AuthService {
         employee.setFirstName(editRequest.getFirstName());
         employee.setLastName(editRequest.getLastName());
         employee.setPhone(editRequest.getPhone());
-        employee.setBranchId(editRequest.getBranchId());
+        
+        // Set branch if provided
+        if (editRequest.getBranchId() != null) {
+            Branch branch = branchCacheService.getBranchById(editRequest.getBranchId());
+            employee.setBranch(branch);
+        } else {
+            employee.setBranch(null);
+        }
         
         // Update role if different
         roleService.assignRoleToUserById(employee.getId(), editRequest.getRoleId());
         
-        return userRepository.save(employee);
+        User savedEmployee = userRepository.save(employee);
+        
+        // Convert to EmployeeResponse to avoid lazy loading issues
+        return convertToEmployeeResponse(savedEmployee);
+    }
+    
+    private EmployeeResponse convertToEmployeeResponse(User user) {
+        // Create role DTO
+        EmployeeResponse.RoleDto roleDto = new EmployeeResponse.RoleDto(
+            user.getRole().getId(), 
+            user.getRole().getName(), 
+            user.getRole().getDescription()
+        );
+        
+        // Create branch DTO if branchId exists
+        EmployeeResponse.BranchDto branchDto = user.getBranchId() != null 
+            ? branchService.getBranchById(user.getBranchId())
+                .map(branchEntity -> new EmployeeResponse.BranchDto(
+                    branchEntity.getId(),
+                    branchEntity.getName(),
+                    branchEntity.getLocation(),
+                    branchEntity.getStatus().name()
+                ))
+                .orElse(null)
+            : null;
+        
+        // Create mobile country code DTO if exists
+        EmployeeResponse.MobileCountryCodeDto mccDto = user.getMobileCountryCode() != null
+            ? new EmployeeResponse.MobileCountryCodeDto(
+                user.getMobileCountryCode().getId(),
+                user.getMobileCountryCode().getCountryName(),
+                user.getMobileCountryCode().getCountryCode(),
+                user.getMobileCountryCode().getMobileCode(),
+                user.getMobileCountryCode().getIsoAlpha2(),
+                user.getMobileCountryCode().getIsoAlpha3(),
+                user.getMobileCountryCode().getIsActive(),
+                user.getMobileCountryCode().getFlagUrl(),
+                user.getMobileCountryCode().getMobileNumberLength()
+            )
+            : null;
+        
+        return new EmployeeResponse(
+            user.getId(),
+            user.getFullName(),
+            user.getEmail(),
+            user.getPhone(),
+            user.getBranchId(),
+            branchDto,
+            user.getStatus().name(),
+            user.getIsVerified(),
+            roleDto,
+            user.getCreatedAt(),
+            user.getUpdatedAt(),
+            user.getCreatedBy(),
+            user.getUpdatedBy(),
+            mccDto
+        );
     }
     
     @Transactional

@@ -42,6 +42,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
            "AND (:search IS NULL OR " +
            "CAST(u.first_name AS TEXT) LIKE CONCAT('%', :search, '%') OR " +
            "CAST(u.last_name AS TEXT) LIKE CONCAT('%', :search, '%') OR " +
+           "CONCAT(u.first_name, ' ', u.last_name) LIKE CONCAT('%', :search, '%') OR " +
            "CAST(u.email AS TEXT) LIKE CONCAT('%', :search, '%') OR " +
            "CAST(r.name AS TEXT) LIKE CONCAT('%', :search, '%')) " +
            "AND r.name IN :employeeRoleNames", 

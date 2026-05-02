@@ -22,4 +22,6 @@ public class CompanyEditRequest {
     private String industry;
     private String website;
     private Long assignedTo;
+    private Long branchId;
+    private Long mobileCountryCodeId;
 }

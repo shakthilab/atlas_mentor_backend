@@ -19,12 +19,14 @@ public class EmployeeResponse {
     private LocalDateTime updatedAt;
     private User createdBy;
     private User updatedBy;
+    private MobileCountryCodeDto mobileCountryCode;
 
     public EmployeeResponse() {}
 
     public EmployeeResponse(Long id, String name, String email, String phone, Long branchId, BranchDto branch,
                          String status, Boolean isVerified, RoleDto role, 
-                         LocalDateTime createdAt, LocalDateTime updatedAt, User createdBy, User updatedBy) {
+                         LocalDateTime createdAt, LocalDateTime updatedAt, User createdBy, User updatedBy,
+                         MobileCountryCodeDto mobileCountryCode) {
         this.id = id;
         this.name = name;
         this.email = email;
@@ -38,6 +40,7 @@ public class EmployeeResponse {
         this.updatedAt = updatedAt;
         this.createdBy = createdBy;
         this.updatedBy = updatedBy;
+        this.mobileCountryCode = mobileCountryCode;
     }
 
     // Getters and Setters
@@ -79,6 +82,9 @@ public class EmployeeResponse {
 
     public User getUpdatedBy() { return updatedBy; }
     public void setUpdatedBy(User updatedBy) { this.updatedBy = updatedBy; }
+
+    public MobileCountryCodeDto getMobileCountryCode() { return mobileCountryCode; }
+    public void setMobileCountryCode(MobileCountryCodeDto mobileCountryCode) { this.mobileCountryCode = mobileCountryCode; }
 
     // RoleDto nested class
     public static class RoleDto {
@@ -131,5 +137,62 @@ public class EmployeeResponse {
 
         public String getStatus() { return status; }
         public void setStatus(String status) { this.status = status; }
+    }
+
+    // MobileCountryCodeDto nested class
+    public static class MobileCountryCodeDto {
+        private Long id;
+        private String countryName;
+        private String countryCode;
+        private String mobileCode;
+        private String isoAlpha2;
+        private String isoAlpha3;
+        private Boolean isActive;
+        private String flagUrl;
+        private Integer mobileNumberLength;
+
+        public MobileCountryCodeDto() {}
+
+        public MobileCountryCodeDto(Long id, String countryName, String countryCode, String mobileCode,
+                                  String isoAlpha2, String isoAlpha3, Boolean isActive, String flagUrl,
+                                  Integer mobileNumberLength) {
+            this.id = id;
+            this.countryName = countryName;
+            this.countryCode = countryCode;
+            this.mobileCode = mobileCode;
+            this.isoAlpha2 = isoAlpha2;
+            this.isoAlpha3 = isoAlpha3;
+            this.isActive = isActive;
+            this.flagUrl = flagUrl;
+            this.mobileNumberLength = mobileNumberLength;
+        }
+
+        // Getters and Setters
+        public Long getId() { return id; }
+        public void setId(Long id) { this.id = id; }
+
+        public String getCountryName() { return countryName; }
+        public void setCountryName(String countryName) { this.countryName = countryName; }
+
+        public String getCountryCode() { return countryCode; }
+        public void setCountryCode(String countryCode) { this.countryCode = countryCode; }
+
+        public String getMobileCode() { return mobileCode; }
+        public void setMobileCode(String mobileCode) { this.mobileCode = mobileCode; }
+
+        public String getIsoAlpha2() { return isoAlpha2; }
+        public void setIsoAlpha2(String isoAlpha2) { this.isoAlpha2 = isoAlpha2; }
+
+        public String getIsoAlpha3() { return isoAlpha3; }
+        public void setIsoAlpha3(String isoAlpha3) { this.isoAlpha3 = isoAlpha3; }
+
+        public Boolean getIsActive() { return isActive; }
+        public void setIsActive(Boolean isActive) { this.isActive = isActive; }
+
+        public String getFlagUrl() { return flagUrl; }
+        public void setFlagUrl(String flagUrl) { this.flagUrl = flagUrl; }
+
+        public Integer getMobileNumberLength() { return mobileNumberLength; }
+        public void setMobileNumberLength(Integer mobileNumberLength) { this.mobileNumberLength = mobileNumberLength; }
     }
 }

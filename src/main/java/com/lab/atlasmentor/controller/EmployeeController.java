@@ -43,27 +43,27 @@ public class EmployeeController {
     }
 
     @PostMapping
-    public ResponseEntity<ApiResponse<User>> addEmployee(@Valid @RequestBody EmployeeRequest employeeRequest, 
+    public ResponseEntity<ApiResponse<EmployeeResponse>> addEmployee(@Valid @RequestBody EmployeeRequest employeeRequest, 
                                                    HttpServletRequest request) {
         try {
-            User employee = authService.createEmployee(employeeRequest, request);
-            ApiResponse<User> response = ApiResponse.success("Employee created successfully", employee);
+            EmployeeResponse employee = authService.createEmployee(employeeRequest, request);
+            ApiResponse<EmployeeResponse> response = ApiResponse.success("Employee created successfully", employee);
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
         } catch (RuntimeException e) {
-            ApiResponse<User> response = ApiResponse.error(e.getMessage());
+            ApiResponse<EmployeeResponse> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<ApiResponse<User>> editEmployee(@PathVariable Long id, 
+    public ResponseEntity<ApiResponse<EmployeeResponse>> editEmployee(@PathVariable Long id, 
                                                         @Valid @RequestBody EmployeeEditRequest editRequest) {
         try {
-            User updatedEmployee = authService.editEmployee(id, editRequest);
-            ApiResponse<User> response = ApiResponse.success("Employee updated successfully", updatedEmployee);
+            EmployeeResponse updatedEmployee = authService.editEmployee(id, editRequest);
+            ApiResponse<EmployeeResponse> response = ApiResponse.success("Employee updated successfully", updatedEmployee);
             return ResponseEntity.ok(response);
         } catch (RuntimeException e) {
-            ApiResponse<User> response = ApiResponse.error(e.getMessage());
+            ApiResponse<EmployeeResponse> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
     }

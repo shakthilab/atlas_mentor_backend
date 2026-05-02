@@ -52,26 +52,28 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
     @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.assignedTo.id = :userId ORDER BY t.createdAt DESC")
     List<Task> findByAssignedToIdOrderByCreatedAtDesc(@Param("userId") Long userId);
 
-    // Dynamic filtering query
-    @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND " +
-           "(:status IS NULL OR t.status = :status) AND " +
-           "(:assigneeId IS NULL OR t.assignedTo.id = :assigneeId) AND " +
-           "(:branchId IS NULL OR t.branch.id = :branchId) AND " +
-           "(:priority IS NULL OR t.priority = :priority) AND " +
-           "(:createdBy IS NULL OR t.createdBy.id = :createdBy) AND " +
-           "(:keyword IS NULL OR t.title LIKE %:keyword% OR t.description LIKE %:keyword%) AND " +
-           "(:overdue IS NULL OR (:overdue = true AND t.dueDate < CURRENT_DATE AND t.status != 'DONE')) " +
-           "ORDER BY t.createdAt DESC")
+    // Dynamic filtering query - simplified to avoid parameter type issues
+    @Query(value = "SELECT t.* FROM tasks t WHERE t.is_deleted = false AND " +
+            "(:status IS NULL OR t.status = :status) AND " +
+            "(:assigneeId IS NULL OR t.assigned_to = :assigneeId) AND " +
+            "(:branchId IS NULL OR t.branch_id = :branchId) AND " +
+            "(:priority IS NULL OR t.priority = :priority) AND " +
+            "(:createdBy IS NULL OR t.created_by = :createdBy) AND " +
+            "(:keyword IS NULL OR t.title LIKE CONCAT('%', :keyword, '%') OR t.description LIKE CONCAT('%', :keyword, '%')) AND " +
+            "(:overdue IS NULL OR (:overdue = true AND t.due_date < CURRENT_DATE AND t.status != 'DONE')) AND " +
+            "(:search IS NULL OR t.title LIKE CONCAT('%', :search, '%') OR t.description LIKE CONCAT('%', :search, '%')) " +
+            "ORDER BY t.created_at DESC",
+            nativeQuery = true)
     List<Task> findTasksWithFilters(
-            @Param("status") TaskStatus status,
+            @Param("status") String status,
             @Param("assigneeId") Long assigneeId,
             @Param("branchId") Long branchId,
-            @Param("priority") Priority priority,
+            @Param("priority") String priority,
             @Param("createdBy") Long createdBy,
             @Param("keyword") String keyword,
-            @Param("overdue") Boolean overdue
+            @Param("overdue") Boolean overdue,
+            @Param("search") String search
     );
-
     // Combined filter queries
     @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.branch.id = :branchId AND t.status = :status")
     List<Task> findByBranchIdAndStatus(@Param("branchId") Long branchId, @Param("status") TaskStatus status);

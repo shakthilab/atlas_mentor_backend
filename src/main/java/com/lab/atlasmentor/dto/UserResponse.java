@@ -23,11 +23,12 @@ public class UserResponse {
     private LocalDateTime updatedAt;
     private ReferralType referralType;
     private CompanyDetailsResponse companyDetails;
+    private String assignedToUsername;
     
     public UserResponse(Long id, String firstName, String lastName, String email, String phone, Role role, 
                        UserStatus status, Boolean isVerified, BranchResponse branch, 
                        LocalDateTime createdAt, LocalDateTime updatedAt, ReferralType referralType, 
-                       CompanyDetailsResponse companyDetails) {
+                       CompanyDetailsResponse companyDetails, String assignedToUsername) {
         this.id = id;
         this.firstName = firstName;
         this.lastName = lastName;
@@ -41,5 +42,6 @@ public class UserResponse {
         this.updatedAt = updatedAt;
         this.referralType = referralType;
         this.companyDetails = companyDetails;
+        this.assignedToUsername = assignedToUsername;
     }
 }

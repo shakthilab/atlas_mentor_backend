@@ -255,15 +255,71 @@ public class TaskService {
     }
 
     @Transactional(readOnly = true)
-    public List<TaskResponse> getTasksWithFilters(TaskStatus status, Long assigneeId, Long branchId, 
-                                                  Priority priority, Long createdBy, String keyword, Boolean overdue) {
-        log.info("Getting tasks with filters: status={}, assigneeId={}, branchId={}, priority={}, createdBy={}, keyword={}, overdue={}", 
-                status, assigneeId, branchId, priority, createdBy, keyword, overdue);
-        
-        return taskRepository.findTasksWithFilters(status, assigneeId, branchId, priority, createdBy, keyword, overdue)
-                .stream()
+    public List<TaskResponse> getTasksWithFilters(TaskStatus status, Long assigneeId, Long branchId,
+                                                  Priority priority, Long createdBy, String keyword, Boolean overdue,
+                                                  String search, String dueDateFrom, String dueDateTo,
+                                                  String assignedDateFrom, String assignedDateTo) {
+        log.info("Getting tasks with filters: status={}, assigneeId={}, branchId={}, priority={}, createdBy={}, keyword={}, overdue={}, search={}, dueDateFrom={}, dueDateTo={}, assignedDateFrom={}, assignedDateTo={}",
+                status, assigneeId, branchId, priority, createdBy, keyword, overdue, search, dueDateFrom, dueDateTo, assignedDateFrom, assignedDateTo);
+
+        final LocalDate dueDateFromParsed;
+        final LocalDate dueDateToParsed;
+        final LocalDate assignedDateFromParsed;
+        final LocalDate assignedDateToParsed;
+
+        try {
+            dueDateFromParsed = parseDate(dueDateFrom);
+            dueDateToParsed = parseDate(dueDateTo);
+            assignedDateFromParsed = parseDate(assignedDateFrom);
+            assignedDateToParsed = parseDate(assignedDateTo);
+        } catch (Exception e) {
+            log.error("Error parsing date filters: {}", e.getMessage());
+            return List.of();
+        }
+
+        List<Task> tasks = taskRepository.findTasksWithFilters(
+                status != null ? status.name() : null,
+                assigneeId,
+                branchId,
+                priority != null ? priority.name() : null,
+                createdBy,
+                keyword,
+                overdue,
+                search
+        );
+
+        return tasks.stream()
+                .filter(task -> {
+                    // Due date filtering
+                    if (dueDateFromParsed != null) {
+                        if (task.getDueDate() == null || task.getDueDate().isBefore(dueDateFromParsed)) {
+                            return false;
+                        }
+                    }
+                    if (dueDateToParsed != null) {
+                        if (task.getDueDate() == null || task.getDueDate().isAfter(dueDateToParsed)) {
+                            return false;
+                        }
+                    }
+
+                    // Assigned date filtering (createdAt)
+                    LocalDate taskCreatedDate = task.getCreatedAt().toLocalDate();
+                    if (assignedDateFromParsed != null && taskCreatedDate.isBefore(assignedDateFromParsed)) {
+                        return false;
+                    }
+                    if (assignedDateToParsed != null && taskCreatedDate.isAfter(assignedDateToParsed)) {
+                        return false;
+                    }
+
+                    return true;
+                })
                 .map(this::convertToTaskResponse)
                 .collect(Collectors.toList());
+    }
+
+    private LocalDate parseDate(String dateStr) {
+        if (dateStr == null || dateStr.isEmpty()) return null;
+        return LocalDate.parse(dateStr);
     }
 
     @Transactional(readOnly = true)

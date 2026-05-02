@@ -11,8 +11,11 @@ import com.lab.atlasmentor.dto.RoleRequest;
 import com.lab.atlasmentor.dto.SeniorCounsellorResponse;
 import com.lab.atlasmentor.model.ManagerEmployeeHierarchy;
 import com.lab.atlasmentor.model.User;
+import com.lab.atlasmentor.repository.CompanyDetailsRepository;
 import com.lab.atlasmentor.repository.CounsellorHierarchyRepository;
+import com.lab.atlasmentor.repository.EmployeeDetailsRepository;
 import com.lab.atlasmentor.repository.ManagerEmployeeHierarchyRepository;
+import com.lab.atlasmentor.repository.ReferralDetailsRepository;
 import com.lab.atlasmentor.repository.UserRepository;
 import com.lab.atlasmentor.service.HierarchyService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,6 +40,15 @@ public class HierarchyController {
 
     @Autowired
     private CounsellorHierarchyRepository counsellorHierarchyRepository;
+
+    @Autowired
+    private CompanyDetailsRepository companyDetailsRepository;
+
+    @Autowired
+    private ReferralDetailsRepository referralDetailsRepository;
+
+    @Autowired
+    private EmployeeDetailsRepository employeeDetailsRepository;
 
     @GetMapping("/managers")
     public ResponseEntity<ApiResponse<List<ManagerHierarchyResponse>>> getManagerHierarchy() {
@@ -120,6 +132,29 @@ public class HierarchyController {
                         userId
                     );
                     managerEmployeeHierarchyRepository.save(assignment);
+                    
+                    // Also update CompanyDetails.assignedTo if the user is a company
+                    if (user.hasRole("COMPANY")) {
+                        companyDetailsRepository.findByUserId(userId).ifPresent(companyDetails -> {
+                            companyDetails.setAssignedTo(manager);
+                            companyDetailsRepository.save(companyDetails);
+                        });
+                    }
+                    
+                    // Also update ReferralDetails.assignedTo if the user is a referral
+                    if (user.hasRole("REFERRAL")) {
+                        referralDetailsRepository.findByUserId(userId).ifPresent(referralDetails -> {
+                            referralDetails.setAssignedTo(manager);
+                            referralDetailsRepository.save(referralDetails);
+                        });
+                    }
+                    
+                    // Also update EmployeeDetails.assignedTo if the user has employee details
+                    employeeDetailsRepository.findByUserId(userId).ifPresent(employeeDetails -> {
+                        employeeDetails.setAssignedTo(manager);
+                        employeeDetailsRepository.save(employeeDetails);
+                    });
+                    
                     successCount++;
                     
                 } catch (Exception e) {
@@ -217,6 +252,29 @@ public class HierarchyController {
     @Transactional
     public ResponseEntity<ApiResponse<String>> unassignEmployeeFromManager(@PathVariable Long employeeId) {
         try {
+            // Also clear assignedTo fields in various detail tables
+            userRepository.findById(employeeId).ifPresent(user -> {
+                if (user.hasRole("COMPANY")) {
+                    companyDetailsRepository.findByUserId(employeeId).ifPresent(companyDetails -> {
+                        companyDetails.setAssignedTo(null);
+                        companyDetailsRepository.save(companyDetails);
+                    });
+                }
+                
+                if (user.hasRole("REFERRAL")) {
+                    referralDetailsRepository.findByUserId(employeeId).ifPresent(referralDetails -> {
+                        referralDetails.setAssignedTo(null);
+                        referralDetailsRepository.save(referralDetails);
+                    });
+                }
+                
+                // Clear EmployeeDetails.assignedTo if the user has employee details
+                employeeDetailsRepository.findByUserId(employeeId).ifPresent(employeeDetails -> {
+                    employeeDetails.setAssignedTo(null);
+                    employeeDetailsRepository.save(employeeDetails);
+                });
+            });
+            
             managerEmployeeHierarchyRepository.deleteByEmployeeId(employeeId);
             return ResponseEntity.ok(ApiResponse.success("Employee unassigned from manager successfully", null));
         } catch (Exception e) {

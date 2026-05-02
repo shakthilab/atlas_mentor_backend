@@ -53,6 +53,9 @@ public class AdminService {
     @Autowired
     private ManagerEmployeeHierarchyRepository managerEmployeeHierarchyRepository;
 
+    @Autowired
+    private MobileCountryCodeRepository mobileCountryCodeRepository;
+
     public UserResponse createUser(CreateUserRequest request, String createdByRoleName) {
         // Validate role creation permissions
         validateRoleCreation(request.getRole(), createdByRoleName);
@@ -133,10 +136,9 @@ public class AdminService {
                 .map(ManagerEmployeeHierarchy::getEmployeeId)
                 .collect(Collectors.toList());
         
-        // Get all users with employee roles (excluding managers)
+        // Get all users with employee roles (excluding managers and senior counselors)
         List<String> employeeRoles = List.of(
             "JUNIOR_COUNSELLOR",
-            "SENIOR_COUNSELLOR",
             "VIDEO_EDITOR"
         );
         
@@ -238,7 +240,12 @@ public class AdminService {
         user.setEmail(referralRequest.getEmail());
         user.setPassword(passwordEncoder.encode(generatedPassword));
         user.setPhone(referralRequest.getPhone());
-        user.setBranchId(referralRequest.getBranchId());
+        // Set branch entity if branchId is provided
+        if (referralRequest.getBranchId() != null) {
+            Branch branch = branchRepository.findById(referralRequest.getBranchId())
+                    .orElseThrow(() -> new RuntimeException("Branch not found with ID: " + referralRequest.getBranchId()));
+            user.setBranch(branch);
+        }
         user.setIsVerified(true); // Referrals are pre-verified
         
         // Set createdBy from current admin/manager user
@@ -312,7 +319,12 @@ public class AdminService {
         user.setEmail(companyRequest.getEmail());
         user.setPassword(passwordEncoder.encode(generatedPassword));
         user.setPhone(companyRequest.getPhone());
-        user.setBranchId(companyRequest.getBranchId());
+        // Set branch entity if branchId is provided
+        if (companyRequest.getBranchId() != null) {
+            Branch branch = branchRepository.findById(companyRequest.getBranchId())
+                    .orElseThrow(() -> new RuntimeException("Branch not found with ID: " + companyRequest.getBranchId()));
+            user.setBranch(branch);
+        }
         user.setIsVerified(true); // Companies are pre-verified
         
         // Set createdBy from current admin/manager user
@@ -338,12 +350,8 @@ public class AdminService {
         companyDetails.setWebsite(companyRequest.getWebsite());
         companyDetails.setIndustry(companyRequest.getIndustry());
         
-        // Set assignedTo User if provided
-        if (companyRequest.getAssignedTo() != null) {
-            User assignedUser = userRepository.findById(companyRequest.getAssignedTo())
-                .orElseThrow(() -> new RuntimeException("Assigned user not found"));
-            companyDetails.setAssignedTo(assignedUser);
-        }
+        // Note: assignedTo should only be managed through hierarchy assignment API
+        // Not during company creation
         
         // Set createdBy and updatedBy for CompanyDetails
         if (token != null && token.startsWith("Bearer ")) {
@@ -444,11 +452,17 @@ public class AdminService {
     public UserResponse convertToUserResponse(User user) {
         Role primaryRole = user.getRole();
         
-        // Get referral type for users with REFERRAL role
+        // Get referral type and assignedTo for users with REFERRAL role
         com.lab.atlasmentor.enums.ReferralType referralType = null;
+        String assignedToUsername = null;
         if (primaryRole != null && "REFERRAL".equals(primaryRole.getName())) {
             referralType = referralDetailsRepository.findByUserId(user.getId())
                     .map(ReferralDetails::getReferralType)
+                    .orElse(null);
+            
+            assignedToUsername = referralDetailsRepository.findByUserId(user.getId())
+                    .map(referralDetails -> referralDetails.getAssignedTo() != null ? 
+                            referralDetails.getAssignedTo().getFullName() : null)
                     .orElse(null);
         }
         
@@ -456,18 +470,24 @@ public class AdminService {
         CompanyDetailsResponse companyDetails = null;
         if (primaryRole != null && "COMPANY".equals(primaryRole.getName())) {
             companyDetails = companyDetailsRepository.findByUserId(user.getId())
-                    .map(cd -> new CompanyDetailsResponse(
-                            cd.getId(),
-                            cd.getUser().getId(),
-                            cd.getCompanyName(),
-                            cd.getContactPerson(),
-                            cd.getAddress(),
-                            cd.getWebsite(),
-                            cd.getIndustry(),
-                            cd.getAssignedTo() != null ? cd.getAssignedTo().getId() : null,
-                            cd.getCreatedAt(),
-                            cd.getUpdatedAt()
-                    ))
+                    .map(cd -> {
+                        UserResponse assignedToUser = null;
+                        if (cd.getAssignedTo() != null) {
+                            assignedToUser = convertToUserResponse(cd.getAssignedTo());
+                        }
+                        return new CompanyDetailsResponse(
+                                cd.getId(),
+                                cd.getUser().getId(),
+                                cd.getCompanyName(),
+                                cd.getContactPerson(),
+                                cd.getAddress(),
+                                cd.getWebsite(),
+                                cd.getIndustry(),
+                                assignedToUser,
+                                cd.getCreatedAt(),
+                                cd.getUpdatedAt()
+                        );
+                    })
                     .orElse(null);
         }
         
@@ -484,6 +504,12 @@ public class AdminService {
         String firstName = nameParts.length > 0 ? nameParts[0] : "";
         String lastName = nameParts.length > 1 ? nameParts[1] : "";
         
+        // For companies, use the company name from companyDetails instead of split firstName/lastName
+        if (primaryRole != null && "COMPANY".equals(primaryRole.getName()) && companyDetails != null) {
+            firstName = companyDetails.getCompanyName();
+            lastName = null; // Companies don't need lastName
+        }
+        
         return new UserResponse(
                 user.getId(),
                 firstName,
@@ -497,7 +523,8 @@ public class AdminService {
                 user.getCreatedAt(),
                 user.getUpdatedAt(),
                 referralType,
-                companyDetails
+                companyDetails,
+                assignedToUsername
         );
     }
 
@@ -597,7 +624,14 @@ public class AdminService {
         }
         referral.setEmail(request.getEmail());
         referral.setPhone(request.getPhone());
-        referral.setBranchId(request.getBranchId());
+        // Set branch entity if branchId is provided
+        if (request.getBranchId() != null) {
+            Branch branch = branchRepository.findById(request.getBranchId())
+                    .orElseThrow(() -> new RuntimeException("Branch not found with ID: " + request.getBranchId()));
+            referral.setBranch(branch);
+        } else {
+            referral.setBranch(null);
+        }
         
         // Update referral details if referral type is provided
         if (request.getReferralType() != null) {
@@ -636,6 +670,7 @@ public class AdminService {
         return updateReferralStatus(referralId, com.lab.atlasmentor.enums.UserStatus.INACTIVE);
     }
 
+    @Transactional
     public User updateCompany(Long companyId, CompanyEditRequest editRequest) {
         // Check if user exists and has COMPANY role
         User company = userRepository.findById(companyId)
@@ -665,9 +700,27 @@ public class AdminService {
         company.setEmail(editRequest.getEmail());
         company.setPhone(editRequest.getPhone());
         
+        // Set mobile country code if provided
+        if (editRequest.getMobileCountryCodeId() != null) {
+            MobileCountryCode mobileCountryCode = mobileCountryCodeRepository.findById(editRequest.getMobileCountryCodeId())
+                    .orElseThrow(() -> new RuntimeException("Mobile country code not found with ID: " + editRequest.getMobileCountryCodeId()));
+            company.setMobileCountryCode(mobileCountryCode);
+        }
+        
+        // Set branch entity if branchId is provided
+        if (editRequest.getBranchId() != null) {
+            Branch branch = branchRepository.findById(editRequest.getBranchId())
+                    .orElseThrow(() -> new RuntimeException("Branch not found with ID: " + editRequest.getBranchId()));
+            company.setBranch(branch);
+        } else {
+            company.setBranch(null);
+        }
+        
         // Update CompanyDetails if exists
         CompanyDetails companyDetails = companyDetailsRepository.findByUserId(companyId)
                 .orElse(new CompanyDetails());
+        
+        System.out.println("DEBUG: CompanyDetails before save - ID: " + companyDetails.getId() + ", Name: " + companyDetails.getCompanyName());
         
         companyDetails.setUser(company);
         companyDetails.setCompanyName(editRequest.getName());
@@ -676,14 +729,12 @@ public class AdminService {
         companyDetails.setWebsite(editRequest.getWebsite());
         companyDetails.setIndustry(editRequest.getIndustry());
 
-        // Set assignedTo User if provided
-        if (editRequest.getAssignedTo() != null) {
-            User assignedUser = userRepository.findById(editRequest.getAssignedTo())
-                .orElseThrow(() -> new RuntimeException("Assigned user not found"));
-            companyDetails.setAssignedTo(assignedUser);
-        }
+        // Note: assignedTo should only be managed through hierarchy assignment API
+        // Not during company update
         
-        companyDetailsRepository.save(companyDetails);
+        System.out.println("DEBUG: CompanyDetails after setting fields - ID: " + companyDetails.getId() + ", Name: " + companyDetails.getCompanyName());
+        CompanyDetails savedCompanyDetails = companyDetailsRepository.save(companyDetails);
+        System.out.println("DEBUG: CompanyDetails after save - ID: " + savedCompanyDetails.getId() + ", Name: " + savedCompanyDetails.getCompanyName());
         
         return userRepository.save(company);
     }

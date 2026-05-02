@@ -56,6 +56,10 @@ public class User extends BaseEntity {
     @JoinColumn(name = "branch_id")
     private Branch branch;
     
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "mobile_country_code_id")
+    private MobileCountryCode mobileCountryCode;
+    
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
     private UserStatus status = UserStatus.ACTIVE;
@@ -104,10 +108,13 @@ public class User extends BaseEntity {
      */
     public void setBranchId(Long branchId) {
         // This method is for backward compatibility
-        // Actual branch entity should be set separately
+        // It only clears the branch when null is provided
+        // Actual branch entity should be set separately in service layer
         if (branchId == null) {
             this.branch = null;
         }
+        // Note: Setting the actual Branch entity should be done in the service layer
+        // to avoid repository dependencies in the entity class
     }
         
 }
