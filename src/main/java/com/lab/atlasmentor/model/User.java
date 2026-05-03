@@ -6,6 +6,7 @@ import lombok.Data;
 import com.lab.atlasmentor.enums.UserStatus;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 @Entity
 @Table(name = "users")
@@ -55,6 +56,11 @@ public class User extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "branch_id")
     private Branch branch;
+    
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reporting_manager_id")
+    @JsonIgnoreProperties({"users", "assignedTasks"})
+    private User reportingManager;
     
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "mobile_country_code_id")
@@ -114,6 +120,27 @@ public class User extends BaseEntity {
             this.branch = null;
         }
         // Note: Setting the actual Branch entity should be done in the service layer
+        // to avoid repository dependencies in the entity class
+    }
+    
+    /**
+     * Get reporting manager ID for hierarchy operations
+     */
+    public Long getReportingManagerId() {
+        return reportingManager != null ? reportingManager.getId() : null;
+    }
+    
+    /**
+     * Set reporting manager by ID for backward compatibility
+     */
+    public void setReportingManagerId(Long reportingManagerId) {
+        // This method is for backward compatibility
+        // It only clears the reporting manager when null is provided
+        // Actual User entity should be set separately in service layer
+        if (reportingManagerId == null) {
+            this.reportingManager = null;
+        }
+        // Note: Setting the actual User entity should be done in the service layer
         // to avoid repository dependencies in the entity class
     }
         

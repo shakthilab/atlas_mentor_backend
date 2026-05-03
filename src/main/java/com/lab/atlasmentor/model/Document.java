@@ -21,8 +21,11 @@ public class Document extends BaseEntity {
     @Column(name = "document_name", length = 255)
     private String documentName;
     
-    @Column(name = "file_url", nullable = false, columnDefinition = "TEXT")
-    private String fileUrl;
+    @Column(name = "document_type", length = 100)
+    private String documentType;
+    
+    @Column(name = "base64_content", columnDefinition = "TEXT")
+    private String base64Content;
     
     @Column(name = "file_type", length = 50)
     private String fileType;
@@ -31,12 +34,12 @@ public class Document extends BaseEntity {
     @JoinColumn(name = "uploaded_by")
     private User uploadedBy;
     
+        
     public Document() {}
     
-    public Document(Student student, String documentName, String fileUrl, String fileType, User uploadedBy) {
+    public Document(Student student, String documentName, String fileType, User uploadedBy) {
         this.student = student;
         this.documentName = documentName;
-        this.fileUrl = fileUrl;
         this.fileType = fileType;
         this.uploadedBy = uploadedBy;
     }

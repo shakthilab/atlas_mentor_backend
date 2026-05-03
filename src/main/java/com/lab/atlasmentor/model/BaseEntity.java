@@ -14,17 +14,11 @@ public abstract class BaseEntity {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
     
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "created_by", referencedColumnName = "id", nullable = true)
-    @EqualsAndHashCode.Exclude
-    @ToString.Exclude
-    private User createdBy;
+    @Column(name = "created_by")
+    private Long createdBy;
     
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "updated_by", referencedColumnName = "id", nullable = true)
-    @EqualsAndHashCode.Exclude
-    @ToString.Exclude
-    private User updatedBy;
+    @Column(name = "updated_by")
+    private Long updatedBy;
     
     @PrePersist
     protected void onCreate() {
@@ -53,19 +47,19 @@ public abstract class BaseEntity {
         this.updatedAt = updatedAt;
     }
     
-    public User getCreatedBy() {
+    public Long getCreatedBy() {
         return createdBy;
     }
     
-    public void setCreatedBy(User createdBy) {
+    public void setCreatedBy(Long createdBy) {
         this.createdBy = createdBy;
     }
     
-    public User getUpdatedBy() {
+    public Long getUpdatedBy() {
         return updatedBy;
     }
     
-    public void setUpdatedBy(User updatedBy) {
+    public void setUpdatedBy(Long updatedBy) {
         this.updatedBy = updatedBy;
     }
 }

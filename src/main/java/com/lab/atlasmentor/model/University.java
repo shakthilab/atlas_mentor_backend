@@ -43,7 +43,7 @@ public class University extends BaseEntity {
         this.name = name;
         this.country = country;
         this.countryId = country != null ? country.getId() : null;
-        setCreatedBy(createdBy);
+        setCreatedBy(createdBy.getId());
     }
     
     public void setCountry(Country country) {

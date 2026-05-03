@@ -51,7 +51,7 @@ public class StudentNote extends BaseEntity {
         this.referralCode = referralCode;
         this.academicDetails = academicDetails;
         this.additionalNotes = additionalNotes;
-        setCreatedBy(createdBy);
+        setCreatedBy(createdBy.getId());
     }
     
         

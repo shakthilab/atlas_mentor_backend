@@ -35,6 +35,6 @@ public class Country extends BaseEntity {
     public Country(String name, String code, User createdBy) {
         this.name = name;
         this.code = code;
-        setCreatedBy(createdBy);
+        setCreatedBy(createdBy.getId());
     }
 }

@@ -105,4 +105,11 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query(value = "SELECT u.* FROM users u WHERE (:isAdmin = true OR u.branch_id = :branchId) AND u.role_id IN (SELECT r.id FROM roles r WHERE r.name IN :roleNames)", nativeQuery = true)
     List<User> findByRoleNamesWithAccess(@Param("roleNames") List<String> roleNames, @Param("isAdmin") boolean isAdmin, @Param("branchId") Long branchId);
     
+    // Hierarchy-based queries
+    @Query("SELECT u FROM User u WHERE u.reportingManager.id = :seniorId AND u.role.name = 'JUNIOR_COUNSELLOR' AND u.branch.id = :branchId")
+    List<User> findJuniorCounsellorsBySeniorIdAndBranchId(@Param("seniorId") Long seniorId, @Param("branchId") Long branchId);
+    
+    @Query("SELECT u.id FROM User u WHERE u.reportingManager.id = :seniorId AND u.role.name = 'JUNIOR_COUNSELLOR' AND u.branch.id = :branchId")
+    List<Long> findJuniorCounsellorIdsBySeniorIdAndBranchId(@Param("seniorId") Long seniorId, @Param("branchId") Long branchId);
+    
 }

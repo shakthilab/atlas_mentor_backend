@@ -230,4 +230,94 @@ public class EmailService {
 
         mailSender.send(message);
     }
+
+    public void sendLoginCredentials(String toEmail, String password) {
+        String loginUrl = frontendUrl + "/login";
+
+        try {
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+
+            helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject("Welcome to Atlas Mentor - Your Student Account");
+
+            String htmlContent =
+                    "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">" +
+                            "<html xmlns='http://www.w3.org/1999/xhtml' lang='en'>" +
+                            "<head>" +
+                            "<meta http-equiv='Content-Type' content='text/html; charset=UTF-8' />" +
+                            "<meta name='viewport' content='width=device-width, initial-scale=1.0' />" +
+                            "<meta name='x-apple-disable-message-reformatting' />" +
+                            "<title>Welcome to Atlas Mentor</title>" +
+                            "</head>" +
+
+                            "<body style='margin:0;padding:0;width:100%;background-color:#f0f2f5;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;'>" +
+                            "<table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='border-collapse:collapse;background-color:#f0f2f5;min-width:100%;'>" +
+                            "<tr><td align='center' style='padding:40px 16px;'>" +
+
+                            // Brand name
+                            "<table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='border-collapse:collapse;max-width:560px;'>" +
+                            "<tr><td align='center' style='padding-bottom:16px;'>" +
+                            "<span style='font-size:22px;font-weight:800;color:#1a73e8;font-family:Segoe UI,Helvetica Neue,Arial,sans-serif;letter-spacing:-0.5px;'>AtlasMentor</span>" +
+                            "</td></tr>" +
+                            "</table>" +
+
+                            // Card
+                            "<table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='border-collapse:collapse;max-width:560px;background-color:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.10);'>" +
+
+                            // ── BODY ──────────────────────────────────────────
+                            "<tr><td align='center' style='padding:48px 40px 36px;font-family:Segoe UI,Helvetica Neue,Arial,sans-serif;'>" +
+
+                            // Welcome icon
+                            "<table role='presentation' cellpadding='0' cellspacing='0' border='0' style='border-collapse:collapse;margin:0 auto 28px auto;'>" +
+                            "<tr>" +
+                            "<td align='center' valign='middle' style='width:80px;height:80px;background-color:#1a73e8;border-radius:50%;'>" +
+                            "<div style='width:40px;height:40px;border:4px solid #ffffff;border-radius:50%;margin:0 auto;'></div>" +
+                            "</td>" +
+                            "</tr></table>" +
+
+                            "<h1 style='margin:0 0 14px 0;font-size:26px;font-weight:800;color:#1a1a2e;font-family:Segoe UI,Helvetica Neue,Arial,sans-serif;'>Welcome to Atlas Mentor!</h1>" +
+                            "<p style='margin:0 0 10px 0;font-size:17px;font-weight:700;color:#333333;font-family:Segoe UI,Helvetica Neue,Arial,sans-serif;'>Hello Student,</p>" +
+                            "<p style='margin:0 0 32px 0;font-size:15px;color:#666666;line-height:1.75;font-family:Segoe UI,Helvetica Neue,Arial,sans-serif;'>Your student account has been created successfully!<br />Here are your login credentials to access the portal.</p>" +
+
+                            // Credentials box
+                            "<table role='presentation' width='100%' cellpadding='20' cellspacing='0' border='0' style='border-collapse:collapse;background-color:#f8f9fa;border-radius:8px;margin:0 0 32px 0;'>" +
+                            "<tr><td style='font-family:Segoe UI,Helvetica Neue,Arial,sans-serif;'>" +
+                            "<p style='margin:0 0 8px 0;font-size:13px;color:#666666;font-family:Segoe UI,Helvetica Neue,Arial,sans-serif;'>EMAIL ADDRESS</p>" +
+                            "<p style='margin:0 0 16px 0;font-size:16px;font-weight:700;color:#1a1a2e;font-family:Segoe UI,Helvetica Neue,Arial,sans-serif;'>" + toEmail + "</p>" +
+                            "<p style='margin:0 0 8px 0;font-size:13px;color:#666666;font-family:Segoe UI,Helvetica Neue,Arial,sans-serif;'>TEMPORARY PASSWORD</p>" +
+                            "<p style='margin:0 0 0 0;font-size:16px;font-weight:700;color:#1a1a2e;font-family:Segoe UI,Helvetica Neue,Arial,sans-serif;'>" + password + "</p>" +
+                            "</td></tr>" +
+                            "</table>" +
+
+                            // CTA button
+                            "<table role='presentation' cellpadding='0' cellspacing='0' border='0' style='border-collapse:collapse;margin:0 auto;'>" +
+                            "<tr><td align='center' style='border-radius:8px;background-color:#1a73e8;'>" +
+                            "<a href='" + loginUrl + "' target='_blank' style='display:inline-block;padding:15px 40px;font-size:14px;font-weight:800;color:#ffffff;text-decoration:none;text-transform:uppercase;letter-spacing:1px;font-family:Segoe UI,Helvetica Neue,Arial,sans-serif;border-radius:8px;background-color:#1a73e8;mso-padding-alt:0;'>Login to Your Account</a>" +
+                            "</td></tr></table>" +
+
+                            "<p style='margin:18px 0 0 0;font-size:13px;color:#999999;font-style:italic;line-height:1.6;font-family:Segoe UI,Helvetica Neue,Arial,sans-serif;'>Please login and change your password for security reasons.</p>" +
+
+                            "</td></tr>" +
+
+                            // ── DIVIDER ──────────────────────────────────────
+                            "<tr><td style='height:1px;background-color:#eeeeee;font-size:0;line-height:0;'>&nbsp;</td></tr>" +
+
+                            // ── FOOTER ───────────────────────────────────────
+                            "<tr><td align='center' style='padding:22px 40px;background-color:#f8f9fa;font-family:Segoe UI,Helvetica Neue,Arial,sans-serif;'>" +
+                            "<p style='margin:0;font-size:13px;color:#999999;line-height:1.6;'>Thank you for choosing <span style='color:#1a73e8;font-weight:700;'>AtlasMentor</span>.<br />If you have any questions, please contact our support team.</p>" +
+                            "</td></tr>" +
+
+                            "</table>" + // end card
+
+                            "</td></tr></table>" + // end outer wrapper
+                            "</body></html>";
+
+            helper.setText(htmlContent, true);
+            mailSender.send(mimeMessage);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to send login credentials email", e);
+        }
+    }
 }

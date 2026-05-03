@@ -129,7 +129,7 @@ public class BranchService {
 
         Branch branch = optionalBranch.get();
         branch.setStatus(status);
-        branch.setUpdatedBy(updatedBy);
+        branch.setUpdatedBy(updatedBy.getId());
         
         return branchRepository.save(branch);
     }

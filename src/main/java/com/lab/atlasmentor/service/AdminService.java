@@ -291,8 +291,8 @@ public class AdminService {
         if (token != null && token.startsWith("Bearer ")) {
             currentUser = userRepository.findById(SecurityUtils.getCurrentUserId())
                 .orElseThrow(() -> new RuntimeException("Current user not found"));
-            user.setCreatedBy(currentUser);
-            user.setUpdatedBy(currentUser);
+            user.setCreatedBy(currentUser.getId());
+            user.setUpdatedBy(currentUser.getId());
         }
         
         // Set REFERRAL role using Role entity
@@ -308,8 +308,8 @@ public class AdminService {
             
             // Set createdBy and updatedBy for ReferralDetails using existing currentUser
             if (currentUser != null) {
-                referralDetails.setCreatedBy(currentUser);
-                referralDetails.setUpdatedBy(currentUser);
+                referralDetails.setCreatedBy(currentUser.getId());
+                referralDetails.setUpdatedBy(currentUser.getId());
             }
             
             System.out.println("Step 2: ReferralDetails created - userId: " + referralDetails.getUserId() + ", type: " + referralDetails.getReferralType());
@@ -370,8 +370,8 @@ public class AdminService {
         if (token != null && token.startsWith("Bearer ")) {
             User currentUser = userRepository.findById(SecurityUtils.getCurrentUserId())
                 .orElseThrow(() -> new RuntimeException("Current user not found"));
-            user.setCreatedBy(currentUser);
-            user.setUpdatedBy(currentUser);
+            user.setCreatedBy(currentUser.getId());
+            user.setUpdatedBy(currentUser.getId());
         }
         
         // Set COMPANY role using Role entity
@@ -396,8 +396,8 @@ public class AdminService {
         if (token != null && token.startsWith("Bearer ")) {
             User currentUser = userRepository.findById(SecurityUtils.getCurrentUserId())
                 .orElseThrow(() -> new RuntimeException("Current user not found"));
-            companyDetails.setCreatedBy(currentUser);
-            companyDetails.setUpdatedBy(currentUser);
+            companyDetails.setCreatedBy(currentUser.getId());
+            companyDetails.setUpdatedBy(currentUser.getId());
         }
         
         companyDetailsRepository.save(companyDetails);

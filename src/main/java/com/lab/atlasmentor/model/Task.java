@@ -36,9 +36,14 @@ public class Task extends BaseEntity {
     @JsonIgnoreProperties({"tasks", "assignedTasks"})
     private User assignedBy;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "created_by", insertable = false, updatable = false)
+    @JsonIgnoreProperties({"tasks", "assignedTasks"})
+    private User createdByUser;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
-    private TaskStatus status = TaskStatus.TO_DO;
+    private TaskStatus status = TaskStatus.PENDING;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "priority", nullable = false)
@@ -63,15 +68,16 @@ public class Task extends BaseEntity {
 
     public Task() {}
 
-    public Task(String title, String description, User assignedTo, User assignedBy, Priority priority, LocalDate dueDate, Branch branch) {
+    public Task(String title, String description, User assignedTo, User assignedBy, User createdByUser, Priority priority, LocalDate dueDate, Branch branch) {
         this.title = title;
         this.description = description;
         this.assignedTo = assignedTo;
         this.assignedBy = assignedBy;
+        this.createdByUser = createdByUser;
         this.priority = priority != null ? priority : Priority.MEDIUM;
         this.dueDate = dueDate;
         this.branch = branch;
-        this.status = TaskStatus.TO_DO;
+        this.status = TaskStatus.PENDING;
         this.isDeleted = false;
     }
 

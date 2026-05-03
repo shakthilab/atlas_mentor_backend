@@ -3,19 +3,19 @@ package com.lab.atlasmentor.controller;
 import com.lab.atlasmentor.dto.*;
 import com.lab.atlasmentor.enums.TaskStatus;
 import com.lab.atlasmentor.enums.Priority;
-import com.lab.atlasmentor.model.User;
 import com.lab.atlasmentor.service.TaskService;
 import com.lab.atlasmentor.security.SecurityUtils;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 @RestController
 @RequestMapping("/api/tasks")
@@ -65,6 +65,21 @@ public class TaskController {
         
         List<TaskResponse> tasks = taskService.getTasksWithFilters(status, assigneeId, branchId, priority, createdBy, keyword, overdue, search, dueDateFrom, dueDateTo, assignedDateFrom, assignedDateTo);
         return ResponseEntity.ok(tasks);
+    }
+
+    @GetMapping("/paginated")
+    public ResponseEntity<Page<TaskResponse>> getAllTasksPaginated(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "createdAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortDir) {
+        log.info("Get paginated tasks: page={}, size={}, sortBy={}, sortDir={}", page, size, sortBy, sortDir);
+        
+        Sort.Direction direction = sortDir.equalsIgnoreCase("desc") ? Sort.Direction.DESC : Sort.Direction.ASC;
+        Pageable pageable = PageRequest.of(page, size, Sort.by(direction, sortBy));
+        
+        Page<TaskResponse> taskPage = taskService.getAllTasksPaginated(pageable);
+        return ResponseEntity.ok(taskPage);
     }
 
     @GetMapping("/{id}")
@@ -177,5 +192,4 @@ public class TaskController {
         taskService.deleteTask(id, currentUserId);
         return ResponseEntity.noContent().build();
     }
-    
-    }
+}

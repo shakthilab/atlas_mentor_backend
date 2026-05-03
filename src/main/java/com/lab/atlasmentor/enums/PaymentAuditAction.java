@@ -1,0 +1,13 @@
+package com.lab.atlasmentor.enums;
+
+public enum PaymentAuditAction {
+    AMOUNT_ASSIGNED,
+    PAYMENT_UPDATED,
+    STATUS_CHANGED,
+    STUDENT_CREATED,
+    AMOUNT_CHANGE_REQUESTED,
+    AMOUNT_CHANGE_APPROVED,
+    REJECTION_REQUESTED,
+    REJECTION_APPROVED,
+    REJECTION_REJECTED
+}

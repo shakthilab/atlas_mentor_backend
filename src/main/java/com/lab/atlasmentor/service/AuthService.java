@@ -146,8 +146,8 @@ public class AuthService {
         if (token != null && token.startsWith("Bearer ")) {
             User currentUser = userRepository.findById(SecurityUtils.getCurrentUserId())
                 .orElseThrow(() -> new RuntimeException("Current user not found"));
-            user.setCreatedBy(currentUser);
-            user.setUpdatedBy(currentUser);
+            user.setCreatedBy(currentUser.getId());
+            user.setUpdatedBy(currentUser.getId());
         }
         
         User savedUser = userRepository.save(user);
@@ -210,8 +210,8 @@ public class AuthService {
         if (token != null && token.startsWith("Bearer ")) {
             User currentUser = userRepository.findById(SecurityUtils.getCurrentUserId())
                 .orElseThrow(() -> new RuntimeException("Current user not found"));
-            employeeDetails.setCreatedBy(currentUser);
-            employeeDetails.setUpdatedBy(currentUser);
+            employeeDetails.setCreatedBy(currentUser.getId());
+            employeeDetails.setUpdatedBy(currentUser.getId());
         }
         
         employeeDetailsRepository.save(employeeDetails);
@@ -364,9 +364,9 @@ public class AuthService {
                 : null;
             
             // Get task counts for the employee
-            Long pendingTaskCount = taskRepository.countByAssignedToIdAndStatus(user.getId(), TaskStatus.TO_DO);
+            Long pendingTaskCount = taskRepository.countByAssignedToIdAndStatus(user.getId(), TaskStatus.PENDING);
             Long inProgressTaskCount = taskRepository.countByAssignedToIdAndStatus(user.getId(), TaskStatus.IN_PROGRESS);
-            Long completedTaskCount = taskRepository.countByAssignedToIdAndStatus(user.getId(), TaskStatus.DONE);
+            Long completedTaskCount = taskRepository.countByAssignedToIdAndStatus(user.getId(), TaskStatus.COMPLETED);
             
             EmployeeResponse.TaskCount taskCount = new EmployeeResponse.TaskCount(
                 pendingTaskCount, inProgressTaskCount, completedTaskCount
@@ -384,8 +384,8 @@ public class AuthService {
                 roleDtos.get(0),
                 user.getCreatedAt(),
                 user.getUpdatedAt(),
-                user.getCreatedBy() != null ? user.getCreatedBy().getId() : null,
-                user.getUpdatedBy() != null ? user.getUpdatedBy().getId() : null,
+                user.getCreatedBy(),
+                user.getUpdatedBy(),
                 mccDto,
                 taskCount
             );
@@ -425,8 +425,8 @@ public class AuthService {
                         roleDtos.get(0),
                         user.getCreatedAt(),
                         user.getUpdatedAt(),
-                        user.getCreatedBy() != null ? user.getCreatedBy().getId() : null,
-                        user.getUpdatedBy() != null ? user.getUpdatedBy().getId() : null,
+                        user.getCreatedBy(),
+                        user.getUpdatedBy(),
                         null, // mccDto
                         null  // taskCount
                     );
@@ -514,9 +514,9 @@ public class AuthService {
             : null;
         
         // Get task counts for the employee
-        Long pendingTaskCount = taskRepository.countByAssignedToIdAndStatus(user.getId(), TaskStatus.TO_DO);
+        Long pendingTaskCount = taskRepository.countByAssignedToIdAndStatus(user.getId(), TaskStatus.PENDING);
         Long inProgressTaskCount = taskRepository.countByAssignedToIdAndStatus(user.getId(), TaskStatus.IN_PROGRESS);
-        Long completedTaskCount = taskRepository.countByAssignedToIdAndStatus(user.getId(), TaskStatus.DONE);
+        Long completedTaskCount = taskRepository.countByAssignedToIdAndStatus(user.getId(), TaskStatus.COMPLETED);
         
         EmployeeResponse.TaskCount taskCount = new EmployeeResponse.TaskCount(
             pendingTaskCount, inProgressTaskCount, completedTaskCount
@@ -534,8 +534,8 @@ public class AuthService {
             roleDto,
             user.getCreatedAt(),
             user.getUpdatedAt(),
-            user.getCreatedBy() != null ? user.getCreatedBy().getId() : null,
-            user.getUpdatedBy() != null ? user.getUpdatedBy().getId() : null,
+            user.getCreatedBy(),
+            user.getUpdatedBy(),
             mccDto,
             taskCount
         );

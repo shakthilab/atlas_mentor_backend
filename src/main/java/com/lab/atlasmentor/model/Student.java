@@ -1,10 +1,14 @@
 package com.lab.atlasmentor.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import com.lab.atlasmentor.model.MobileCountryCode;
 import com.lab.atlasmentor.enums.StudentStatus;
+import com.lab.atlasmentor.enums.StudentStatusEnhanced;
+import com.lab.atlasmentor.enums.SourceType;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import java.time.LocalDateTime;
 
@@ -38,6 +42,7 @@ public class Student extends BaseEntity {
     
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "branch_id", referencedColumnName = "id")
+    @JsonIgnore
     private Branch branch;
     
     @ManyToOne(fetch = FetchType.LAZY)
@@ -55,11 +60,37 @@ public class Student extends BaseEntity {
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
     
+    @Column(name = "course_name", length = 200)
+    private String courseName;
+    
+    @Column(name = "intake_period", length = 100)
+    private String intakePeriod;
+    
+    // Additional branch fields for API convenience
+    @Transient
+    private Long branchId;
+    
+    @Transient  
+    private String branchName;
+    
     @OneToMany(mappedBy = "student", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnoreProperties({"student"})
     private java.util.List<StudentAcademicHistory> academicHistories;
     
     @OneToMany(mappedBy = "student", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnoreProperties({"student"})
     private java.util.List<Document> documents;
+    
+    @Enumerated(EnumType.STRING)
+    @Column(name = "source_type")
+    private SourceType sourceType;
+    
+    @Column(name = "source_id")
+    private Long sourceId;
+    
+    @Enumerated(EnumType.STRING)
+    @Column(name = "enhanced_status")
+    private StudentStatusEnhanced enhancedStatus = StudentStatusEnhanced.IN_REVIEW;
     
     public Student() {}
 
@@ -67,7 +98,7 @@ public class Student extends BaseEntity {
     public Student(User user, Branch branch, User createdBy) {
         this.user = user;
         this.branch = branch;
-        setCreatedBy(createdBy);
+        setCreatedBy(createdBy.getId());
     }
     
     /**

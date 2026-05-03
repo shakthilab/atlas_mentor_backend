@@ -11,6 +11,7 @@ import com.lab.atlasmentor.enums.UserStatus;
 import com.lab.atlasmentor.model.Branch;
 import com.lab.atlasmentor.model.User;
 import com.lab.atlasmentor.repository.UserRepository;
+import com.lab.atlasmentor.repository.StudentRepository;
 import com.lab.atlasmentor.service.BranchService;
 import com.lab.atlasmentor.service.AdminService;
 import com.lab.atlasmentor.security.SecurityUtils;
@@ -38,6 +39,9 @@ public class BranchController {
 
     @Autowired
     private UserRepository userRepository;
+    
+    @Autowired
+    private StudentRepository studentRepository;
 
     @PostMapping
     public ResponseEntity<ApiResponse<BranchResponse>> createBranch(
@@ -55,8 +59,8 @@ public class BranchController {
             branch.setName(branchRequest.getName());
             branch.setLocation(branchRequest.getLocation());
             branch.setStatus(branchRequest.getStatus() != null ? branchRequest.getStatus() : UserStatus.ACTIVE);
-            branch.setCreatedBy(currentUser);
-            branch.setUpdatedBy(currentUser);
+            branch.setCreatedBy(currentUser.getId());
+            branch.setUpdatedBy(currentUser.getId());
             
             Branch createdBranch = branchService.createBranch(branch, branchRequest.getManagerId());
             BranchResponse response = convertToBranchResponse(createdBranch);
@@ -124,7 +128,7 @@ public class BranchController {
             branchDetails.setName(branchRequest.getName());
             branchDetails.setLocation(branchRequest.getLocation());
             branchDetails.setStatus(branchRequest.getStatus());
-            branchDetails.setUpdatedBy(currentUser);
+            branchDetails.setUpdatedBy(currentUser.getId());
             
             Branch updatedBranch = branchService.updateBranch(id, branchDetails, branchRequest.getManagerId());
             BranchResponse response = convertToBranchResponse(updatedBranch);
@@ -184,7 +188,7 @@ public class BranchController {
         List<String> staffRoles = List.of("MANAGER", "VIDEO_EDITOR", "JUNIOR_COUNSELLOR", "SENIOR_COUNSELLOR", "COUNSELLOR");
         
         Long totalStaffs = userRepository.countStaffsByBranchId(branch.getId(), staffRoles);
-        Long totalStudents = userRepository.countStudentsByBranchId(branch.getId());
+        Long totalStudents = studentRepository.countStudentsByBranchId(branch.getId());
         
         BranchResponse.UserCounts userCounts = new BranchResponse.UserCounts(totalStaffs, totalStudents);
         

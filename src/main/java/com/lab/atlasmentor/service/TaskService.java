@@ -7,6 +7,7 @@ import com.lab.atlasmentor.enums.Priority;
 import com.lab.atlasmentor.model.*;
 import com.lab.atlasmentor.repository.*;
 import com.lab.atlasmentor.security.SecurityUtils;
+import com.lab.atlasmentor.exception.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -15,6 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 @Service
 @RequiredArgsConstructor
@@ -34,26 +37,30 @@ public class TaskService {
         User assignedTo = userRepository.findById(request.getAssignedToId())
                 .orElseThrow(() -> new RuntimeException("Assignee user not found"));
 
-        User assignedBy = userRepository.findById(createdByUserId)
+        User createdBy = userRepository.findById(createdByUserId)
                 .orElseThrow(() -> new RuntimeException("Creator user not found"));
+
+        // Validate task creation permissions based on roles
+        validateTaskCreation(createdBy, assignedTo);
 
         // Auto-assign branch from assigned user
         Branch branch = assignedTo.getBranch();
         
         // If admin is assigning to another admin, keep branch null (admin sees all tasks)
-        if (branch == null && !assignedBy.hasRole("ADMIN")) {
+        if (branch == null && !createdBy.hasRole("ADMIN")) {
             // For non-admin assigners, ensure task has a branch
             log.warn("Task assigned to user {} who has no branch assignment", assignedTo.getEmail());
         }
         
         log.info("Task creation: assigned_to={}, branch_id={}, created_by={}", 
-            assignedTo.getEmail(), branch != null ? branch.getId() : "null", assignedBy.getEmail());
+            assignedTo.getEmail(), branch != null ? branch.getId() : "null", createdBy.getEmail());
 
         Task task = new Task(
                 request.getTitle(),
                 request.getDescription(),
                 assignedTo,
-                assignedBy,
+                createdBy, // assignedBy
+                createdBy, // createdBy
                 request.getPriority() != null ? request.getPriority() : Priority.MEDIUM,
                 request.getDueDate(),
                 branch
@@ -61,8 +68,8 @@ public class TaskService {
 
         task.setReferenceType(request.getReferenceType());
         task.setReferenceId(request.getReferenceId());
-        task.setCreatedBy(assignedBy);
-        task.setUpdatedBy(assignedBy);
+        task.setCreatedBy(createdBy.getId());
+        task.setUpdatedBy(createdBy.getId());
 
         Task savedTask = taskRepository.save(task);
 
@@ -72,9 +79,9 @@ public class TaskService {
                 TaskAction.CREATED,
                 null,
                 null,
-                assignedBy
+                createdBy
         );
-        activity.setCreatedBy(assignedBy);
+        activity.setCreatedBy(createdBy.getId());
         taskActivityRepository.save(activity);
 
         log.info("Task created successfully with ID: {}", savedTask.getId());
@@ -87,12 +94,19 @@ public class TaskService {
         Task task = taskRepository.findActiveTaskById(taskId)
                 .orElseThrow(() -> new RuntimeException("Task not found"));
 
-        TaskStatus oldStatus = task.getStatus();
         User updatedBy = userRepository.findById(updatedByUserId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
+        // Validate update permissions based on roles
+        validateTaskUpdate(updatedBy, task);
+
+        // Validate status transition
+        TaskStatus oldStatus = task.getStatus();
+        String userRole = updatedBy.getRole() != null ? updatedBy.getRole().getName() : null;
+        validateStatusTransition(oldStatus, newStatus, userRole);
+
         task.setStatus(newStatus);
-        task.setUpdatedBy(updatedBy);
+        task.setUpdatedBy(updatedBy.getId());
 
         Task savedTask = taskRepository.save(task);
 
@@ -104,7 +118,7 @@ public class TaskService {
                 newStatus.toString(),
                 updatedBy
         );
-        activity.setCreatedBy(updatedBy);
+        activity.setCreatedBy(updatedBy.getId());
         taskActivityRepository.save(activity);
 
         log.info("Task {} status updated successfully", taskId);
@@ -123,11 +137,17 @@ public class TaskService {
         User assignedBy = userRepository.findById(assignedByUserId)
                 .orElseThrow(() -> new RuntimeException("Assigner user not found"));
 
+        // Validate update permissions based on roles (for modifying the task)
+        validateTaskUpdate(assignedBy, task);
+        
+        // Validate assignment permissions based on roles (for who can be assigned)
+        validateTaskAssignment(assignedBy, newAssignee);
+
         String oldAssigneeName = task.getAssignedTo() != null ? task.getAssignedTo().getFullName() : null;
         String newAssigneeName = newAssignee.getFullName();
 
         task.setAssignedTo(newAssignee);
-        task.setUpdatedBy(assignedBy);
+        task.setUpdatedBy(assignedBy.getId());
 
         Task savedTask = taskRepository.save(task);
 
@@ -139,7 +159,7 @@ public class TaskService {
                 newAssigneeName,
                 assignedBy
         );
-        activity.setCreatedBy(assignedBy);
+        activity.setCreatedBy(assignedBy.getId());
         taskActivityRepository.save(activity);
 
         log.info("Task {} assigned successfully", taskId);
@@ -156,8 +176,8 @@ public class TaskService {
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         TaskComment comment = new TaskComment(task, request.getComment(), commentedBy);
-        comment.setCreatedBy(commentedBy);
-        comment.setUpdatedBy(commentedBy);
+        comment.setCreatedBy(commentedBy.getId());
+        comment.setUpdatedBy(commentedBy.getId());
 
         TaskComment savedComment = taskCommentRepository.save(comment);
 
@@ -169,7 +189,7 @@ public class TaskService {
                 null,
                 commentedBy
         );
-        activity.setCreatedBy(commentedBy);
+        activity.setCreatedBy(commentedBy.getId());
         taskActivityRepository.save(activity);
 
         log.info("Comment added successfully to task {}", taskId);
@@ -182,12 +202,15 @@ public class TaskService {
         Task task = taskRepository.findActiveTaskById(taskId)
                 .orElseThrow(() -> new RuntimeException("Task not found"));
 
-        Priority oldPriority = task.getPriority();
         User updatedBy = userRepository.findById(updatedByUserId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
+        // Validate update permissions based on roles
+        validateTaskUpdate(updatedBy, task);
+
+        Priority oldPriority = task.getPriority();
         task.setPriority(newPriority);
-        task.setUpdatedBy(updatedBy);
+        task.setUpdatedBy(updatedBy.getId());
 
         Task savedTask = taskRepository.save(task);
 
@@ -199,7 +222,7 @@ public class TaskService {
                 newPriority.toString(),
                 updatedBy
         );
-        activity.setCreatedBy(updatedBy);
+        activity.setCreatedBy(updatedBy.getId());
         taskActivityRepository.save(activity);
 
         log.info("Task {} priority updated successfully", taskId);
@@ -212,12 +235,15 @@ public class TaskService {
         Task task = taskRepository.findActiveTaskById(taskId)
                 .orElseThrow(() -> new RuntimeException("Task not found"));
 
-        LocalDate oldDueDate = task.getDueDate();
         User updatedBy = userRepository.findById(updatedByUserId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
+        // Validate update permissions based on roles
+        validateTaskUpdate(updatedBy, task);
+
+        LocalDate oldDueDate = task.getDueDate();
         task.setDueDate(newDueDate);
-        task.setUpdatedBy(updatedBy);
+        task.setUpdatedBy(updatedBy.getId());
 
         Task savedTask = taskRepository.save(task);
 
@@ -229,7 +255,7 @@ public class TaskService {
                 newDueDate.toString(),
                 updatedBy
         );
-        activity.setCreatedBy(updatedBy);
+        activity.setCreatedBy(updatedBy.getId());
         taskActivityRepository.save(activity);
 
         log.info("Task {} due date updated successfully", taskId);
@@ -245,8 +271,11 @@ public class TaskService {
         User deletedBy = userRepository.findById(deletedByUserId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
+        // Validate update permissions based on roles (deleting is a form of updating)
+        validateTaskUpdate(deletedBy, task);
+
         task.setIsDeleted(true);
-        task.setUpdatedBy(deletedBy);
+        task.setUpdatedBy(deletedBy.getId());
 
         taskRepository.save(task);
 
@@ -255,15 +284,103 @@ public class TaskService {
 
     @Transactional(readOnly = true)
     public List<TaskResponse> getAllTasks() {
-        log.info("Getting all tasks with branch-based access control");
+        log.info("Getting all tasks with role-based access control");
         
         try {
             var currentUser = SecurityUtils.getCurrentUser();
-            log.info("Current user: userId={}, role={}, branchId={}, isAdmin={}", 
-                currentUser.getUserId(), currentUser.getRole(), currentUser.getBranchId(), currentUser.isAdmin());
-            return taskRepository.findAllWithAccess(currentUser.isAdmin(), currentUser.getBranchId(), currentUser.getUserId()).stream()
+            log.info("Current user: userId={}, role={}, branchId={}", 
+                currentUser.getUserId(), currentUser.getRole(), currentUser.getBranchId());
+            
+            String userRole = currentUser.getRole();
+            Long userId = currentUser.getUserId();
+            Long branchId = currentUser.getBranchId();
+            
+            List<Task> tasks;
+            
+            switch (userRole.toUpperCase()) {
+                case "ADMIN":
+                    // ADMIN: return all tasks
+                    tasks = taskRepository.findAllTasksForAdminList();
+                    break;
+                    
+                case "MANAGER":
+                    // MANAGER: return tasks WHERE branchId = user.branchId
+                    tasks = taskRepository.findTasksByBranchForManagerList(branchId);
+                    break;
+                    
+                case "SENIOR_COUNSELLOR":
+                    // SENIOR_COUNSELLOR: return tasks WHERE branchId = user.branchId AND (assignedTo = user.id OR assignedTo IN juniorIds)
+                    List<Long> juniorIds = getJuniorCounsellorIds(userId, branchId);
+                    tasks = taskRepository.findTasksForSeniorCounsellorList(branchId, userId, juniorIds);
+                    break;
+                    
+                case "JUNIOR_COUNSELLOR":
+                    // JUNIOR_COUNSELLOR: return tasks WHERE branchId = user.branchId AND assignedTo = user.id
+                    tasks = taskRepository.findTasksForJuniorCounsellorList(branchId, userId);
+                    break;
+                    
+                default:
+                    // Other roles cannot view tasks
+                    log.warn("User role {} is not authorized to view tasks", userRole);
+                    return List.of();
+            }
+            
+            return tasks.stream()
                     .map(this::convertToTaskResponse)
                     .collect(Collectors.toList());
+                    
+        } catch (Exception e) {
+            log.error("Error getting current user: {}", e.getMessage(), e);
+            throw new RuntimeException("SecurityUtils error: " + e.getMessage(), e);
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public Page<TaskResponse> getAllTasksPaginated(Pageable pageable) {
+        log.info("Getting all tasks with role-based access control and pagination");
+        
+        try {
+            var currentUser = SecurityUtils.getCurrentUser();
+            log.info("Current user: userId={}, role={}, branchId={}, page={}, size={}", 
+                currentUser.getUserId(), currentUser.getRole(), currentUser.getBranchId(), 
+                pageable.getPageNumber(), pageable.getPageSize());
+            
+            String userRole = currentUser.getRole();
+            Long userId = currentUser.getUserId();
+            Long branchId = currentUser.getBranchId();
+            
+            Page<Task> taskPage;
+            
+            switch (userRole.toUpperCase()) {
+                case "ADMIN":
+                    // ADMIN: return all tasks
+                    taskPage = taskRepository.findAllTasksForAdmin(pageable);
+                    break;
+                    
+                case "MANAGER":
+                    // MANAGER: return tasks WHERE branchId = user.branchId
+                    taskPage = taskRepository.findTasksByBranchForManager(branchId, pageable);
+                    break;
+                    
+                case "SENIOR_COUNSELLOR":
+                    // SENIOR_COUNSELLOR: return tasks WHERE branchId = user.branchId AND (assignedTo = user.id OR assignedTo IN juniorIds)
+                    List<Long> juniorIds = getJuniorCounsellorIds(userId, branchId);
+                    taskPage = taskRepository.findTasksForSeniorCounsellor(branchId, userId, juniorIds, pageable);
+                    break;
+                    
+                case "JUNIOR_COUNSELLOR":
+                    // JUNIOR_COUNSELLOR: return tasks WHERE branchId = user.branchId AND assignedTo = user.id
+                    taskPage = taskRepository.findTasksForJuniorCounsellor(branchId, userId, pageable);
+                    break;
+                    
+                default:
+                    // Other roles cannot view tasks
+                    log.warn("User role {} is not authorized to view tasks", userRole);
+                    return Page.empty(pageable);
+            }
+            
+            return taskPage.map(this::convertToTaskResponse);
+                    
         } catch (Exception e) {
             log.error("Error getting current user: {}", e.getMessage(), e);
             throw new RuntimeException("SecurityUtils error: " + e.getMessage(), e);
@@ -298,8 +415,25 @@ public class TaskService {
             return List.of();
         }
 
-        // Use branch-based filtering instead of the old method
-        List<Task> tasks = taskRepository.findAllWithAccess(currentUser.isAdmin(), currentUser.getBranchId(), currentUser.getUserId());
+        // Use role-based filtering
+        List<Task> tasks;
+        if (currentUser.isAdmin()) {
+            // ADMIN: See all tasks
+            tasks = taskRepository.findAllTasksForAdminList();
+        } else if ("MANAGER".equals(currentUser.getRole())) {
+            // MANAGER: See all tasks in their branch
+            tasks = taskRepository.findTasksByBranchForManagerList(currentUser.getBranchId());
+        } else if ("SENIOR_COUNSELLOR".equals(currentUser.getRole())) {
+            // SENIOR_COUNSELLOR: See their tasks + tasks of their junior counsellors
+            // For now, fall back to branch filtering - TODO: Implement junior counsellor hierarchy
+            tasks = taskRepository.findTasksByBranchForManagerList(currentUser.getBranchId());
+        } else if ("JUNIOR_COUNSELLOR".equals(currentUser.getRole())) {
+            // JUNIOR_COUNSELLOR: See only their assigned tasks
+            tasks = taskRepository.findTasksForJuniorCounsellorList(currentUser.getBranchId(), currentUser.getUserId());
+        } else {
+            // Default: Use the old access control method for other roles
+            tasks = taskRepository.findAllWithAccess(currentUser.isAdmin(), currentUser.getBranchId(), currentUser.getUserId());
+        }
 
         return tasks.stream()
                 .filter(task -> {
@@ -450,6 +584,314 @@ public class TaskService {
                 return actorName + " changed due date from " + (activity.getOldValue() != null ? activity.getOldValue() : "Not set") + " to " + activity.getNewValue();
             default:
                 return actorName + " performed " + activity.getAction();
+        }
+    }
+
+    /**
+     * Get junior counsellor IDs assigned to a senior counsellor in the same branch
+     */
+    private List<Long> getJuniorCounsellorIds(Long seniorCounsellorId, Long branchId) {
+        log.info("Getting junior counsellor IDs for senior: {} in branch: {}", seniorCounsellorId, branchId);
+        
+        // Fetch users WHERE reporting_manager_id = seniorId AND role = 'JUNIOR_COUNSELLOR' AND branch_id = given branchId
+        List<Long> juniorIds = userRepository.findJuniorCounsellorIdsBySeniorIdAndBranchId(seniorCounsellorId, branchId);
+        
+        log.info("Found {} junior counsellors for senior: {} in branch: {}", juniorIds.size(), seniorCounsellorId, branchId);
+        return juniorIds;
+    }
+
+    /**
+     * Validates task update permissions with strict branch security and defensive validation
+     * 
+     * Update Rules:
+     * - ADMIN: can update any task
+     * - MANAGER: can update tasks WHERE branchId = user.branchId
+     * - SENIOR_COUNSELLOR: can update tasks WHERE branchId = user.branchId AND (assignedTo = user.id OR assignedTo IN juniorIds)
+     * - JUNIOR_COUNSELLOR: can update tasks WHERE branchId = user.branchId AND assignedTo = user.id
+     */
+    private void validateTaskUpdate(User updatedBy, Task task) {
+        String userRole = updatedBy.getRole() != null ? updatedBy.getRole().getName() : null;
+        Long userId = updatedBy.getId();
+        Long userBranchId = updatedBy.getBranch() != null ? updatedBy.getBranch().getId() : null;
+        Long taskBranchId = task.getBranch() != null ? task.getBranch().getId() : null;
+        Long assignedToId = task.getAssignedTo() != null ? task.getAssignedTo().getId() : null;
+        
+        log.info("Validating task update: {} ({}) updating task {} assigned to {} in branch {}", 
+            updatedBy.getFullName(), userRole, task.getId(), assignedToId, taskBranchId);
+        
+        // Defensive validation: Check for null values
+        if (userRole == null) {
+            throw new UnauthorizedAccessException("User role not properly configured");
+        }
+        if (task == null || task.getId() == null) {
+            throw new IllegalArgumentException("Task cannot be null or must have a valid ID");
+        }
+        
+        // Branch security enforcement: Cannot update tasks outside user's branch
+        if (!"ADMIN".equals(userRole.toUpperCase())) {
+            if (userBranchId == null) {
+                throw new BranchSecurityException("User must be assigned to a branch to update tasks");
+            }
+            if (taskBranchId == null) {
+                throw new BranchSecurityException("Task must be assigned to a branch");
+            }
+            if (!userBranchId.equals(taskBranchId)) {
+                throw new BranchSecurityException("Cannot update tasks in different branches. User branch: " + 
+                    userBranchId + ", Task branch: " + taskBranchId);
+            }
+        }
+        
+        switch (userRole.toUpperCase()) {
+            case "ADMIN":
+                // Admin can update any task (branch restriction doesn't apply)
+                log.info("ADMIN {} updating task {}", updatedBy.getFullName(), task.getId());
+                break;
+                
+            case "MANAGER":
+                // Manager can update tasks WHERE branchId = user.branchId (already validated above)
+                log.info("MANAGER {} updating task {} in branch {}", updatedBy.getFullName(), task.getId(), userBranchId);
+                break;
+                
+            case "SENIOR_COUNSELLOR":
+                // Senior Counsellor can update tasks WHERE branchId = user.branchId AND (assignedTo = user.id OR assignedTo IN juniorIds)
+                if (!userId.equals(assignedToId)) {
+                    List<Long> juniorIds = getJuniorCounsellorIds(userId, userBranchId);
+                    if (!juniorIds.contains(assignedToId)) {
+                        throw new UnauthorizedAccessException("SENIOR_COUNSELLOR can only update their own tasks or tasks assigned to their junior counsellors");
+                    }
+                }
+                log.info("SENIOR_COUNSELLOR {} updating task {} in branch {}", updatedBy.getFullName(), task.getId(), userBranchId);
+                break;
+                
+            case "JUNIOR_COUNSELLOR":
+                // Junior Counsellor can update tasks WHERE branchId = user.branchId AND assignedTo = user.id
+                if (!userId.equals(assignedToId)) {
+                    throw new UnauthorizedAccessException("JUNIOR_COUNSELLOR can only update their own tasks");
+                }
+                log.info("JUNIOR_COUNSELLOR {} updating their own task {}", updatedBy.getFullName(), task.getId());
+                break;
+                
+            default:
+                // Other roles cannot update tasks
+                throw new UnauthorizedAccessException(userRole + " cannot update tasks");
+        }
+    }
+
+    /**
+     * Validates status transition control with enforced workflow rules
+     * 
+     * Valid Status Flow:
+     * PENDING → IN_PROGRESS → COMPLETED
+     *                 ↓
+     *              REJECTED
+     * 
+     * Rules:
+     * - Cannot move COMPLETED → IN_PROGRESS (except ADMIN)
+     * - Cannot skip flow randomly
+     * - ADMIN can override
+     */
+    private void validateStatusTransition(TaskStatus oldStatus, TaskStatus newStatus, String userRole) {
+        log.info("Validating status transition: {} → {} by user role: {}", oldStatus, newStatus, userRole);
+        
+        // Admin can override any transition
+        if ("ADMIN".equals(userRole.toUpperCase())) {
+            log.info("ADMIN overriding status transition: {} → {}", oldStatus, newStatus);
+            return;
+        }
+        
+        // Allow same status (no change)
+        if (oldStatus == newStatus) {
+            return;
+        }
+        
+        // Define valid transitions
+        switch (oldStatus) {
+            case PENDING:
+                // PENDING can go to IN_PROGRESS or REJECTED
+                if (newStatus != TaskStatus.IN_PROGRESS && newStatus != TaskStatus.REJECTED) {
+                    throw new InvalidStatusTransitionException("PENDING tasks can only transition to IN_PROGRESS or REJECTED");
+                }
+                break;
+                
+            case IN_PROGRESS:
+                // IN_PROGRESS can go to COMPLETED or REJECTED
+                if (newStatus != TaskStatus.COMPLETED && newStatus != TaskStatus.REJECTED) {
+                    throw new InvalidStatusTransitionException("IN_PROGRESS tasks can only transition to COMPLETED or REJECTED");
+                }
+                break;
+                
+            case COMPLETED:
+                // COMPLETED should not transition back (except ADMIN which is handled above)
+                throw new InvalidStatusTransitionException("COMPLETED tasks cannot be modified (only ADMIN can override)");
+                
+            case REJECTED:
+                // REJECTED can go back to PENDING or IN_PROGRESS
+                if (newStatus != TaskStatus.PENDING && newStatus != TaskStatus.IN_PROGRESS) {
+                    throw new InvalidStatusTransitionException("REJECTED tasks can only transition to PENDING or IN_PROGRESS");
+                }
+                break;
+                
+            default:
+                throw new InvalidStatusTransitionException("Unknown status: " + oldStatus);
+        }
+        
+        log.info("Status transition validated: {} → {}", oldStatus, newStatus);
+    }
+
+    /**
+     * Validates task creation permissions based on user roles
+     * 
+     * Creation Rules:
+     * - ADMIN: can create task for anyone
+     * - MANAGER: can create task ONLY for users in their branch
+     * - SENIOR_COUNSELLOR: can create task ONLY for assignedTo IN (juniorIds under this senior) AND branchId = user.branchId
+     * - JUNIOR_COUNSELLOR: not allowed
+     */
+    private void validateTaskCreation(User createdBy, User assignedTo) {
+        String creatorRole = createdBy.getRole() != null ? createdBy.getRole().getName() : null;
+        String assigneeRole = assignedTo.getRole() != null ? assignedTo.getRole().getName() : null;
+        
+        log.info("Validating task creation: {} ({}) -> {} ({})", 
+            createdBy.getFullName(), creatorRole, assignedTo.getFullName(), assigneeRole);
+        
+        if (creatorRole == null || assigneeRole == null) {
+            throw new RuntimeException("User roles not properly configured");
+        }
+        
+        switch (creatorRole.toUpperCase()) {
+            case "ADMIN":
+                // Admin can create task for anyone
+                log.info("ADMIN {} creating task for {} ({})", createdBy.getFullName(), assignedTo.getFullName(), assigneeRole);
+                break;
+                
+            case "MANAGER":
+                // Manager can create task ONLY for users in their branch
+                if (createdBy.getBranch() == null || assignedTo.getBranch() == null) {
+                    throw new RuntimeException("MANAGER must have a branch assignment to create tasks");
+                }
+                if (!createdBy.getBranch().getId().equals(assignedTo.getBranch().getId())) {
+                    throw new RuntimeException("MANAGER can only create tasks for users in the same branch");
+                }
+                if ("ADMIN".equals(assigneeRole)) {
+                    throw new RuntimeException("MANAGER cannot create tasks for ADMIN users");
+                }
+                log.info("MANAGER {} creating task for {} ({}) in branch {}", 
+                    createdBy.getFullName(), assignedTo.getFullName(), assigneeRole, createdBy.getBranch().getId());
+                break;
+                
+            case "SENIOR_COUNSELLOR":
+                // Senior Counsellor can create task ONLY for assignedTo IN (juniorIds under this senior) AND branchId = user.branchId
+                if (!"JUNIOR_COUNSELLOR".equals(assigneeRole)) {
+                    throw new RuntimeException("SENIOR_COUNSELLOR can only create tasks for JUNIOR_COUNSELLOR");
+                }
+                if (createdBy.getBranch() == null || assignedTo.getBranch() == null) {
+                    throw new RuntimeException("SENIOR_COUNSELLOR must have a branch assignment to create tasks");
+                }
+                if (!createdBy.getBranch().getId().equals(assignedTo.getBranch().getId())) {
+                    throw new RuntimeException("SENIOR_COUNSELLOR can only create tasks for JUNIOR_COUNSELLOR in the same branch");
+                }
+                // TODO: Add validation to ensure assignedTo is actually assigned under this senior
+                log.info("SENIOR_COUNSELLOR {} creating task for {} ({}) in branch {}", 
+                    createdBy.getFullName(), assignedTo.getFullName(), assigneeRole, createdBy.getBranch().getId());
+                break;
+                
+            case "JUNIOR_COUNSELLOR":
+            case "VIDEO_EDITOR":
+            case "STUDENT":
+            case "EMPLOYEE":
+            case "REFERRAL":
+            case "COMPANY":
+                // These roles cannot create tasks
+                throw new RuntimeException(creatorRole + " cannot create tasks");
+                
+            default:
+                throw new RuntimeException("Unknown role: " + creatorRole);
+        }
+    }
+
+    /**
+     * Validates task assignment permissions with strict role-based rules and branch security
+     * 
+     * Assignment Rules:
+     * - ADMIN: Can assign to anyone
+     * - MANAGER: Can assign ONLY to SENIOR_COUNSELLOR, JUNIOR_COUNSELLOR, Video Editor, Web Developer
+     * - SENIOR_COUNSELLOR: Can assign ONLY to their own JUNIOR_COUNSELLORS, cannot assign to themselves
+     * - JUNIOR_COUNSELLOR: Cannot assign tasks
+     */
+    private void validateTaskAssignment(User assignedBy, User assignedTo) {
+        String assignerRole = assignedBy.getRole() != null ? assignedBy.getRole().getName() : null;
+        String assigneeRole = assignedTo.getRole() != null ? assignedTo.getRole().getName() : null;
+        
+        log.info("Validating task assignment: {} ({}) -> {} ({})", 
+            assignedBy.getFullName(), assignerRole, assignedTo.getFullName(), assigneeRole);
+        
+        if (assignerRole == null || assigneeRole == null) {
+            throw new UnauthorizedAccessException("User roles not properly configured");
+        }
+        
+        // Branch security enforcement: assignedUser.branchId must equal currentUser.branchId
+        Long assignerBranchId = assignedBy.getBranchId();
+        Long assigneeBranchId = assignedTo.getBranchId();
+        
+        if (assignerBranchId == null || !assignerBranchId.equals(assigneeBranchId)) {
+            throw new BranchSecurityException("Cannot assign tasks to users in different branches. Assigner branch: " + 
+                assignerBranchId + ", Assignee branch: " + assigneeBranchId);
+        }
+        
+        switch (assignerRole.toUpperCase()) {
+            case "ADMIN":
+                // Admin can assign to anyone
+                log.info("ADMIN {} assigning task to {} ({})", assignedBy.getFullName(), assignedTo.getFullName(), assigneeRole);
+                break;
+                
+            case "MANAGER":
+                // Manager can assign ONLY to: SENIOR_COUNSELLOR, JUNIOR_COUNSELLOR, Video Editor, Web Developer
+                // Cannot assign to ADMIN or other MANAGER
+                if ("ADMIN".equals(assigneeRole) || "MANAGER".equals(assigneeRole)) {
+                    throw new InvalidAssignmentException("MANAGER cannot assign tasks to ADMIN or other MANAGER users");
+                }
+                if (!"SENIOR_COUNSELLOR".equals(assigneeRole) && 
+                    !"JUNIOR_COUNSELLOR".equals(assigneeRole) && 
+                    !"VIDEO_EDITOR".equals(assigneeRole) && 
+                    !"WEB_DEVELOPER".equals(assigneeRole)) {
+                    throw new InvalidAssignmentException("MANAGER can only assign tasks to SENIOR_COUNSELLOR, JUNIOR_COUNSELLOR, Video Editor, or Web Developer");
+                }
+                log.info("MANAGER {} assigning task to {} ({})", assignedBy.getFullName(), assignedTo.getFullName(), assigneeRole);
+                break;
+                
+            case "SENIOR_COUNSELLOR":
+                // Self-task restriction: Cannot assign to themselves
+                if (assignedBy.getId().equals(assignedTo.getId())) {
+                    throw new InvalidAssignmentException("SENIOR_COUNSELLOR cannot assign tasks to themselves");
+                }
+                
+                // Can assign ONLY to their own JUNIOR_COUNSELLORS
+                if (!"JUNIOR_COUNSELLOR".equals(assigneeRole)) {
+                    throw new InvalidAssignmentException("SENIOR_COUNSELLOR can only assign tasks to JUNIOR_COUNSELLOR");
+                }
+                
+                // Verify that the assigned junior counsellor reports to this senior
+                List<Long> juniorIds = getJuniorCounsellorIds(assignedBy.getId(), assignerBranchId);
+                if (!juniorIds.contains(assignedTo.getId())) {
+                    throw new InvalidAssignmentException("SENIOR_COUNSELLOR can only assign tasks to their own junior counsellors");
+                }
+                
+                log.info("SENIOR_COUNSELLOR {} assigning task to their junior counsellor: {}", 
+                    assignedBy.getFullName(), assignedTo.getFullName());
+                break;
+                
+            case "JUNIOR_COUNSELLOR":
+            case "VIDEO_EDITOR":
+            case "WEB_DEVELOPER":
+            case "STUDENT":
+            case "EMPLOYEE":
+            case "REFERRAL":
+            case "COMPANY":
+                // These roles cannot assign tasks
+                throw new UnauthorizedAccessException(assignerRole + " cannot assign tasks to other users");
+                
+            default:
+                throw new UnauthorizedAccessException("Unknown role: " + assignerRole);
         }
     }
 }

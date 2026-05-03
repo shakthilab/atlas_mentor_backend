@@ -9,4 +9,6 @@ import java.util.List;
 @Repository
 public interface StudentAcademicHistoryRepository extends JpaRepository<StudentAcademicHistory, Long> {
     List<StudentAcademicHistory> findByStudentId(Long studentId);
+    
+    void deleteByStudentId(Long studentId);
 }

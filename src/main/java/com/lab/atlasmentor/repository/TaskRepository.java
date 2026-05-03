@@ -3,6 +3,8 @@ package com.lab.atlasmentor.repository;
 import com.lab.atlasmentor.model.Task;
 import com.lab.atlasmentor.enums.TaskStatus;
 import com.lab.atlasmentor.enums.Priority;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -34,7 +36,7 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
     @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.priority = :priority")
     List<Task> findByPriority(@Param("priority") Priority priority);
 
-    @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.dueDate <= :date AND t.status != 'DONE'")
+    @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.dueDate <= :date AND t.status != 'COMPLETED'")
     List<Task> findOverdueTasks(@Param("date") LocalDate date);
 
     @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.dueDate = :date")
@@ -60,7 +62,7 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
             "(:priority IS NULL OR t.priority = :priority) AND " +
             "(:createdBy IS NULL OR t.created_by = :createdBy) AND " +
             "(:keyword IS NULL OR t.title LIKE CONCAT('%', :keyword, '%') OR t.description LIKE CONCAT('%', :keyword, '%')) AND " +
-            "(:overdue IS NULL OR (:overdue = true AND t.due_date < CURRENT_DATE AND t.status != 'DONE')) AND " +
+            "(:overdue IS NULL OR (:overdue = true AND t.due_date < CURRENT_DATE AND t.status != 'COMPLETED')) AND " +
             "(:search IS NULL OR t.title LIKE CONCAT('%', :search, '%') OR t.description LIKE CONCAT('%', :search, '%')) " +
             "ORDER BY t.created_at DESC",
             nativeQuery = true)
@@ -104,7 +106,7 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
     
     // Branch-based access control methods
     @Query(value = "SELECT t.* FROM tasks t WHERE t.is_deleted = false AND " +
-            "(:isAdmin = true OR (:isAdmin = false AND t.assigned_to = :currentUserId))", nativeQuery = true)
+            "(:isAdmin = true OR (:isAdmin = false AND (t.assigned_to = :currentUserId OR t.created_by = :currentUserId)))", nativeQuery = true)
     List<Task> findAllWithAccess(@Param("isAdmin") boolean isAdmin, @Param("branchId") Long branchId, @Param("currentUserId") Long currentUserId);
     
     @Query(value = "SELECT t.* FROM tasks t WHERE (:isAdmin = true OR t.branch_id = :branchId) AND t.is_deleted = false AND t.status = :status", nativeQuery = true)
@@ -115,4 +117,37 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
     
     @Query(value = "SELECT COUNT(t) FROM tasks t WHERE (:isAdmin = true OR t.branch_id = :branchId) AND t.is_deleted = false AND t.status = :status", nativeQuery = true)
     long countByStatusWithAccess(@Param("status") String status, @Param("isAdmin") boolean isAdmin, @Param("branchId") Long branchId);
+
+    // Role-based task fetching methods with pagination support
+    
+    // For ADMIN: return all tasks
+    @Query("SELECT t FROM Task t WHERE t.isDeleted = false")
+    Page<Task> findAllTasksForAdmin(Pageable pageable);
+    
+    // For MANAGER: return tasks where branchId = user.branchId
+    @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.branch.id = :branchId")
+    Page<Task> findTasksByBranchForManager(@Param("branchId") Long branchId, Pageable pageable);
+    
+    // For SENIOR_COUNSELLOR: return tasks where branchId = user.branchId AND (assignedTo = user.id OR assignedTo IN juniorIds)
+    @Query(value = "SELECT t.* FROM tasks t WHERE t.is_deleted = false AND t.branch_id = :branchId AND " +
+            "(t.assigned_to = :seniorId OR t.assigned_to IN (:juniorIds))", nativeQuery = true)
+    Page<Task> findTasksForSeniorCounsellor(@Param("branchId") Long branchId, @Param("seniorId") Long seniorId, @Param("juniorIds") List<Long> juniorIds, Pageable pageable);
+    
+    // For JUNIOR_COUNSELLOR: return tasks where branchId = user.branchId AND assignedTo = user.id
+    @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.branch.id = :branchId AND t.assignedTo.id = :juniorId")
+    Page<Task> findTasksForJuniorCounsellor(@Param("branchId") Long branchId, @Param("juniorId") Long juniorId, Pageable pageable);
+    
+    // Legacy non-paginated methods for backward compatibility
+    @Query("SELECT t FROM Task t WHERE t.isDeleted = false")
+    List<Task> findAllTasksForAdminList();
+    
+    @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.branch.id = :branchId")
+    List<Task> findTasksByBranchForManagerList(@Param("branchId") Long branchId);
+    
+    @Query(value = "SELECT t.* FROM tasks t WHERE t.is_deleted = false AND t.branch_id = :branchId AND " +
+            "(t.assigned_to = :seniorId OR t.assigned_to IN (:juniorIds))", nativeQuery = true)
+    List<Task> findTasksForSeniorCounsellorList(@Param("branchId") Long branchId, @Param("seniorId") Long seniorId, @Param("juniorIds") List<Long> juniorIds);
+    
+    @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.branch.id = :branchId AND t.assignedTo.id = :juniorId")
+    List<Task> findTasksForJuniorCounsellorList(@Param("branchId") Long branchId, @Param("juniorId") Long juniorId);
 }

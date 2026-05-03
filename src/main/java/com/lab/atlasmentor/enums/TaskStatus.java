@@ -1,7 +1,8 @@
 package com.lab.atlasmentor.enums;
 
 public enum TaskStatus {
-    TO_DO,
+    PENDING,
     IN_PROGRESS,
-    DONE
+    COMPLETED,
+    REJECTED
 }

@@ -79,6 +79,7 @@ public class AdminController {
     }
 
     @GetMapping("/get-all-employee")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SENIOR_COUNSELLOR')")
     public ResponseEntity<ApiResponse<List<UserResponse>>> getUsersExcludingAdminAndStudent(
             @RequestParam(required = false) Long roleId,
             @RequestParam(required = false) Long branchId) {

@@ -4,5 +4,6 @@ public enum StudentStatus {
     LEAD,
     REGISTERED,
     LOST,
-    STUDENT
+    STUDENT,
+    PROSPECTIVE
 }
