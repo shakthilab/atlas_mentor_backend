@@ -260,6 +260,115 @@ public class DisputeService {
     }
     
     @Transactional
+    public DisputeDto acceptDisputePayment(Long id, String acceptanceNotes, String paymentReference, Double acceptedAmount) {
+        Dispute dispute = disputeRepository.findById(id)
+            .orElseThrow(() -> new RuntimeException("Dispute not found with id: " + id));
+        
+        if (dispute.isDisputeDeleted()) {
+            throw new RuntimeException("Cannot accept payment for deleted dispute");
+        }
+        
+        if (dispute.getStatus() != DisputeStatus.OPEN && dispute.getStatus() != DisputeStatus.IN_PROGRESS) {
+            throw new RuntimeException("Cannot accept payment. Dispute must be OPEN or IN_PROGRESS");
+        }
+        
+        CustomUserDetails currentUser = SecurityUtils.getCurrentUser();
+        
+        // Set dispute to RESOLVED
+        dispute.setStatus(DisputeStatus.RESOLVED);
+        
+        // Build comprehensive resolution notes
+        StringBuilder notesBuilder = new StringBuilder();
+        if (dispute.getResolutionNotes() != null && !dispute.getResolutionNotes().isEmpty()) {
+            notesBuilder.append(dispute.getResolutionNotes()).append("\n");
+        }
+        notesBuilder.append("PAYMENT ACCEPTED: ").append(acceptanceNotes);
+        
+        if (paymentReference != null && !paymentReference.trim().isEmpty()) {
+            notesBuilder.append("\nPayment Reference: ").append(paymentReference);
+        }
+        
+        if (acceptedAmount != null && acceptedAmount > 0) {
+            notesBuilder.append("\nAccepted Amount: ").append(acceptedAmount);
+        }
+        
+        dispute.setResolutionNotes(notesBuilder.toString());
+        dispute.setResolvedBy(currentUser.getUserId());
+        dispute.setResolvedAt(LocalDateTime.now());
+        
+        // Update student payment status to APPROVED when payment is accepted
+        updateStudentPaymentStatusToApproved(dispute.getStudent().getId());
+        
+        Dispute updatedDispute = disputeRepository.save(dispute);
+        return convertToDto(updatedDispute);
+    }
+    
+    @Transactional
+    public DisputeDto rejectDisputePayment(Long id, String rejectionReason, String rejectionCategory, Boolean requiresFurtherAction) {
+        Dispute dispute = disputeRepository.findById(id)
+            .orElseThrow(() -> new RuntimeException("Dispute not found with id: " + id));
+        
+        if (dispute.isDisputeDeleted()) {
+            throw new RuntimeException("Cannot reject payment for deleted dispute");
+        }
+        
+        if (dispute.getStatus() != DisputeStatus.OPEN && dispute.getStatus() != DisputeStatus.IN_PROGRESS) {
+            throw new RuntimeException("Cannot reject payment. Dispute must be OPEN or IN_PROGRESS");
+        }
+        
+        CustomUserDetails currentUser = SecurityUtils.getCurrentUser();
+        
+        // Set dispute to CLOSED with payment rejection
+        dispute.setStatus(DisputeStatus.CLOSED);
+        
+        // Build comprehensive rejection notes
+        StringBuilder notesBuilder = new StringBuilder();
+        if (dispute.getResolutionNotes() != null && !dispute.getResolutionNotes().isEmpty()) {
+            notesBuilder.append(dispute.getResolutionNotes()).append("\n");
+        }
+        notesBuilder.append("PAYMENT REJECTED: ").append(rejectionReason);
+        
+        if (rejectionCategory != null && !rejectionCategory.trim().isEmpty()) {
+            notesBuilder.append("\nRejection Category: ").append(rejectionCategory);
+        }
+        
+        if (requiresFurtherAction != null && requiresFurtherAction) {
+            notesBuilder.append("\nRequires Further Action: Yes");
+        }
+        
+        dispute.setResolutionNotes(notesBuilder.toString());
+        dispute.setResolvedBy(currentUser.getUserId());
+        dispute.setResolvedAt(LocalDateTime.now());
+        
+        // Update student payment status to REJECTED when payment is rejected
+        updateStudentPaymentStatusToRejected(dispute.getStudent().getId());
+        
+        Dispute updatedDispute = disputeRepository.save(dispute);
+        return convertToDto(updatedDispute);
+    }
+    
+    /**
+     * Update student payment status to APPROVED when dispute payment is accepted
+     */
+    private void updateStudentPaymentStatusToApproved(Long studentId) {
+        try {
+            // Find active student payment for the student
+            StudentPayment studentPayment = studentPaymentRepository.findActiveByStudentId(studentId)
+                .orElse(null);
+            
+            if (studentPayment != null) {
+                // Update payment status to APPROVED
+                studentPayment.setPaymentStatus(StudentPaymentStatus.PAID);
+                studentPaymentRepository.save(studentPayment);
+            }
+        } catch (Exception e) {
+            // Log error but don't fail the dispute payment acceptance
+            // In a production environment, you would want to log this properly
+            System.err.println("Warning: Failed to update student payment status to APPROVED for student ID: " + studentId);
+        }
+    }
+
+    @Transactional
     public void deleteDispute(Long id) {
         Dispute dispute = disputeRepository.findById(id)
             .orElseThrow(() -> new RuntimeException("Dispute not found with id: " + id));

@@ -5,5 +5,6 @@ public enum StudentPaymentStatus {
     PENDING,
     PARTIAL,
     PAID,
-    REJECTED
+    REJECTED,
+    DISPUTE
 }

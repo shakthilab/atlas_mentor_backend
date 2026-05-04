@@ -6,6 +6,8 @@ import com.lab.atlasmentor.dto.DisputeRequest;
 import com.lab.atlasmentor.dto.DisputeResolutionRequest;
 import com.lab.atlasmentor.dto.DisputeAcceptRequest;
 import com.lab.atlasmentor.dto.DisputeRejectRequest;
+import com.lab.atlasmentor.dto.DisputePaymentAcceptRequest;
+import com.lab.atlasmentor.dto.DisputePaymentRejectRequest;
 import com.lab.atlasmentor.model.Dispute;
 import com.lab.atlasmentor.service.DisputeService;
 import com.lab.atlasmentor.enums.DisputeStatus;
@@ -131,6 +133,34 @@ public class DisputeController {
         try {
             DisputeDto dispute = disputeService.closeDispute(id, resolutionNotes);
             return ResponseEntity.ok(ApiResponse.success("Dispute closed successfully", dispute));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+        }
+    }
+
+    // ==================== DISPUTE PAYMENT OPERATIONS ====================
+
+    @PostMapping("/{id}/payment/accept")
+    @PreAuthorize("hasAnyRole('REFERRAL', 'COMPANY')")
+    public ResponseEntity<ApiResponse<DisputeDto>> acceptDisputePayment(@PathVariable Long id,
+                                                                         @Valid @RequestBody DisputePaymentAcceptRequest request) {
+        try {
+            DisputeDto dispute = disputeService.acceptDisputePayment(id, request.getAcceptanceNotes(), 
+                request.getPaymentReference(), request.getAcceptedAmount());
+            return ResponseEntity.ok(ApiResponse.success("Dispute payment accepted successfully", dispute));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+        }
+    }
+
+    @PostMapping("/{id}/payment/reject")
+    @PreAuthorize("hasAnyRole('REFERRAL', 'COMPANY')")
+    public ResponseEntity<ApiResponse<DisputeDto>> rejectDisputePayment(@PathVariable Long id,
+                                                                         @Valid @RequestBody DisputePaymentRejectRequest request) {
+        try {
+            DisputeDto dispute = disputeService.rejectDisputePayment(id, request.getRejectionReason(), 
+                request.getRejectionCategory(), request.getRequiresFurtherAction());
+            return ResponseEntity.ok(ApiResponse.success("Dispute payment rejected successfully", dispute));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
         }

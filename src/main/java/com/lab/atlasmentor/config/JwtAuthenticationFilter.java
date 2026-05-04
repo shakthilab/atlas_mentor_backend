@@ -70,32 +70,32 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     logger.info("Authentication set in SecurityContext for user: " + email);
                 }
             } catch (io.jsonwebtoken.ExpiredJwtException e) {
-                // JWT expired - return 401 error
+                // JWT expired - return 401 error (session timeout)
                 logger.error("JWT token expired: " + e.getMessage());
                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                 response.setContentType("application/json");
-                response.getWriter().write("{\"error\": \"JWT token expired\", \"message\": \"Token has expired. Please login again.\"}");
+                response.getWriter().write("{\"error\": \"Session timeout\", \"message\": \"Token has expired. Please login again.\"}");
                 return;
             } catch (io.jsonwebtoken.security.SignatureException e) {
-                // Invalid signature - return 401 error
+                // Invalid signature - return 403 error (forbidden)
                 logger.error("JWT signature validation failed: " + e.getMessage());
-                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                response.setStatus(HttpServletResponse.SC_FORBIDDEN);
                 response.setContentType("application/json");
                 response.getWriter().write("{\"error\": \"Invalid JWT signature\", \"message\": \"Token signature is invalid.\"}");
                 return;
             } catch (io.jsonwebtoken.MalformedJwtException e) {
-                // Malformed token - return 401 error
+                // Malformed token - return 400 error (bad request)
                 logger.error("JWT token malformed: " + e.getMessage());
                 String errorMessage = "Token format is invalid.";
                 if (e.getMessage().contains("Compact JWSs must contain exactly 2 period characters")) {
                     errorMessage = "Invalid JWT format. Token must contain exactly 2 period separators.";
                 }
-                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                 response.setContentType("application/json");
                 response.getWriter().write("{\"error\": \"Malformed JWT token\", \"message\": \"" + errorMessage + "\"}");
                 return;
             } catch (Exception e) {
-                // Other JWT errors - return 401 error
+                // Other JWT errors - return 401 error (authentication failure)
                 logger.error("JWT token validation failed: " + e.getMessage());
                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                 response.setContentType("application/json");
