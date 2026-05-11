@@ -36,10 +36,8 @@ public class StudentResponse {
     private Long universityId;
     private String universityName;
     
-    // Mobile country code
-    private Long mobileCountryCodeId;
-    private String mobileCountryCode;
-    private String mobileCountryCodeSymbol;
+    // Mobile country code object
+    private MobileCountryCodeDto mobileCountryCode;
     
     // User information
     private Long userId;
@@ -48,6 +46,7 @@ public class StudentResponse {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private Long createdBy;
+    private String createdByName;
     private Long updatedBy;
     
     // Assigned by information
@@ -95,11 +94,22 @@ public class StudentResponse {
             response.setUniversityName(student.getUniversity().getName());
         }
         
-        // Mobile country code
-        if (student.getMobileCountryCode() != null) {
-            response.setMobileCountryCodeId(student.getMobileCountryCode().getId());
-            response.setMobileCountryCode(student.getMobileCountryCode().getCountryCode());
-            response.setMobileCountryCodeSymbol(student.getMobileCountryCode().getMobileCode());
+        // Mobile country code (get from user since it's now stored in User entity)
+        if (student.getUser() != null && student.getUser().getMobileCountryCode() != null) {
+            response.setMobileCountryCode(new MobileCountryCodeDto(
+                student.getUser().getMobileCountryCode().getId(),
+                student.getUser().getMobileCountryCode().getCountryName(),
+                student.getUser().getMobileCountryCode().getCountryCode(),
+                student.getUser().getMobileCountryCode().getMobileCode(),
+                student.getUser().getMobileCountryCode().getIsoAlpha2(),
+                student.getUser().getMobileCountryCode().getIsoAlpha3(),
+                student.getUser().getMobileCountryCode().getIsActive(),
+                student.getUser().getMobileCountryCode().getFlagUrl(),
+                student.getUser().getMobileCountryCode().getMobileNumberLength()
+            ));
+        } else {
+            // Always set MCC object, even if null, to ensure consistent API response
+            response.setMobileCountryCode(new MobileCountryCodeDto());
         }
         
         // Assigned by information

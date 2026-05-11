@@ -1,15 +1,7 @@
 package com.lab.atlasmentor.controller;
 
-import com.lab.atlasmentor.dto.ApiResponse;
-import com.lab.atlasmentor.dto.PageResponse;
-import com.lab.atlasmentor.dto.StudentRegistrationRequest;
-import com.lab.atlasmentor.dto.StudentOnboardingRequest;
-import com.lab.atlasmentor.dto.StudentStatusUpdateRequest;
-import com.lab.atlasmentor.dto.StudentResponse;
-import com.lab.atlasmentor.dto.StudentWithStudentPaymentDto;
-import com.lab.atlasmentor.dto.StudentPaymentAmountUpdateRequest;
-import com.lab.atlasmentor.dto.StudentPaymentStatusUpdateRequest;
-import com.lab.atlasmentor.dto.StudentPaymentAmountDto;
+import com.lab.atlasmentor.dto.*;
+import com.lab.atlasmentor.model.ClientPayout;
 import com.lab.atlasmentor.model.Student;
 import com.lab.atlasmentor.model.StudentPayment;
 import com.lab.atlasmentor.service.StudentService;
@@ -47,13 +39,13 @@ public class StudentController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<Student>> getStudent(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse<StudentResponse>> getStudent(@PathVariable Long id) {
         try {
-            Student student = studentService.getStudentByIdAsResponse(id);
-            ApiResponse<Student> response = ApiResponse.success("Student retrieved successfully", student);
+            StudentResponse student = studentService.getStudentByIdAsResponse(id);
+            ApiResponse<StudentResponse> response = ApiResponse.success("Student retrieved successfully", student);
             return ResponseEntity.ok(response);
         } catch (RuntimeException e) {
-            ApiResponse<Student> response = ApiResponse.error(e.getMessage());
+            ApiResponse<StudentResponse> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
     }
@@ -71,7 +63,7 @@ public class StudentController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<PageResponse<Student>>> getAllStudents(
+    public ResponseEntity<ApiResponse<PageResponse<StudentResponse>>> getAllStudents(
             @RequestParam(required = false) StudentStatus status,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
@@ -82,13 +74,13 @@ public class StudentController {
         Sort sort = direction.equalsIgnoreCase("asc") ? Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
         Pageable pageable = PageRequest.of(page, size, sort);
         
-        PageResponse<Student> students = studentService.getAllStudents(status, search, pageable);
-        ApiResponse<PageResponse<Student>> response = ApiResponse.success("Students retrieved successfully", students);
+        PageResponse<StudentResponse> students = studentService.getAllStudents(status, search, pageable);
+        ApiResponse<PageResponse<StudentResponse>> response = ApiResponse.success("Students retrieved successfully", students);
         return ResponseEntity.ok(response);
     }
 
     @GetMapping("/registered")
-    public ResponseEntity<ApiResponse<PageResponse<Student>>> getRegisteredStudents(
+    public ResponseEntity<ApiResponse<PageResponse<StudentResponse>>> getRegisteredStudents(
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
@@ -98,14 +90,19 @@ public class StudentController {
         Sort sort = direction.equalsIgnoreCase("asc") ? Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
         Pageable pageable = PageRequest.of(page, size, sort);
         
-        PageResponse<Student> students = studentService.getAllStudents(StudentStatus.REGISTERED, search, pageable);
-        ApiResponse<PageResponse<Student>> response = ApiResponse.success("Registered students retrieved successfully", students);
+        PageResponse<StudentResponse> students = studentService.getAllStudents(StudentStatus.REGISTERED, search, pageable);
+        ApiResponse<PageResponse<StudentResponse>> response = ApiResponse.success("Registered students retrieved successfully", students);
         return ResponseEntity.ok(response);
     }
 
     @GetMapping("/non-registered")
-    public ResponseEntity<ApiResponse<PageResponse<Student>>> getNonRegisteredStudents(
+    public ResponseEntity<ApiResponse<PageResponse<StudentNonRegisteredResponse>>> getNonRegisteredStudents(
             @RequestParam(required = false) String search,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String countryName,
+            @RequestParam(required = false) String dateFrom,
+            @RequestParam(required = false) String dateTo,
+            @RequestParam(required = false) String source,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "id") String sortBy,
@@ -114,8 +111,8 @@ public class StudentController {
         Sort sort = direction.equalsIgnoreCase("asc") ? Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
         Pageable pageable = PageRequest.of(page, size, sort);
         
-        PageResponse<Student> students = studentService.getNonRegisteredStudents(search, pageable);
-        ApiResponse<PageResponse<Student>> response = ApiResponse.success("Non-registered students retrieved successfully", students);
+        PageResponse<StudentNonRegisteredResponse> students = studentService.getNonRegisteredStudents(search, status, countryName, dateFrom, dateTo, source, pageable);
+        ApiResponse<PageResponse<StudentNonRegisteredResponse>> response = ApiResponse.<PageResponse<StudentNonRegisteredResponse>>success("Non-registered students retrieved successfully", students);
         return ResponseEntity.ok(response);
     }
 
@@ -125,7 +122,7 @@ public class StudentController {
             Student student = studentService.findStudentByEmail(email);
             if (student != null) {
                 StudentResponse studentResponse = StudentResponse.fromEntity(student);
-                ApiResponse<StudentResponse> response = ApiResponse.success("Student found successfully", studentResponse);
+                ApiResponse<StudentResponse> response = (ApiResponse<StudentResponse>) ApiResponse.success("Student found successfully", studentResponse);
                 return ResponseEntity.ok(response);
             } else {
                 ApiResponse<StudentResponse> response = ApiResponse.success("No student found with this email", null);
@@ -145,7 +142,24 @@ public class StudentController {
             ApiResponse<String> response = ApiResponse.success(message, null);
             return ResponseEntity.status(student.getUser() != null ? HttpStatus.OK : HttpStatus.CREATED).body(response);
         } catch (RuntimeException e) {
-            ApiResponse<String> response = ApiResponse.error(e.getMessage());
+            String errorMessage = e.getMessage();
+            // Provide specific error messages for common scenarios
+            if (errorMessage.contains("Email already exists")) {
+                errorMessage = "A user with this email already exists. Please use a different email address.";
+            } else if (errorMessage.contains("Mobile country code not found")) {
+                errorMessage = "Invalid mobile country code selected.";
+            } else if (errorMessage.contains("Branch not found")) {
+                errorMessage = "Invalid branch selected.";
+            } else if (errorMessage.contains("Country not found")) {
+                errorMessage = "Invalid destination country selected.";
+            } else if (errorMessage.contains("University not found")) {
+                errorMessage = "Invalid target university selected.";
+            } else if (errorMessage.contains("Invalid passing year format")) {
+                errorMessage = "Invalid passing year format. Please provide a valid year.";
+            } else if (errorMessage.contains("Failed to create student")) {
+                errorMessage = "Student onboarding failed. Please check all fields and try again.";
+            }
+            ApiResponse<String> response = ApiResponse.error(errorMessage);
             return ResponseEntity.badRequest().body(response);
         }
     }
@@ -201,13 +215,22 @@ public class StudentController {
     }
 
     @GetMapping("/with-payment-by-referral-company")
-    public ResponseEntity<ApiResponse<java.util.List<StudentWithStudentPaymentDto>>> getStudentsWithPaymentByReferralAndCompany() {
+    public ResponseEntity<ApiResponse<ClientPayoutWithSummaryDto>> getStudentsWithPaymentByReferralAndCompany(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String source,
+            @RequestParam(required = false) Long branch,
+            @RequestParam(required = false) String paymentStatus,
+            @RequestParam(required = false) String dateFrom,
+            @RequestParam(required = false) String dateTo,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
         try {
-            java.util.List<StudentWithStudentPaymentDto> students = studentService.getStudentsWithPaymentByReferralAndCompany();
-            ApiResponse<java.util.List<StudentWithStudentPaymentDto>> response = ApiResponse.success("Students with payment details (referral and company) retrieved successfully", students);
+            ClientPayoutWithSummaryDto result = studentService.getStudentsWithPaymentByReferralAndCompanyWithSummary(
+                search, source, branch, paymentStatus, dateFrom, dateTo, page, size);
+            ApiResponse<ClientPayoutWithSummaryDto> response = ApiResponse.success("Client payouts with referral and company details retrieved successfully", result);
             return ResponseEntity.ok(response);
         } catch (RuntimeException e) {
-            ApiResponse<java.util.List<StudentWithStudentPaymentDto>> response = ApiResponse.error(e.getMessage());
+            ApiResponse<ClientPayoutWithSummaryDto> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
     }
@@ -221,6 +244,20 @@ public class StudentController {
             return ResponseEntity.ok(response);
         } catch (RuntimeException e) {
             ApiResponse<StudentPayment> response = ApiResponse.error(e.getMessage());
+            return ResponseEntity.badRequest().body(response);
+        }
+    }
+
+    @PutMapping("/client-payout/amount")
+    public ResponseEntity<ApiResponse<ClientPayoutDto>> updateClientPayoutAmount(
+            @Valid @RequestBody ClientPayoutAmountUpdateRequest request) {
+        try {
+            ClientPayout updatedPayout = studentService.updateClientPayoutAmount(request);
+            ClientPayoutDto payoutDto = studentService.convertToClientPayoutDto(updatedPayout);
+            ApiResponse<ClientPayoutDto> response = ApiResponse.success("Client payout amount updated successfully", payoutDto);
+            return ResponseEntity.ok(response);
+        } catch (RuntimeException e) {
+            ApiResponse<ClientPayoutDto> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
     }

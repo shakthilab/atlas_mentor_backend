@@ -124,18 +124,36 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
     @Query("SELECT t FROM Task t WHERE t.isDeleted = false")
     Page<Task> findAllTasksForAdmin(Pageable pageable);
     
+    // For ADMIN with status filter
+    @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND (:status IS NULL OR t.status = :status)")
+    Page<Task> findAllTasksForAdminWithStatus(@Param("status") TaskStatus status, Pageable pageable);
+    
     // For MANAGER: return tasks where branchId = user.branchId
     @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.branch.id = :branchId")
     Page<Task> findTasksByBranchForManager(@Param("branchId") Long branchId, Pageable pageable);
+    
+    // For MANAGER with status filter
+    @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.branch.id = :branchId AND (:status IS NULL OR t.status = :status)")
+    Page<Task> findTasksByBranchForManagerWithStatus(@Param("branchId") Long branchId, @Param("status") TaskStatus status, Pageable pageable);
     
     // For SENIOR_COUNSELLOR: return tasks where branchId = user.branchId AND (assignedTo = user.id OR assignedTo IN juniorIds)
     @Query(value = "SELECT t.* FROM tasks t WHERE t.is_deleted = false AND t.branch_id = :branchId AND " +
             "(t.assigned_to = :seniorId OR t.assigned_to IN (:juniorIds))", nativeQuery = true)
     Page<Task> findTasksForSeniorCounsellor(@Param("branchId") Long branchId, @Param("seniorId") Long seniorId, @Param("juniorIds") List<Long> juniorIds, Pageable pageable);
     
+    // For SENIOR_COUNSELLOR with status filter
+    @Query(value = "SELECT t.* FROM tasks t WHERE t.is_deleted = false AND t.branch_id = :branchId AND " +
+            "(t.assigned_to = :seniorId OR t.assigned_to IN (:juniorIds)) AND " +
+            "(:status IS NULL OR t.status = :status)", nativeQuery = true)
+    Page<Task> findTasksForSeniorCounsellorWithStatus(@Param("branchId") Long branchId, @Param("seniorId") Long seniorId, @Param("juniorIds") List<Long> juniorIds, @Param("status") String status, Pageable pageable);
+    
     // For JUNIOR_COUNSELLOR: return tasks where branchId = user.branchId AND assignedTo = user.id
     @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.branch.id = :branchId AND t.assignedTo.id = :juniorId")
     Page<Task> findTasksForJuniorCounsellor(@Param("branchId") Long branchId, @Param("juniorId") Long juniorId, Pageable pageable);
+    
+    // For JUNIOR_COUNSELLOR with status filter
+    @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.branch.id = :branchId AND t.assignedTo.id = :juniorId AND (:status IS NULL OR t.status = :status)")
+    Page<Task> findTasksForJuniorCounsellorWithStatus(@Param("branchId") Long branchId, @Param("juniorId") Long juniorId, @Param("status") TaskStatus status, Pageable pageable);
     
     // Legacy non-paginated methods for backward compatibility
     @Query("SELECT t FROM Task t WHERE t.isDeleted = false")
@@ -150,4 +168,51 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
     
     @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.branch.id = :branchId AND t.assignedTo.id = :juniorId")
     List<Task> findTasksForJuniorCounsellorList(@Param("branchId") Long branchId, @Param("juniorId") Long juniorId);
+    
+    // Task bundle related queries
+    @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.taskBundle.id = :bundleId AND t.assignedTo.id = :userId AND t.executionDate = :executionDate AND t.title = :title")
+    List<Task> findByAssignedToIdAndTaskBundleIdAndExecutionDateAndTitleAndIsDeletedFalse(
+            @Param("userId") Long userId, 
+            @Param("bundleId") Long bundleId, 
+            @Param("executionDate") LocalDate executionDate, 
+            @Param("title") String title);
+    
+    @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.taskBundle.id = :bundleId")
+    List<Task> findByTaskBundleIdAndIsDeletedFalse(@Param("bundleId") Long bundleId);
+    
+    @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.taskBundle.id = :bundleId AND t.title = :title")
+    Optional<Task> findByTaskBundleIdAndTitleAndIsDeletedFalse(@Param("bundleId") Long bundleId, @Param("title") String title);
+    
+    @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.sourceType = :sourceType AND t.executionDate BETWEEN :startDate AND :endDate")
+    List<Task> findBySourceTypeAndExecutionDateBetweenAndIsDeletedFalse(
+            @Param("sourceType") com.lab.atlasmentor.enums.TaskSource sourceType,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate);
+    
+    @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.dueDate < :currentDate AND t.status != 'OVERDUE' AND t.status != 'COMPLETED'")
+    List<Task> findTasksToMarkOverdue(@Param("currentDate") LocalDate currentDate);
+    
+    @Query("SELECT COUNT(t) FROM Task t WHERE t.isDeleted = false AND t.dueDate < :currentDate AND t.status != 'OVERDUE'")
+    Long countTasksToMarkOverdue(@Param("currentDate") LocalDate currentDate);
+    
+    @Query("SELECT COUNT(t) FROM Task t WHERE t.isDeleted = false AND t.dueDate < :currentDate AND t.status != 'OVERDUE'")
+    Long countByDueDateBeforeAndStatusNotAndIsDeletedFalse(@Param("currentDate") LocalDate currentDate, @Param("status") TaskStatus status);
+    
+    @Query("SELECT t.priority, COUNT(t) FROM Task t WHERE t.isDeleted = false AND t.dueDate < :currentDate AND t.status = 'OVERDUE' GROUP BY t.priority")
+    List<Object[]> countOverdueTasksByPriority(@Param("currentDate") LocalDate currentDate);
+    
+    @Query(value = "SELECT DATEDIFF(CURRENT_DATE, t.due_date) as daysOverdue, COUNT(t) as count FROM tasks t WHERE t.is_deleted = false AND t.due_date < CURRENT_DATE AND t.status = 'OVERDUE' GROUP BY DATEDIFF(CURRENT_DATE, t.due_date) ORDER BY daysOverdue", nativeQuery = true)
+    List<Object[]> countOverdueTasksByAge(@Param("currentDate") LocalDate currentDate);
+    
+    @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.assignedTo.id = :userId AND t.dueDate < :currentDate AND t.status != 'OVERDUE'")
+    List<Task> findByAssignedToIdAndDueDateBeforeAndStatusNotAndIsDeletedFalse(
+            @Param("userId") Long userId, 
+            @Param("currentDate") LocalDate currentDate, 
+            @Param("status") TaskStatus status);
+    
+    @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.branch.id = :branchId AND t.dueDate < :currentDate AND t.status != 'OVERDUE'")
+    List<Task> findByBranchIdAndDueDateBeforeAndStatusNotAndIsDeletedFalse(
+            @Param("branchId") Long branchId, 
+            @Param("currentDate") LocalDate currentDate, 
+            @Param("status") TaskStatus status);
 }

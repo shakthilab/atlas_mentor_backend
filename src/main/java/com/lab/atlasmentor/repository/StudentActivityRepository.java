@@ -27,4 +27,6 @@ public interface StudentActivityRepository extends JpaRepository<StudentActivity
     
     @Query("SELECT sa FROM StudentActivity sa WHERE sa.performedBy.id = :userId ORDER BY sa.performedAt DESC")
     List<StudentActivity> findByPerformedByOrderByPerformedAtDesc(@Param("userId") Long userId);
+    
+    void deleteByStudent(Student student);
 }

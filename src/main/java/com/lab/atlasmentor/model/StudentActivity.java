@@ -8,7 +8,11 @@ import com.lab.atlasmentor.enums.StudentStatus;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "student_activities")
+@Table(name = "student_activities",
+       indexes = {
+           @Index(name = "idx_student_activities_student_id", columnList = "student_id"),
+           @Index(name = "idx_student_activities_performed_by", columnList = "performed_by")
+       })
 @Data
 @EqualsAndHashCode(callSuper = true)
 public class StudentActivity extends BaseEntity {

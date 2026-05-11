@@ -5,7 +5,11 @@ import lombok.Data;
 import com.lab.atlasmentor.enums.EmployeeType;
 
 @Entity
-@Table(name = "employee_details")
+@Table(name = "employee_details",
+       indexes = {
+           @Index(name = "idx_employee_details_manager_id", columnList = "manager_id"),
+           @Index(name = "idx_employee_details_assigned_to", columnList = "assigned_to")
+       })
 @Data
 public class EmployeeDetails extends BaseEntity {
     

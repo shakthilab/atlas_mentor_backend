@@ -10,13 +10,10 @@ import com.lab.atlasmentor.dto.ManagerHierarchyResponse;
 import com.lab.atlasmentor.dto.RoleRequest;
 import com.lab.atlasmentor.dto.SeniorCounsellorResponse;
 import com.lab.atlasmentor.model.ManagerEmployeeHierarchy;
+import com.lab.atlasmentor.model.ReferralAssignment;
 import com.lab.atlasmentor.model.User;
-import com.lab.atlasmentor.repository.CompanyDetailsRepository;
-import com.lab.atlasmentor.repository.CounsellorHierarchyRepository;
-import com.lab.atlasmentor.repository.EmployeeDetailsRepository;
-import com.lab.atlasmentor.repository.ManagerEmployeeHierarchyRepository;
-import com.lab.atlasmentor.repository.ReferralDetailsRepository;
-import com.lab.atlasmentor.repository.UserRepository;
+import com.lab.atlasmentor.repository.*;
+import com.lab.atlasmentor.security.SecurityUtils;
 import com.lab.atlasmentor.service.HierarchyService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -49,6 +46,9 @@ public class HierarchyController {
 
     @Autowired
     private EmployeeDetailsRepository employeeDetailsRepository;
+
+    @Autowired
+    private ReferralAssignmentRepository referralAssignmentRepository;
 
     @GetMapping("/managers")
     public ResponseEntity<ApiResponse<List<ManagerHierarchyResponse>>> getManagerHierarchy() {
@@ -97,6 +97,10 @@ public class HierarchyController {
     @PostMapping("/assign-employee-by-roles")
     public ResponseEntity<ApiResponse<String>> assignEmployeesToManagerByRoles(@RequestBody EmployeeAssignmentRequest request) {
         try {
+            // Get current user
+            User currentUser = userRepository.findById(SecurityUtils.getCurrentUserId())
+                .orElseThrow(() -> new RuntimeException("Current user not found"));
+            
             // Validate that manager exists
             User manager = userRepository.findById(request.getManagerId())
                 .orElseThrow(() -> new RuntimeException("Manager not found"));
@@ -141,12 +145,16 @@ public class HierarchyController {
                         });
                     }
                     
-                    // Also update ReferralDetails.assignedTo if the user is a referral
+                    // Also update ReferralAssignment if the user is a referral
                     if (user.hasRole("REFERRAL")) {
-                        referralDetailsRepository.findByUserId(userId).ifPresent(referralDetails -> {
-                            referralDetails.setAssignedTo(manager);
-                            referralDetailsRepository.save(referralDetails);
-                        });
+                        // Remove existing assignments for this referral
+                        referralAssignmentRepository.deleteByReferralId(userId);
+                        
+                        // Create new assignment to the manager
+                        ReferralAssignment referralAssignment = new ReferralAssignment(user, manager);
+                        referralAssignment.setCreatedBy(currentUser.getId());
+                        referralAssignment.setUpdatedBy(currentUser.getId());
+                        referralAssignmentRepository.save(referralAssignment);
                     }
                     
                     // Also update EmployeeDetails.assignedTo if the user has employee details
@@ -262,10 +270,8 @@ public class HierarchyController {
                 }
                 
                 if (user.hasRole("REFERRAL")) {
-                    referralDetailsRepository.findByUserId(employeeId).ifPresent(referralDetails -> {
-                        referralDetails.setAssignedTo(null);
-                        referralDetailsRepository.save(referralDetails);
-                    });
+                    // Remove all referral assignments for this referral
+                    referralAssignmentRepository.deleteByReferralId(employeeId);
                 }
                 
                 // Clear EmployeeDetails.assignedTo if the user has employee details

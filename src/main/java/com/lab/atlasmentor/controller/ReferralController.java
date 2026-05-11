@@ -25,7 +25,7 @@ public class ReferralController {
     private AdminService adminService;
 
     @PostMapping("/create")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
     public ResponseEntity<UserResponse> createReferral(
             @Valid @RequestBody ReferralRequest referralRequest,
             HttpServletRequest request) {
@@ -37,7 +37,7 @@ public class ReferralController {
     }
 
     @GetMapping("/list")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
     public ResponseEntity<PageResponse<UserResponse>> getReferrals(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
@@ -50,7 +50,7 @@ public class ReferralController {
     }
 
     @GetMapping("/types")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
     public ResponseEntity<List<String>> getReferralTypes() {
         List<String> referralTypes = Arrays.stream(ReferralType.values())
                 .map(Enum::name)
@@ -59,7 +59,7 @@ public class ReferralController {
     }
 
     @PutMapping("/update/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
     public ResponseEntity<UserResponse> updateReferral(
             @PathVariable Long id,
             @Valid @RequestBody ReferralRequest referralRequest) {
@@ -71,14 +71,14 @@ public class ReferralController {
     }
 
     @DeleteMapping("/delete/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
     public ResponseEntity<Void> deleteReferral(@PathVariable Long id) {
         adminService.deleteReferral(id);
         return ResponseEntity.ok().build();
     }
 
     @PutMapping("/status/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
     public ResponseEntity<UserResponse> updateReferralStatus(
             @PathVariable Long id,
             @RequestParam com.lab.atlasmentor.enums.UserStatus status) {
@@ -89,7 +89,7 @@ public class ReferralController {
     }
 
     @PutMapping("/deactivate/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
     public ResponseEntity<UserResponse> deactivateReferral(@PathVariable Long id) {
         User deactivatedReferral = adminService.updateReferralStatus(id, com.lab.atlasmentor.enums.UserStatus.INACTIVE);
         UserResponse response = adminService.convertToUserResponse(deactivatedReferral);
@@ -98,7 +98,7 @@ public class ReferralController {
     }
 
     @PutMapping("/activate/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
     public ResponseEntity<UserResponse> activateReferral(@PathVariable Long id) {
         User activatedReferral = adminService.updateReferralStatus(id, com.lab.atlasmentor.enums.UserStatus.ACTIVE);
         UserResponse response = adminService.convertToUserResponse(activatedReferral);

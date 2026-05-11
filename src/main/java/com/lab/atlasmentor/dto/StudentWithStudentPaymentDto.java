@@ -4,11 +4,11 @@ import com.lab.atlasmentor.enums.StudentPaymentStatus;
 import com.lab.atlasmentor.enums.StudentStatus;
 import com.lab.atlasmentor.enums.SourceType;
 import com.lab.atlasmentor.enums.ApprovalStatus;
-import com.lab.atlasmentor.enums.DisputeStatus;
 import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 public class StudentWithStudentPaymentDto {
@@ -37,9 +37,7 @@ public class StudentWithStudentPaymentDto {
     private String paymentNotes;
     private LocalDateTime paymentCreatedAt;
     private ApprovalStatus approvalStatus;
-    
-    // Dispute information
-    private DisputeStatus disputeStatus;
+    private List<PaymentDisputeActivityDto> disputeActivities;
     
     public StudentWithStudentPaymentDto() {}
     
@@ -48,7 +46,7 @@ public class StudentWithStudentPaymentDto {
                                String branchName, LocalDateTime createdAt, Long paymentId, BigDecimal assignedAmount,
                                BigDecimal paidAmount, StudentPaymentStatus paymentStatus, SourceType sourceType,
                                Long sourceId, Boolean isAmountLocked, Long branchId, String paymentNotes,
-                               LocalDateTime paymentCreatedAt, ApprovalStatus approvalStatus, DisputeStatus disputeStatus) {
+                               LocalDateTime paymentCreatedAt, ApprovalStatus approvalStatus) {
         this.studentId = studentId;
         this.firstName = firstName;
         this.lastName = lastName;
@@ -71,6 +69,5 @@ public class StudentWithStudentPaymentDto {
         this.paymentNotes = paymentNotes;
         this.paymentCreatedAt = paymentCreatedAt;
         this.approvalStatus = approvalStatus;
-        this.disputeStatus = disputeStatus;
     }
 }

@@ -21,6 +21,9 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
     
     boolean existsByEmail(String email);
     
+    @Query("SELECT s FROM Student s JOIN s.user u WHERE u.phone = :phone")
+    Optional<Student> findByPhone(@Param("phone") String phone);
+    
     @Query("SELECT COUNT(s) FROM Student s WHERE s.assignedBy.id = :counsellorId")
     long countStudentsByAssignedBy(@Param("counsellorId") Long counsellorId);
 
@@ -29,7 +32,7 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
            "AND (LOWER(u.firstName) LIKE :search " +
            "OR LOWER(u.lastName) LIKE :search " +
            "OR LOWER(s.email) LIKE :search " +
-           "OR s.phone LIKE :search " +
+           "OR u.phone LIKE :search " +
            "OR u IS NULL)")
     Page<Student> findByFilters(@Param("status") StudentStatus status, @Param("search") String search, Pageable pageable);
     
@@ -43,35 +46,34 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
     @Query(value = "SELECT COUNT(s) FROM students s LEFT JOIN users u ON s.user_id = u.id WHERE (:isAdmin = true OR s.branch_id IS NULL OR s.branch_id = :branchId)", nativeQuery = true)
     long countWithAccess(@Param("isAdmin") boolean isAdmin, @Param("branchId") Long branchId);
     
-    @Query(value = "SELECT s.* FROM students s LEFT JOIN users u ON s.user_id = u.id WHERE (:isAdmin = true OR s.branch_id IS NULL OR s.branch_id = :branchId) AND (:status IS NULL OR s.status = :status) AND (LOWER(u.first_name) LIKE :search OR LOWER(u.last_name) LIKE :search OR LOWER(s.email) LIKE :search OR s.phone LIKE :search OR u IS NULL)", nativeQuery = true)
+    @Query(value = "SELECT s.* FROM students s LEFT JOIN users u ON s.user_id = u.id WHERE (:isAdmin = true OR s.branch_id IS NULL OR s.branch_id = :branchId) AND (:status IS NULL OR s.status = :status) AND (LOWER(u.first_name) LIKE :search OR LOWER(u.last_name) LIKE :search OR LOWER(s.email) LIKE :search OR u.phone LIKE :search OR u IS NULL)", nativeQuery = true)
     Page<Student> findByFiltersWithAccess(@Param("status") String status, @Param("search") String search, @Param("isAdmin") boolean isAdmin, @Param("branchId") Long branchId, Pageable pageable);
     
-    @Query(value = "SELECT s.* FROM students s LEFT JOIN users u ON s.user_id = u.id WHERE s.assignedBy_id = :counsellorId AND (:status IS NULL OR s.status = :status) AND (LOWER(u.first_name) LIKE :search OR LOWER(u.last_name) LIKE :search OR LOWER(s.email) LIKE :search OR s.phone LIKE :search OR u IS NULL)", nativeQuery = true)
+    @Query(value = "SELECT s.* FROM students s LEFT JOIN users u ON s.user_id = u.id WHERE s.assignedBy_id = :counsellorId AND (:status IS NULL OR s.status = :status) AND (LOWER(u.first_name) LIKE :search OR LOWER(u.last_name) LIKE :search OR LOWER(s.email) LIKE :search OR u.phone LIKE :search OR u IS NULL)", nativeQuery = true)
     Page<Student> findByFiltersForCounsellor(@Param("status") String status, @Param("search") String search, @Param("counsellorId") Long counsellorId, Pageable pageable);
     
-    @Query(value = "SELECT s.* FROM students s LEFT JOIN users u ON s.user_id = u.id WHERE s.created_by = :creatorId AND (:status IS NULL OR s.status = :status) AND (LOWER(u.first_name) LIKE :search OR LOWER(u.last_name) LIKE :search OR LOWER(s.email) LIKE :search OR s.phone LIKE :search OR u IS NULL)", nativeQuery = true)
+    @Query(value = "SELECT s.* FROM students s LEFT JOIN users u ON s.user_id = u.id WHERE s.created_by = :creatorId AND (:status IS NULL OR s.status = :status) AND (LOWER(u.first_name) LIKE :search OR LOWER(u.last_name) LIKE :search OR LOWER(s.email) LIKE :search OR u.phone LIKE :search OR u IS NULL)", nativeQuery = true)
     Page<Student> findByFiltersForCreator(@Param("status") String status, @Param("search") String search, @Param("creatorId") Long creatorId, Pageable pageable);
     
     @Query("SELECT COUNT(s) FROM Student s WHERE s.branch.id = :branchId")
     Long countStudentsByBranchId(@Param("branchId") Long branchId);
     
-    // Methods for finding non-registered students (status != REGISTERED)
-    @Query(value = "SELECT s.* FROM students s LEFT JOIN users u ON s.user_id = u.id WHERE (:isAdmin = true OR s.branch_id IS NULL OR s.branch_id = :branchId) AND s.status != 'REGISTERED' AND (LOWER(u.first_name) LIKE :search OR LOWER(u.last_name) LIKE :search OR LOWER(s.email) LIKE :search OR s.phone LIKE :search OR u IS NULL)", nativeQuery = true)
-    Page<Student> findByNonRegisteredStatusWithAccess(@Param("search") String search, @Param("isAdmin") boolean isAdmin, @Param("branchId") Long branchId, Pageable pageable);
+    // Methods for finding non-registered students (status != REGISTERED) with optional status filter
+    @Query(value = "SELECT s.* FROM students s LEFT JOIN users u ON s.user_id = u.id LEFT JOIN countries c ON s.country_id = c.id LEFT JOIN users creator ON s.created_by = creator.id LEFT JOIN roles r ON creator.role_id = r.id WHERE (:isAdmin = true OR s.branch_id IS NULL OR s.branch_id = :branchId) AND s.status != 'REGISTERED' AND (:status IS NULL OR s.status = :status) AND (:countryName IS NULL OR LOWER(c.name) LIKE LOWER(CONCAT('%', :countryName, '%'))) AND (:dateFrom IS NULL OR s.created_at >= CAST(:dateFrom AS timestamp)) AND (:dateTo IS NULL OR s.created_at <= CAST(:dateTo AS timestamp)) AND (:source IS NULL OR (r.name IN (:sourceRoles) OR (s.source_type IN (:sourceTypes) AND s.source_type IS NOT NULL))) AND (LOWER(u.first_name) LIKE :search OR LOWER(u.last_name) LIKE :search OR LOWER(s.email) LIKE :search OR u.phone LIKE :search OR u IS NULL)", nativeQuery = true)
+    Page<Student> findByNonRegisteredStatusWithAccess(@Param("search") String search, @Param("isAdmin") boolean isAdmin, @Param("branchId") Long branchId, @Param("status") String status, @Param("countryName") String countryName, @Param("dateFrom") String dateFrom, @Param("dateTo") String dateTo, @Param("source") String source, @Param("sourceRoles") List<String> sourceRoles, @Param("sourceTypes") List<String> sourceTypes, Pageable pageable);
     
-    @Query(value = "SELECT s.* FROM students s LEFT JOIN users u ON s.user_id = u.id WHERE s.assignedBy_id = :counsellorId AND s.status != 'REGISTERED' AND (LOWER(u.first_name) LIKE :search OR LOWER(u.last_name) LIKE :search OR LOWER(s.email) LIKE :search OR s.phone LIKE :search OR u IS NULL)", nativeQuery = true)
-    Page<Student> findByNonRegisteredStatusForCounsellor(@Param("search") String search, @Param("counsellorId") Long counsellorId, Pageable pageable);
+    @Query(value = "SELECT s.* FROM students s LEFT JOIN users u ON s.user_id = u.id LEFT JOIN countries c ON s.country_id = c.id LEFT JOIN users creator ON s.created_by = creator.id LEFT JOIN roles r ON creator.role_id = r.id WHERE s.assignedBy_id = :counsellorId AND s.status != 'REGISTERED' AND (:status IS NULL OR s.status = :status) AND (:countryName IS NULL OR LOWER(c.name) LIKE LOWER(CONCAT('%', :countryName, '%'))) AND (:dateFrom IS NULL OR s.created_at >= CAST(:dateFrom AS timestamp)) AND (:dateTo IS NULL OR s.created_at <= CAST(:dateTo AS timestamp)) AND (:source IS NULL OR (r.name IN (:sourceRoles) OR (s.source_type IN (:sourceTypes) AND s.source_type IS NOT NULL))) AND (LOWER(u.first_name) LIKE :search OR LOWER(u.last_name) LIKE :search OR LOWER(s.email) LIKE :search OR u.phone LIKE :search OR u IS NULL)", nativeQuery = true)
+    Page<Student> findByNonRegisteredStatusForCounsellor(@Param("search") String search, @Param("counsellorId") Long counsellorId, @Param("status") String status, @Param("countryName") String countryName, @Param("dateFrom") String dateFrom, @Param("dateTo") String dateTo, @Param("source") String source, @Param("sourceRoles") List<String> sourceRoles, @Param("sourceTypes") List<String> sourceTypes, Pageable pageable);
     
-    @Query(value = "SELECT s.* FROM students s LEFT JOIN users u ON s.user_id = u.id WHERE s.created_by = :creatorId AND s.status != 'REGISTERED' AND (LOWER(u.first_name) LIKE :search OR LOWER(u.last_name) LIKE :search OR LOWER(s.email) LIKE :search OR s.phone LIKE :search OR u IS NULL)", nativeQuery = true)
-    Page<Student> findByNonRegisteredStatusForCreator(@Param("search") String search, @Param("creatorId") Long creatorId, Pageable pageable);
+    @Query(value = "SELECT s.* FROM students s LEFT JOIN users u ON s.user_id = u.id LEFT JOIN countries c ON s.country_id = c.id LEFT JOIN users creator ON s.created_by = creator.id LEFT JOIN roles r ON creator.role_id = r.id WHERE s.created_by = :creatorId AND s.status != 'REGISTERED' AND (:status IS NULL OR s.status = :status) AND (:countryName IS NULL OR LOWER(c.name) LIKE LOWER(CONCAT('%', :countryName, '%'))) AND (:dateFrom IS NULL OR s.created_at >= CAST(:dateFrom AS timestamp)) AND (:dateTo IS NULL OR s.created_at <= CAST(:dateTo AS timestamp)) AND (:source IS NULL OR (r.name IN (:sourceRoles) OR (s.source_type IN (:sourceTypes) AND s.source_type IS NOT NULL))) AND (LOWER(u.first_name) LIKE :search OR LOWER(u.last_name) LIKE :search OR LOWER(s.email) LIKE :search OR s.phone LIKE :search OR u IS NULL)", nativeQuery = true)
+    Page<Student> findByNonRegisteredStatusForCreator(@Param("search") String search, @Param("creatorId") Long creatorId, @Param("status") String status, @Param("countryName") String countryName, @Param("dateFrom") String dateFrom, @Param("dateTo") String dateTo, @Param("source") String source, @Param("sourceRoles") List<String> sourceRoles, @Param("sourceTypes") List<String> sourceTypes, Pageable pageable);
     
     @Query("SELECT new com.lab.atlasmentor.dto.StudentWithStudentPaymentDto(" +
-           "s.id, u.firstName, u.lastName, s.email, s.phone, s.status, " +
+           "s.id, u.firstName, u.lastName, s.email, u.phone, s.status, " +
            "s.courseName, s.intakePeriod, s.notes, b.name, s.createdAt, " +
            "p.id, COALESCE(p.assignedAmount, 0), COALESCE(p.paidAmount, 0), p.paymentStatus, p.sourceType, p.sourceId, " +
            "p.isAmountLocked, p.branchId, p.notes, p.createdAt, " +
-           "CASE WHEN p.assignedAmount IS NOT NULL AND p.assignedAmount > 0 THEN com.lab.atlasmentor.enums.ApprovalStatus.PENDING ELSE com.lab.atlasmentor.enums.ApprovalStatus.NOT_APPLICABLE END, " +
-           "null) " +
+           "CASE WHEN p.assignedAmount IS NOT NULL AND p.assignedAmount > 0 THEN com.lab.atlasmentor.enums.ApprovalStatus.PENDING ELSE com.lab.atlasmentor.enums.ApprovalStatus.NOT_APPLICABLE END) " +
            "FROM Student s " +
            "INNER JOIN s.user u " +
            "LEFT JOIN s.branch b " +
@@ -80,15 +82,14 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
            "AND (s.createdBy IN " +
            "(SELECT u.id FROM User u JOIN u.role r WHERE r.name IN ('REFERRAL', 'COMPANY')) " +
            "OR p.sourceType IN ('REFERRAL', 'COMPANY'))")
-    List<StudentWithStudentPaymentDto> findStudentsWithPaymentByReferralAndCompany();
+    Page<StudentWithStudentPaymentDto> findStudentsWithPaymentByReferralAndCompany(Pageable pageable);
     
     @Query("SELECT new com.lab.atlasmentor.dto.StudentWithStudentPaymentDto(" +
-           "s.id, u.firstName, u.lastName, s.email, s.phone, s.status, " +
+           "s.id, u.firstName, u.lastName, s.email, u.phone, s.status, " +
            "s.courseName, s.intakePeriod, s.notes, b.name, s.createdAt, " +
            "p.id, COALESCE(p.assignedAmount, 0), COALESCE(p.paidAmount, 0), p.paymentStatus, p.sourceType, p.sourceId, " +
            "p.isAmountLocked, p.branchId, p.notes, p.createdAt, " +
-           "CASE WHEN p.assignedAmount IS NOT NULL AND p.assignedAmount > 0 THEN com.lab.atlasmentor.enums.ApprovalStatus.PENDING ELSE com.lab.atlasmentor.enums.ApprovalStatus.NOT_APPLICABLE END, " +
-           "null) " +
+           "CASE WHEN p.assignedAmount IS NOT NULL AND p.assignedAmount > 0 THEN com.lab.atlasmentor.enums.ApprovalStatus.PENDING ELSE com.lab.atlasmentor.enums.ApprovalStatus.NOT_APPLICABLE END) " +
            "FROM Student s " +
            "INNER JOIN s.user u " +
            "LEFT JOIN s.branch b " +
@@ -96,15 +97,14 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
            "WHERE p.isDeleted = false " +
            "AND (s.createdBy = :referralId " +
            "OR (p.sourceType = 'REFERRAL' AND p.sourceId = :referralId))")
-    List<StudentWithStudentPaymentDto> findStudentsWithPaymentByReferral(@Param("referralId") Long referralId);
+    Page<StudentWithStudentPaymentDto> findStudentsWithPaymentByReferral(@Param("referralId") Long referralId, Pageable pageable);
     
     @Query("SELECT new com.lab.atlasmentor.dto.StudentWithStudentPaymentDto(" +
-           "s.id, u.firstName, u.lastName, s.email, s.phone, s.status, " +
+           "s.id, u.firstName, u.lastName, s.email, u.phone, s.status, " +
            "s.courseName, s.intakePeriod, s.notes, b.name, s.createdAt, " +
            "p.id, COALESCE(p.assignedAmount, 0), COALESCE(p.paidAmount, 0), p.paymentStatus, p.sourceType, p.sourceId, " +
            "p.isAmountLocked, p.branchId, p.notes, p.createdAt, " +
-           "CASE WHEN p.assignedAmount IS NOT NULL AND p.assignedAmount > 0 THEN com.lab.atlasmentor.enums.ApprovalStatus.PENDING ELSE com.lab.atlasmentor.enums.ApprovalStatus.NOT_APPLICABLE END, " +
-           "null) " +
+           "CASE WHEN p.assignedAmount IS NOT NULL AND p.assignedAmount > 0 THEN com.lab.atlasmentor.enums.ApprovalStatus.PENDING ELSE com.lab.atlasmentor.enums.ApprovalStatus.NOT_APPLICABLE END) " +
            "FROM Student s " +
            "INNER JOIN s.user u " +
            "LEFT JOIN s.branch b " +
@@ -112,15 +112,14 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
            "WHERE p.isDeleted = false " +
            "AND (s.createdBy = :companyId " +
            "OR (p.sourceType = 'COMPANY' AND p.sourceId = :companyId))")
-    List<StudentWithStudentPaymentDto> findStudentsWithPaymentByCompany(@Param("companyId") Long companyId);
+    Page<StudentWithStudentPaymentDto> findStudentsWithPaymentByCompany(@Param("companyId") Long companyId, Pageable pageable);
     
     @Query("SELECT new com.lab.atlasmentor.dto.StudentWithStudentPaymentDto(" +
-           "s.id, u.firstName, u.lastName, s.email, s.phone, s.status, " +
+           "s.id, u.firstName, u.lastName, s.email, u.phone, s.status, " +
            "s.courseName, s.intakePeriod, s.notes, b.name, s.createdAt, " +
            "p.id, COALESCE(p.assignedAmount, 0), COALESCE(p.paidAmount, 0), p.paymentStatus, p.sourceType, p.sourceId, " +
            "p.isAmountLocked, p.branchId, p.notes, p.createdAt, " +
-           "CASE WHEN p.assignedAmount IS NOT NULL AND p.assignedAmount > 0 THEN com.lab.atlasmentor.enums.ApprovalStatus.PENDING ELSE com.lab.atlasmentor.enums.ApprovalStatus.NOT_APPLICABLE END, " +
-           "null) " +
+           "CASE WHEN p.assignedAmount IS NOT NULL AND p.assignedAmount > 0 THEN com.lab.atlasmentor.enums.ApprovalStatus.PENDING ELSE com.lab.atlasmentor.enums.ApprovalStatus.NOT_APPLICABLE END) " +
            "FROM Student s " +
            "INNER JOIN s.user u " +
            "INNER JOIN s.branch b " +
@@ -130,7 +129,7 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
            "AND (s.createdBy IN " +
            "(SELECT u.id FROM User u JOIN u.role r WHERE r.name IN ('REFERRAL', 'COMPANY')) " +
            "OR p.sourceType IN ('REFERRAL', 'COMPANY'))")
-    List<StudentWithStudentPaymentDto> findStudentsWithPaymentByBranch(@Param("branchId") Long branchId);
+    Page<StudentWithStudentPaymentDto> findStudentsWithPaymentByBranch(@Param("branchId") Long branchId, Pageable pageable);
 }
 
 

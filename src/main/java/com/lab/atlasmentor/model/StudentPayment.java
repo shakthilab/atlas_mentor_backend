@@ -12,7 +12,12 @@ import java.math.BigDecimal;
 import java.util.List;
 
 @Entity
-@Table(name = "student_payments")
+@Table(name = "student_payments",
+       indexes = {
+           @Index(name = "idx_student_payments_student_id", columnList = "student_id"),
+           @Index(name = "idx_student_payments_status", columnList = "payment_status"),
+           @Index(name = "idx_student_payments_branch_id", columnList = "branch_id")
+       })
 @Data
 @EqualsAndHashCode(callSuper = true)
 public class StudentPayment extends BaseEntity {

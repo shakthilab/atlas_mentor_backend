@@ -35,10 +35,17 @@ public class TaskService {
         log.info("Creating new task with title: {}", request.getTitle());
 
         User assignedTo = userRepository.findById(request.getAssignedToId())
-                .orElseThrow(() -> new RuntimeException("Assignee user not found"));
+                .orElseThrow(() -> new RuntimeException("Assignee user not found with ID: " + request.getAssignedToId()));
 
-        User createdBy = userRepository.findById(createdByUserId)
-                .orElseThrow(() -> new RuntimeException("Creator user not found"));
+        // Validate that the creator user exists, provide fallback if needed
+        User createdBy = userRepository.findById(createdByUserId).orElse(null);
+        if (createdBy == null) {
+            log.warn("Creator user not found with ID: {}. The user may have been deleted or the JWT token contains an invalid user ID. Using fallback user.", createdByUserId);
+            // Use the first available admin user as fallback
+            createdBy = userRepository.findFirstByRoleName("ADMIN").orElseThrow(() -> 
+                new RuntimeException("No admin users found in the system to use as fallback"));
+            log.info("Using fallback admin user: {} (ID: {})", createdBy.getEmail(), createdBy.getId());
+        }
 
         // Validate task creation permissions based on roles
         validateTaskCreation(createdBy, assignedTo);
@@ -415,28 +422,103 @@ public class TaskService {
             return List.of();
         }
 
-        // Use role-based filtering
+        // Use role-based filtering (use status-aware methods when status is provided)
         List<Task> tasks;
         if (currentUser.isAdmin()) {
             // ADMIN: See all tasks
-            tasks = taskRepository.findAllTasksForAdminList();
-        } else if ("MANAGER".equals(currentUser.getRole())) {
-            // MANAGER: See all tasks in their branch
-            tasks = taskRepository.findTasksByBranchForManagerList(currentUser.getBranchId());
+            if (status != null) {
+                tasks = taskRepository.findByStatus(status);
+            } else {
+                tasks = taskRepository.findAllTasksForAdminList();
+            }
+        } else if ("MANAGER".equals(currentUser.getRole()) || "BRANCH_PARTNER".equals(currentUser.getRole())) {
+            // MANAGER/BRANCH_PARTNER: See all tasks in their branch
+            if (status != null) {
+                tasks = taskRepository.findByBranchIdAndStatus(currentUser.getBranchId(), status);
+            } else {
+                tasks = taskRepository.findTasksByBranchForManagerList(currentUser.getBranchId());
+            }
         } else if ("SENIOR_COUNSELLOR".equals(currentUser.getRole())) {
             // SENIOR_COUNSELLOR: See their tasks + tasks of their junior counsellors
             // For now, fall back to branch filtering - TODO: Implement junior counsellor hierarchy
-            tasks = taskRepository.findTasksByBranchForManagerList(currentUser.getBranchId());
+            if (status != null) {
+                tasks = taskRepository.findByBranchIdAndStatus(currentUser.getBranchId(), status);
+            } else {
+                tasks = taskRepository.findTasksByBranchForManagerList(currentUser.getBranchId());
+            }
         } else if ("JUNIOR_COUNSELLOR".equals(currentUser.getRole())) {
             // JUNIOR_COUNSELLOR: See only their assigned tasks
-            tasks = taskRepository.findTasksForJuniorCounsellorList(currentUser.getBranchId(), currentUser.getUserId());
+            if (status != null) {
+                tasks = taskRepository.findByAssignedToIdAndStatus(currentUser.getUserId(), status);
+            } else {
+                tasks = taskRepository.findTasksForJuniorCounsellorList(currentUser.getBranchId(), currentUser.getUserId());
+            }
         } else {
             // Default: Use the old access control method for other roles
             tasks = taskRepository.findAllWithAccess(currentUser.isAdmin(), currentUser.getBranchId(), currentUser.getUserId());
         }
 
-        return tasks.stream()
+        log.info("Total tasks fetched from DB before filtering: {}", tasks.size());
+        if (status != null) {
+            long matchingStatus = tasks.stream().filter(t -> t.getStatus() == status).count();
+            log.info("Tasks with status {}: {} out of {}", status, matchingStatus, tasks.size());
+        }
+
+        List<TaskResponse> result = tasks.stream()
                 .filter(task -> {
+                    // Status filtering
+                    if (status != null && task.getStatus() != status) {
+                        log.debug("Filtering out task {} - status mismatch: expected={}, actual={}",
+                                task.getId(), status, task.getStatus());
+                        return false;
+                    }
+
+                    // Assignee filtering
+                    if (assigneeId != null && (task.getAssignedTo() == null || !task.getAssignedTo().getId().equals(assigneeId))) {
+                        return false;
+                    }
+
+                    // Branch filtering (for ADMIN who can see all branches)
+                    if (branchId != null && (task.getBranch() == null || !task.getBranch().getId().equals(branchId))) {
+                        return false;
+                    }
+
+                    // Priority filtering
+                    if (priority != null && task.getPriority() != priority) {
+                        return false;
+                    }
+
+                    // CreatedBy filtering
+                    if (createdBy != null && (task.getCreatedBy() == null || !task.getCreatedBy().equals(createdBy))) {
+                        return false;
+                    }
+
+                    // Overdue filtering
+                    if (overdue != null && overdue) {
+                        if (task.getDueDate() == null || task.getDueDate().isAfter(LocalDate.now()) || task.getStatus() == TaskStatus.COMPLETED) {
+                            return false;
+                        }
+                    }
+
+                    // Keyword/Search filtering (case-insensitive)
+                    if (keyword != null && !keyword.isEmpty()) {
+                        String lowerKeyword = keyword.toLowerCase();
+                        boolean matchesKeyword = (task.getTitle() != null && task.getTitle().toLowerCase().contains(lowerKeyword)) ||
+                                (task.getDescription() != null && task.getDescription().toLowerCase().contains(lowerKeyword));
+                        if (!matchesKeyword) {
+                            return false;
+                        }
+                    }
+
+                    if (search != null && !search.isEmpty()) {
+                        String lowerSearch = search.toLowerCase();
+                        boolean matchesSearch = (task.getTitle() != null && task.getTitle().toLowerCase().contains(lowerSearch)) ||
+                                (task.getDescription() != null && task.getDescription().toLowerCase().contains(lowerSearch));
+                        if (!matchesSearch) {
+                            return false;
+                        }
+                    }
+
                     // Due date filtering
                     if (dueDateFromParsed != null) {
                         if (task.getDueDate() == null || task.getDueDate().isBefore(dueDateFromParsed)) {
@@ -462,6 +544,186 @@ public class TaskService {
                 })
                 .map(this::convertToTaskResponse)
                 .collect(Collectors.toList());
+
+        log.info("Tasks returned after filtering: {}", result.size());
+        return result;
+    }
+
+    @Transactional(readOnly = true)
+    public Page<TaskResponse> getTasksWithFiltersPaginated(TaskStatus status, Long assigneeId, Long branchId,
+                                                             Priority priority, Long createdBy, String keyword, Boolean overdue,
+                                                             String search, String dueDateFrom, String dueDateTo,
+                                                             String assignedDateFrom, String assignedDateTo, Pageable pageable) {
+        log.info("Getting tasks with filters (paginated): status={}, assigneeId={}, branchId={}, priority={}, createdBy={}, keyword={}, overdue={}, search={}, dueDateFrom={}, dueDateTo={}, assignedDateFrom={}, assignedDateTo={}, page={}, size={}",
+                status, assigneeId, branchId, priority, createdBy, keyword, overdue, search, dueDateFrom, dueDateTo, assignedDateFrom, assignedDateTo, pageable.getPageNumber(), pageable.getPageSize());
+
+        // Get current user for branch-based filtering
+        var currentUser = SecurityUtils.getCurrentUser();
+        log.info("Current user: userId={}, role={}, branchId={}, isAdmin={}",
+            currentUser.getUserId(), currentUser.getRole(), currentUser.getBranchId(), currentUser.isAdmin());
+
+        final LocalDate dueDateFromParsed;
+        final LocalDate dueDateToParsed;
+        final LocalDate assignedDateFromParsed;
+        final LocalDate assignedDateToParsed;
+
+        try {
+            dueDateFromParsed = parseDate(dueDateFrom);
+            dueDateToParsed = parseDate(dueDateTo);
+            assignedDateFromParsed = parseDate(assignedDateFrom);
+            assignedDateToParsed = parseDate(assignedDateTo);
+        } catch (Exception e) {
+            log.error("Error parsing date filters: {}", e.getMessage());
+            return Page.empty(pageable);
+        }
+
+        // Use role-based filtering with pagination (use status-aware methods when status is provided)
+        Page<Task> taskPage;
+        if (currentUser.isAdmin()) {
+            // ADMIN: See all tasks
+            if (status != null) {
+                taskPage = taskRepository.findAllTasksForAdminWithStatus(status, pageable);
+            } else {
+                taskPage = taskRepository.findAllTasksForAdmin(pageable);
+            }
+        } else if ("MANAGER".equals(currentUser.getRole()) || "BRANCH_PARTNER".equals(currentUser.getRole())) {
+            // MANAGER/BRANCH_PARTNER: See all tasks in their branch
+            if (status != null) {
+                taskPage = taskRepository.findTasksByBranchForManagerWithStatus(currentUser.getBranchId(), status, pageable);
+            } else {
+                taskPage = taskRepository.findTasksByBranchForManager(currentUser.getBranchId(), pageable);
+            }
+        } else if ("SENIOR_COUNSELLOR".equals(currentUser.getRole())) {
+            // SENIOR_COUNSELLOR: See their tasks + tasks of their junior counsellors
+            List<Long> juniorIds = getJuniorCounsellorIds(currentUser.getUserId(), currentUser.getBranchId());
+            if (status != null) {
+                taskPage = taskRepository.findTasksForSeniorCounsellorWithStatus(currentUser.getBranchId(), currentUser.getUserId(), juniorIds, status.name(), pageable);
+            } else {
+                taskPage = taskRepository.findTasksForSeniorCounsellor(currentUser.getBranchId(), currentUser.getUserId(), juniorIds, pageable);
+            }
+        } else if ("JUNIOR_COUNSELLOR".equals(currentUser.getRole())) {
+            // JUNIOR_COUNSELLOR: See only their assigned tasks
+            if (status != null) {
+                taskPage = taskRepository.findTasksForJuniorCounsellorWithStatus(currentUser.getBranchId(), currentUser.getUserId(), status, pageable);
+            } else {
+                taskPage = taskRepository.findTasksForJuniorCounsellor(currentUser.getBranchId(), currentUser.getUserId(), pageable);
+            }
+        } else {
+            // Default: fetch all and filter (fallback)
+            List<Task> allTasks = taskRepository.findAllWithAccess(currentUser.isAdmin(), currentUser.getBranchId(), currentUser.getUserId());
+            // Apply filters and convert to page
+            List<TaskResponse> filtered = applyFiltersAndConvert(allTasks, status, assigneeId, branchId, priority, createdBy,
+                    keyword, overdue, search, dueDateFromParsed, dueDateToParsed, assignedDateFromParsed, assignedDateToParsed);
+            return toPage(filtered, pageable);
+        }
+
+        log.info("Total tasks fetched from DB before filtering: {}", taskPage.getTotalElements());
+
+        // Apply filters to the page content
+        List<TaskResponse> filteredContent = applyFiltersAndConvert(taskPage.getContent(), status, assigneeId, branchId, priority, createdBy,
+                keyword, overdue, search, dueDateFromParsed, dueDateToParsed, assignedDateFromParsed, assignedDateToParsed);
+
+        // Create a new page with filtered content
+        // Note: Since we filter after fetching, total count may not be accurate for filtered results
+        // For accurate pagination with dynamic filters, we'd need a more complex query-based approach
+        return new org.springframework.data.domain.PageImpl<>(filteredContent, pageable, taskPage.getTotalElements());
+    }
+
+    private List<TaskResponse> applyFiltersAndConvert(List<Task> tasks, TaskStatus status, Long assigneeId, Long branchId,
+                                                       Priority priority, Long createdBy, String keyword, Boolean overdue,
+                                                       String search, LocalDate dueDateFromParsed, LocalDate dueDateToParsed,
+                                                       LocalDate assignedDateFromParsed, LocalDate assignedDateToParsed) {
+        return tasks.stream()
+                .filter(task -> {
+                    // Status filtering
+                    if (status != null && task.getStatus() != status) {
+                        return false;
+                    }
+
+                    // Assignee filtering
+                    if (assigneeId != null && (task.getAssignedTo() == null || !task.getAssignedTo().getId().equals(assigneeId))) {
+                        return false;
+                    }
+
+                    // Branch filtering (for ADMIN who can see all branches)
+                    if (branchId != null && (task.getBranch() == null || !task.getBranch().getId().equals(branchId))) {
+                        return false;
+                    }
+
+                    // Priority filtering
+                    if (priority != null && task.getPriority() != priority) {
+                        return false;
+                    }
+
+                    // CreatedBy filtering
+                    if (createdBy != null && (task.getCreatedBy() == null || !task.getCreatedBy().equals(createdBy))) {
+                        return false;
+                    }
+
+                    // Overdue filtering
+                    if (overdue != null && overdue) {
+                        if (task.getDueDate() == null || task.getDueDate().isAfter(LocalDate.now()) || task.getStatus() == TaskStatus.COMPLETED) {
+                            return false;
+                        }
+                    }
+
+                    // Keyword/Search filtering (case-insensitive)
+                    if (keyword != null && !keyword.isEmpty()) {
+                        String lowerKeyword = keyword.toLowerCase();
+                        boolean matchesKeyword = (task.getTitle() != null && task.getTitle().toLowerCase().contains(lowerKeyword)) ||
+                                (task.getDescription() != null && task.getDescription().toLowerCase().contains(lowerKeyword));
+                        if (!matchesKeyword) {
+                            return false;
+                        }
+                    }
+
+                    if (search != null && !search.isEmpty()) {
+                        String lowerSearch = search.toLowerCase();
+                        boolean matchesSearch = (task.getTitle() != null && task.getTitle().toLowerCase().contains(lowerSearch)) ||
+                                (task.getDescription() != null && task.getDescription().toLowerCase().contains(lowerSearch));
+                        if (!matchesSearch) {
+                            return false;
+                        }
+                    }
+
+                    // Due date filtering
+                    if (dueDateFromParsed != null) {
+                        if (task.getDueDate() == null || task.getDueDate().isBefore(dueDateFromParsed)) {
+                            return false;
+                        }
+                    }
+                    if (dueDateToParsed != null) {
+                        if (task.getDueDate() == null || task.getDueDate().isAfter(dueDateToParsed)) {
+                            return false;
+                        }
+                    }
+
+                    // Assigned date filtering (createdAt)
+                    LocalDate taskCreatedDate = task.getCreatedAt().toLocalDate();
+                    if (assignedDateFromParsed != null && taskCreatedDate.isBefore(assignedDateFromParsed)) {
+                        return false;
+                    }
+                    if (assignedDateToParsed != null && taskCreatedDate.isAfter(assignedDateToParsed)) {
+                        return false;
+                    }
+
+                    return true;
+                })
+                .map(this::convertToTaskResponse)
+                .collect(Collectors.toList());
+    }
+
+    private Page<TaskResponse> toPage(List<TaskResponse> list, Pageable pageable) {
+        int start = (int) pageable.getOffset();
+        int end = Math.min((start + pageable.getPageSize()), list.size());
+        if (start > list.size()) {
+            start = list.size();
+        }
+        if (end > list.size()) {
+            end = list.size();
+        }
+        List<TaskResponse> pageContent = list.subList(start, end);
+        return new org.springframework.data.domain.PageImpl<>(pageContent, pageable, list.size());
     }
 
     private LocalDate parseDate(String dateStr) {
@@ -845,18 +1107,20 @@ public class TaskService {
                 break;
                 
             case "MANAGER":
-                // Manager can assign ONLY to: SENIOR_COUNSELLOR, JUNIOR_COUNSELLOR, Video Editor, Web Developer
-                // Cannot assign to ADMIN or other MANAGER
-                if ("ADMIN".equals(assigneeRole) || "MANAGER".equals(assigneeRole)) {
-                    throw new InvalidAssignmentException("MANAGER cannot assign tasks to ADMIN or other MANAGER users");
+            case "BRANCH_PARTNER":
+                // Manager/Branch Partner can assign ONLY to: SENIOR_COUNSELLOR, JUNIOR_COUNSELLOR, Video Editor, Web Developer
+                // Cannot assign to ADMIN, MANAGER, or other BRANCH_PARTNER
+                String roleDisplay = "MANAGER".equals(assignerRole) ? "MANAGER" : "BRANCH_PARTNER";
+                if ("ADMIN".equals(assigneeRole) || "MANAGER".equals(assigneeRole) || "BRANCH_PARTNER".equals(assigneeRole)) {
+                    throw new InvalidAssignmentException(roleDisplay + " cannot assign tasks to ADMIN, MANAGER, or other BRANCH_PARTNER users");
                 }
                 if (!"SENIOR_COUNSELLOR".equals(assigneeRole) && 
                     !"JUNIOR_COUNSELLOR".equals(assigneeRole) && 
                     !"VIDEO_EDITOR".equals(assigneeRole) && 
                     !"WEB_DEVELOPER".equals(assigneeRole)) {
-                    throw new InvalidAssignmentException("MANAGER can only assign tasks to SENIOR_COUNSELLOR, JUNIOR_COUNSELLOR, Video Editor, or Web Developer");
+                    throw new InvalidAssignmentException(roleDisplay + " can only assign tasks to SENIOR_COUNSELLOR, JUNIOR_COUNSELLOR, Video Editor, or Web Developer");
                 }
-                log.info("MANAGER {} assigning task to {} ({})", assignedBy.getFullName(), assignedTo.getFullName(), assigneeRole);
+                log.info("{} {} assigning task to {} ({})", assignerRole, assignedBy.getFullName(), assignedTo.getFullName(), assigneeRole);
                 break;
                 
             case "SENIOR_COUNSELLOR":

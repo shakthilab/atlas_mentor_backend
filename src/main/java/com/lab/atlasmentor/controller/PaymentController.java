@@ -3,7 +3,6 @@ package com.lab.atlasmentor.controller;
 import com.lab.atlasmentor.dto.ApiResponse;
 import com.lab.atlasmentor.dto.PaymentCreateRequest;
 import com.lab.atlasmentor.dto.PaymentUpdateRequest;
-import com.lab.atlasmentor.dto.PaymentTransactionWithDisputeDto;
 import com.lab.atlasmentor.model.ClientPayment;
 import com.lab.atlasmentor.model.PaymentTransaction;
 import com.lab.atlasmentor.service.PaymentService;
@@ -37,8 +36,8 @@ public class PaymentController {
     }
 
     @PutMapping("/{paymentId}")
-    public ResponseEntity<ApiResponse<ClientPayment>> updatePayment(@PathVariable Long paymentId, 
-                                                                   @Valid @RequestBody PaymentUpdateRequest request) {
+    public ResponseEntity<ApiResponse<ClientPayment>> updatePayment(@PathVariable Long paymentId,
+                                                                    @Valid @RequestBody PaymentUpdateRequest request) {
         try {
             ClientPayment payment = paymentService.updatePaymentStatus(paymentId, request);
             ApiResponse<ClientPayment> response = ApiResponse.success("Payment updated successfully", payment);
@@ -64,8 +63,8 @@ public class PaymentController {
     }
 
     @PutMapping("/{paymentId}/reject")
-    public ResponseEntity<ApiResponse<ClientPayment>> rejectPayment(@PathVariable Long paymentId, 
-                                                                   @RequestBody(required = false) Map<String, String> requestBody) {
+    public ResponseEntity<ApiResponse<ClientPayment>> rejectPayment(@PathVariable Long paymentId,
+                                                                    @RequestBody(required = false) Map<String, String> requestBody) {
         try {
             String rejectionReason = requestBody != null ? requestBody.get("reason") : null;
             ClientPayment payment = paymentService.rejectPayment(paymentId, rejectionReason);
@@ -145,18 +144,6 @@ public class PaymentController {
             return ResponseEntity.ok(response);
         } catch (RuntimeException e) {
             ApiResponse<List<ClientPayment>> response = ApiResponse.error(e.getMessage());
-            return ResponseEntity.badRequest().body(response);
-        }
-    }
-    
-    @GetMapping("/student/{studentId}/transactions")
-    public ResponseEntity<ApiResponse<List<PaymentTransactionWithDisputeDto>>> getStudentPaymentTransactions(@PathVariable Long studentId) {
-        try {
-            List<PaymentTransactionWithDisputeDto> transactions = paymentService.getStudentPaymentTransactions(studentId);
-            ApiResponse<List<PaymentTransactionWithDisputeDto>> response = ApiResponse.success("Student payment transactions retrieved successfully", transactions);
-            return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
-            ApiResponse<List<PaymentTransactionWithDisputeDto>> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
     }

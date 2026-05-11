@@ -1,12 +1,12 @@
 package com.lab.atlasmentor.controller;
 
+import com.lab.atlasmentor.dto.PaymentTransactionDto;
 import com.lab.atlasmentor.dto.PaymentTransactionRequest;
 import com.lab.atlasmentor.dto.AmountChangeRequest;
 import com.lab.atlasmentor.dto.StatusChangeRequest;
 import com.lab.atlasmentor.dto.ApiResponse;
 import com.lab.atlasmentor.model.*;
 import com.lab.atlasmentor.service.FinalPaymentService;
-import com.lab.atlasmentor.enums.DisputePriority;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -75,12 +75,12 @@ public class EnhancedPaymentController {
 
     @GetMapping("/{studentId}/transactions")
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'REFERRAL', 'COMPANY')")
-    public ResponseEntity<List<PaymentTransaction>> getPaymentTransactions(@PathVariable Long studentId) {
+    public ResponseEntity<ApiResponse<List<PaymentTransactionDto>>> getPaymentTransactions(@PathVariable Long studentId) {
         try {
-            List<PaymentTransaction> transactions = finalPaymentService.getPaymentTransactions(studentId);
-            return ResponseEntity.ok(transactions);
+            List<PaymentTransactionDto> transactions = finalPaymentService.getPaymentTransactions(studentId);
+            return ResponseEntity.ok(ApiResponse.success("Payment transactions retrieved successfully", transactions));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().build();
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
         }
     }
 

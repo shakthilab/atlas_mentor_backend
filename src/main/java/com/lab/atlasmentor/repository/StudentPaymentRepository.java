@@ -5,6 +5,7 @@ import com.lab.atlasmentor.enums.StudentPaymentStatus;
 import com.lab.atlasmentor.enums.StudentStatusEnhanced;
 import com.lab.atlasmentor.enums.SourceType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -53,4 +54,8 @@ public interface StudentPaymentRepository extends JpaRepository<StudentPayment, 
     
     @Query("SELECT sp FROM StudentPayment sp WHERE sp.student.id = :studentId AND sp.isDeleted = false")
     Optional<StudentPayment> findActiveByStudentId(@Param("studentId") Long studentId);
+    
+    @Modifying
+    @Query("DELETE FROM StudentPayment sp WHERE sp.student.id = :studentId")
+    void deleteByStudentId(@Param("studentId") Long studentId);
 }

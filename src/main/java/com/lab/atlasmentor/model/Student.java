@@ -4,7 +4,6 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
-import com.lab.atlasmentor.model.MobileCountryCode;
 import com.lab.atlasmentor.enums.StudentStatus;
 import com.lab.atlasmentor.enums.StudentStatusEnhanced;
 import com.lab.atlasmentor.enums.SourceType;
@@ -13,7 +12,15 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "students")
+@Table(name = "students",
+       indexes = {
+           @Index(name = "idx_students_user_id", columnList = "user_id"),
+           @Index(name = "idx_students_branch_id", columnList = "branch_id"),
+           @Index(name = "idx_students_assigned_by_id", columnList = "assignedBy_id"),
+           @Index(name = "idx_students_status", columnList = "status"),
+           @Index(name = "idx_students_enhanced_status", columnList = "enhanced_status"),
+           @Index(name = "idx_students_source", columnList = "source_type, source_id")
+       })
 @Data
 @EqualsAndHashCode(callSuper = true)
 public class Student extends BaseEntity {
@@ -25,13 +32,6 @@ public class Student extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = true, unique = true, referencedColumnName = "id")
     private User user;
-    
-    @Column(name = "phone", length = 20)
-    private String phone;
-    
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "mobile_country_code_id", referencedColumnName = "id")
-    private MobileCountryCode mobileCountryCode;
     
     @Column(name = "email", length = 150)
     private String email;
@@ -72,6 +72,13 @@ public class Student extends BaseEntity {
     
     @Transient  
     private String branchName;
+    
+    // Created by information fields
+    @Transient
+    private String createdByName;
+    
+    @Transient
+    private String createdByUserRole;
     
     @OneToMany(mappedBy = "student", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonIgnoreProperties({"student"})

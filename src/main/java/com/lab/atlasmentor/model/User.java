@@ -9,7 +9,17 @@ import lombok.ToString;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 @Entity
-@Table(name = "users")
+@Table(name = "users", 
+       uniqueConstraints = {
+           @UniqueConstraint(columnNames = {"phone"}, 
+                                name = "uk_users_phone")
+       },
+       indexes = {
+           @Index(name = "idx_users_role_id", columnList = "role_id"),
+           @Index(name = "idx_users_branch_id", columnList = "branch_id"),
+           @Index(name = "idx_users_reporting_manager_id", columnList = "reporting_manager_id"),
+           @Index(name = "idx_users_status", columnList = "status")
+       })
 @Data
 @EqualsAndHashCode(callSuper = true)
 @ToString(callSuper = true)
@@ -25,10 +35,10 @@ public class User extends BaseEntity {
     @Column(name = "last_name", length = 100)
     private String lastName;
     
-    @Column(name = "email", nullable = false, unique = true, length = 150)
+    @Column(name = "email", nullable = true, unique = true, length = 150)
     private String email;
     
-    @Column(name = "phone", length = 20)
+    @Column(name = "phone", nullable = false, length = 20)
     private String phone;
     
     @Column(name = "password", nullable = false)

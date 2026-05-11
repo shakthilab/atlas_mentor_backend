@@ -9,7 +9,11 @@ import lombok.EqualsAndHashCode;
 import java.math.BigDecimal;
 
 @Entity
-@Table(name = "payment_transactions")
+@Table(name = "payment_transactions",
+       indexes = {
+           @Index(name = "idx_payment_transactions_student_id", columnList = "student_id"),
+           @Index(name = "idx_payment_transactions_payment_id", columnList = "payment_id")
+       })
 @Data
 @EqualsAndHashCode(callSuper = true)
 public class PaymentTransaction extends BaseEntity {

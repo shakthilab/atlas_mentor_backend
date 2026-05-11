@@ -1,14 +1,6 @@
 package com.lab.atlasmentor.service;
 
-import com.lab.atlasmentor.dto.PageResponse;
-import com.lab.atlasmentor.dto.StudentRegistrationRequest;
-import com.lab.atlasmentor.dto.StudentOnboardingRequest;
-import com.lab.atlasmentor.dto.StudentStatusUpdateRequest;
-import com.lab.atlasmentor.dto.StudentResponse;
-import com.lab.atlasmentor.dto.StudentWithStudentPaymentDto;
-import com.lab.atlasmentor.dto.StudentPaymentAmountUpdateRequest;
-import com.lab.atlasmentor.dto.StudentPaymentStatusUpdateRequest;
-import com.lab.atlasmentor.dto.StudentPaymentAmountDto;
+import com.lab.atlasmentor.dto.*;
 import com.lab.atlasmentor.model.*;
 import com.lab.atlasmentor.repository.*;
 import com.lab.atlasmentor.model.StudentPayment;
@@ -19,7 +11,7 @@ import com.lab.atlasmentor.enums.StudentStatus;
 import com.lab.atlasmentor.enums.SourceType;
 import com.lab.atlasmentor.enums.StudentPaymentStatus;
 import com.lab.atlasmentor.enums.ApprovalStatus;
-import com.lab.atlasmentor.enums.DisputeStatus;
+import com.lab.atlasmentor.enums.ClientPayoutStatus;
 import com.lab.atlasmentor.security.SecurityUtils;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,6 +20,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -89,7 +82,16 @@ public class StudentService {
     private FinalPaymentService finalPaymentService;
 
     @Autowired
-    private DisputeRepository disputeRepository;
+    private PaymentAuditRepository paymentAuditRepository;
+
+    @Autowired
+    private PaymentDisputeActivityRepository paymentDisputeActivityRepository;
+    
+    @Autowired
+    private ClientPayoutRepository clientPayoutRepository;
+
+    @Autowired
+    private ClientPayoutService clientPayoutService;
 
     @Transactional
     public Student registerStudent(StudentRegistrationRequest request) {
@@ -107,19 +109,9 @@ public class StudentService {
         Student student = new Student();
         student.setUser(user);
         student.setEmail(request.getEmail());
-        student.setPhone(request.getPhone());
         student.setStatus(StudentStatus.LEAD);
         
-        // Branch is optional for students - leave as null for now
-        
         student.setCreatedBy(user.getId());
-        
-        // Set mobile country code if provided
-        if (request.getMobileCountryCodeId() != null) {
-            MobileCountryCode mobileCountryCode = mobileCountryCodeRepository.findById(request.getMobileCountryCodeId())
-                .orElseThrow(() -> new RuntimeException("Mobile country code not found with id: " + request.getMobileCountryCodeId()));
-            student.setMobileCountryCode(mobileCountryCode);
-        }
         
         // Set country and university if provided
         if (request.getCountryId() != null) {
@@ -155,30 +147,43 @@ public class StudentService {
                 .orElseThrow(() -> new RuntimeException("Student not found with id: " + id));
     }
 
-    public Student getStudentByIdAsResponse(Long id) {
+    public StudentResponse getStudentByIdAsResponse(Long id) {
         Student student = getStudentById(id);
         
-        // Populate branch fields for API convenience
-        if (student.getBranch() != null) {
-            student.setBranchId(student.getBranch().getId());
-            student.setBranchName(student.getBranch().getName());
+        StudentResponse response = StudentResponse.fromEntity(student);
+        
+        // Populate created by name
+        if (student.getCreatedBy() != null) {
+            userRepository.findById(student.getCreatedBy()).ifPresent(createdByUser -> {
+                response.setCreatedByName(createdByUser.getFullName());
+            });
         }
         
-        return student;
+        return response;
     }
 
+    @Transactional
     public void deleteStudent(Long id) {
         Student student = getStudentById(id);
-        
+
+        // Delete related student payments first (foreign key constraint)
+        studentPaymentRepository.deleteByStudentId(student.getId());
+
+        // Delete related payment audit records first (foreign key constraint)
+        paymentAuditRepository.deleteByStudent(student);
+
+        // Delete related student activities first (foreign key constraint)
+        studentActivityRepository.deleteByStudent(student);
+
         // The cascade operations will automatically delete:
         // - StudentAcademicHistory records (cascade = CascadeType.ALL)
         // - Document records (cascade = CascadeType.ALL)
         // - Any other related entities with cascade operations
-        
+
         studentRepository.delete(student);
     }
 
-    public PageResponse<Student> getAllStudents(StudentStatus status, String search, Pageable pageable) {
+    public PageResponse<StudentResponse> getAllStudents(StudentStatus status, String search, Pageable pageable) {
         var currentUser = SecurityUtils.getCurrentUser();
         
         String statusParam = (status != null) ? status.toString() : null;
@@ -198,8 +203,8 @@ public class StudentService {
                 null, 
                 pageable
             );
-        } else if ("MANAGER".equalsIgnoreCase(userRole)) {
-            // Manager: Show only branch-specific students
+        } else if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole)) {
+            // Manager/Branch Partner: Show only branch-specific students
             students = studentRepository.findByFiltersWithAccess(
                 statusParam, 
                 searchParam, 
@@ -234,21 +239,70 @@ public class StudentService {
             );
         }
         
-        // Populate branch fields for each student
-        students.getContent().forEach(student -> {
-            if (student.getBranch() != null) {
-                student.setBranchId(student.getBranch().getId());
-                student.setBranchName(student.getBranch().getName());
-            }
-        });
+        // Convert Student entities to StudentResponse DTOs
+        List<StudentResponse> studentResponses = students.getContent().stream()
+            .map(student -> {
+                StudentResponse response = StudentResponse.fromEntity(student);
+                // Populate created by name
+                if (student.getCreatedBy() != null) {
+                    userRepository.findById(student.getCreatedBy()).ifPresent(createdByUser -> {
+                        response.setCreatedByName(createdByUser.getFullName());
+                    });
+                }
+                return response;
+            })
+            .collect(java.util.stream.Collectors.toList());
         
-        return PageResponse.of(students.getContent(), students.getNumber(), students.getSize(), students.getTotalElements());
+        return PageResponse.of(studentResponses, students.getNumber(), students.getSize(), students.getTotalElements());
     }
 
-    public PageResponse<Student> getNonRegisteredStudents(String search, Pageable pageable) {
+    public PageResponse<StudentNonRegisteredResponse> getNonRegisteredStudents(String search, String status, String countryName, String dateFrom, String dateTo, String source, Pageable pageable) {
         var currentUser = SecurityUtils.getCurrentUser();
         
         String searchParam = (search != null && !search.trim().isEmpty()) ? "%" + search.toLowerCase() + "%" : "%";
+        
+        // Build source filter lists
+        List<String> sourceRoles = new java.util.ArrayList<>();
+        List<String> sourceTypes = new java.util.ArrayList<>();
+        
+        if (source != null && !source.trim().isEmpty()) {
+            String[] sources = source.split(",");
+            for (String s : sources) {
+                String trimmed = s.trim().toUpperCase();
+                switch (trimmed) {
+                    case "ADMIN":
+                        sourceRoles.add("ADMIN");
+                        break;
+                    case "COUNSELLOR":
+                    case "COUNSELOR":
+                        sourceRoles.add("JUNIOR_COUNSELLOR");
+                        sourceRoles.add("SENIOR_COUNSELLOR");
+                        break;
+                    case "REFERRAL":
+                        sourceRoles.add("REFERRAL");
+                        sourceTypes.add("REFERRAL");
+                        break;
+                    case "COMPANY":
+                        sourceRoles.add("COMPANY");
+                        sourceTypes.add("COMPANY");
+                        break;
+                    case "MANAGER":
+                        sourceRoles.add("MANAGER");
+                        break;
+                    case "BRANCH_PARTNER":
+                        sourceRoles.add("BRANCH_PARTNER");
+                        break;
+                }
+            }
+        }
+        
+        // Use empty lists if no valid sources provided (will be ignored by IS NULL check)
+        if (sourceRoles.isEmpty()) {
+            sourceRoles = null;
+        }
+        if (sourceTypes.isEmpty()) {
+            sourceTypes = null;
+        }
         
         Page<Student> students;
         
@@ -261,28 +315,56 @@ public class StudentService {
                 searchParam, 
                 true, 
                 null, 
+                status,
+                countryName,
+                dateFrom,
+                dateTo,
+                source,
+                sourceRoles,
+                sourceTypes,
                 pageable
             );
-        } else if ("MANAGER".equalsIgnoreCase(userRole)) {
-            // Manager: Show only branch-specific students except REGISTERED
+        } else if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole)) {
+            // Manager/Branch Partner: Show only branch-specific students except REGISTERED
             students = studentRepository.findByNonRegisteredStatusWithAccess(
                 searchParam, 
                 false, 
                 currentUser.getBranchId(), 
+                status,
+                countryName,
+                dateFrom,
+                dateTo,
+                source,
+                sourceRoles,
+                sourceTypes,
                 pageable
             );
         } else if ("JUNIOR_COUNSELLOR".equalsIgnoreCase(userRole) || "SENIOR_COUNSELLOR".equalsIgnoreCase(userRole)) {
             // Counsellors: Show only assigned students to them except REGISTERED
             students = studentRepository.findByNonRegisteredStatusForCounsellor(
                 searchParam, 
-                currentUser.getUserId(), 
+                currentUser.getUserId(),
+                status,
+                countryName,
+                dateFrom,
+                dateTo,
+                source,
+                sourceRoles,
+                sourceTypes,
                 pageable
             );
         } else if ("REFERRAL".equalsIgnoreCase(userRole) || "COMPANY".equalsIgnoreCase(userRole)) {
             // Referral and Company: Show only students they created except REGISTERED
             students = studentRepository.findByNonRegisteredStatusForCreator(
                 searchParam, 
-                currentUser.getUserId(), 
+                currentUser.getUserId(),
+                status,
+                countryName,
+                dateFrom,
+                dateTo,
+                source,
+                sourceRoles,
+                sourceTypes,
                 pageable
             );
         } else {
@@ -290,20 +372,149 @@ public class StudentService {
             students = studentRepository.findByNonRegisteredStatusWithAccess(
                 searchParam, 
                 currentUser.isAdmin(), 
-                currentUser.getBranchId(), 
+                currentUser.getBranchId(),
+                status,
+                countryName,
+                dateFrom,
+                dateTo,
+                source,
+                sourceRoles,
+                sourceTypes,
                 pageable
             );
         }
         
-        // Populate branch fields for each student
-        students.getContent().forEach(student -> {
-            if (student.getBranch() != null) {
-                student.setBranchId(student.getBranch().getId());
-                student.setBranchName(student.getBranch().getName());
+        // Convert Student entities to StudentNonRegisteredResponse DTOs
+        List<StudentNonRegisteredResponse> studentResponses = students.getContent().stream().map(student -> {
+            StudentNonRegisteredResponse response = new StudentNonRegisteredResponse();
+            
+            // Basic student information
+            response.setId(student.getId());
+            // User information (nested user object)
+            if (student.getUser() != null) {
+                StudentNonRegisteredResponse.UserDto userDto = new StudentNonRegisteredResponse.UserDto();
+                userDto.setId(student.getUser().getId());
+                userDto.setFirstName(student.getUser().getFirstName());
+                userDto.setLastName(student.getUser().getLastName());
+                userDto.setFullName(student.getUser().getFullName());
+                userDto.setEmail(student.getUser().getEmail());
+                userDto.setPhone(student.getUser().getPhone());
+                userDto.setCreatedAt(student.getUser().getCreatedAt() != null ? student.getUser().getCreatedAt().toString() : null);
+                
+                // User role information
+                if (student.getUser().getRole() != null) {
+                    userDto.setRole(student.getUser().getRole().getName());
+                }
+                
+                // User branch information
+                if (student.getUser().getBranch() != null) {
+                    userDto.setBranchId(student.getUser().getBranch().getId());
+                    userDto.setBranchName(student.getUser().getBranch().getName());
+                }
+                
+                response.setUser(userDto);
             }
-        });
+            response.setNotes(student.getNotes());
+            response.setCourseName(student.getCourseName());
+            response.setIntakePeriod(student.getIntakePeriod());
+            response.setStatus(student.getStatus().name());
+            response.setCreatedAt(student.getCreatedAt() != null ? student.getCreatedAt().toString() : null);
+            response.setCreatedBy(student.getCreatedBy());
+            response.setUpdatedBy(student.getUpdatedBy());
+            
+            // Mobile country code (get from user since it's now stored in User entity)
+            if (student.getUser() != null && student.getUser().getMobileCountryCode() != null) {
+                response.setMobileCountryCode(new MobileCountryCodeDto(
+                    student.getUser().getMobileCountryCode().getId(),
+                    student.getUser().getMobileCountryCode().getCountryName(),
+                    student.getUser().getMobileCountryCode().getCountryCode(),
+                    student.getUser().getMobileCountryCode().getMobileCode(),
+                    student.getUser().getMobileCountryCode().getIsoAlpha2(),
+                    student.getUser().getMobileCountryCode().getIsoAlpha3(),
+                    student.getUser().getMobileCountryCode().getIsActive(),
+                    student.getUser().getMobileCountryCode().getFlagUrl(),
+                    student.getUser().getMobileCountryCode().getMobileNumberLength()
+                ));
+            } else {
+                // Always set MCC object, even if null, to ensure consistent API response
+                response.setMobileCountryCode(new MobileCountryCodeDto());
+            }
+            
+            // Branch information
+            if (student.getBranch() != null) {
+                response.setBranchId(student.getBranch().getId());
+                response.setBranchName(student.getBranch().getName());
+                response.setBranchLocation(student.getBranch().getLocation());
+            }
+            
+            // Country information
+            if (student.getCountry() != null) {
+                response.setCountryId(student.getCountry().getId());
+                response.setCountryName(student.getCountry().getName());
+            }
+            
+            // University information
+            if (student.getUniversity() != null) {
+                response.setUniversityId(student.getUniversity().getId());
+                response.setUniversityName(student.getUniversity().getName());
+            }
+            
+            // Assigned by information (full user object)
+            if (student.getAssignedBy() != null) {
+                StudentNonRegisteredResponse.UserDto assignedByDto = new StudentNonRegisteredResponse.UserDto();
+                assignedByDto.setId(student.getAssignedBy().getId());
+                assignedByDto.setFirstName(student.getAssignedBy().getFirstName());
+                assignedByDto.setLastName(student.getAssignedBy().getLastName());
+                assignedByDto.setFullName(student.getAssignedBy().getFullName());
+                assignedByDto.setEmail(student.getAssignedBy().getEmail());
+                assignedByDto.setPhone(student.getAssignedBy().getPhone());
+                assignedByDto.setCreatedAt(student.getAssignedBy().getCreatedAt().toString());
+                
+                // Assigned by user role information
+                if (student.getAssignedBy().getRole() != null) {
+                    assignedByDto.setRole(student.getAssignedBy().getRole().getName());
+                }
+                
+                // Assigned by user branch information
+                if (student.getAssignedBy().getBranch() != null) {
+                    assignedByDto.setBranchId(student.getAssignedBy().getBranch().getId());
+                    assignedByDto.setBranchName(student.getAssignedBy().getBranch().getName());
+                }
+                
+                response.setAssignedBy(assignedByDto);
+            }
+            
+            // Created by information (full user object)
+            if (student.getCreatedBy() != null) {
+                userRepository.findById(student.getCreatedBy()).ifPresent(createdByUser -> {
+                    StudentNonRegisteredResponse.UserDto createdByDto = new StudentNonRegisteredResponse.UserDto();
+                    createdByDto.setId(createdByUser.getId());
+                    createdByDto.setFirstName(createdByUser.getFirstName());
+                    createdByDto.setLastName(createdByUser.getLastName());
+                    createdByDto.setFullName(createdByUser.getFullName());
+                    createdByDto.setEmail(createdByUser.getEmail());
+                    createdByDto.setPhone(createdByUser.getPhone());
+                    createdByDto.setCreatedAt(createdByUser.getCreatedAt() != null ? createdByUser.getCreatedAt().toString() : null);
+                    
+                    // Created by user role information
+                    if (createdByUser.getRole() != null) {
+                        createdByDto.setRole(createdByUser.getRole().getName());
+                    }
+                    
+                    // Created by user branch information
+                    if (createdByUser.getBranch() != null) {
+                        createdByDto.setBranchId(createdByUser.getBranch().getId());
+                        createdByDto.setBranchName(createdByUser.getBranch().getName());
+                    }
+                    
+                    response.setCreatedByUser(createdByDto);
+                });
+            }
+            
+            return response;
+        }).collect(java.util.stream.Collectors.toList());
         
-        return PageResponse.of(students.getContent(), students.getNumber(), students.getSize(), students.getTotalElements());
+        return PageResponse.of(studentResponses, students.getNumber(), students.getSize(), students.getTotalElements());
     }
 
 
@@ -348,8 +559,18 @@ public class StudentService {
         User currentUser = userRepository.findById(currentUserDetails.getUserId())
             .orElseThrow(() -> new RuntimeException("Current user not found"));
         
-        // Check if student already exists with this email
-        Student existingStudent = studentRepository.findByEmail(request.getEmail()).orElse(null);
+        // Check if student already exists with this email (only if email is provided)
+        Student existingStudent = null;
+        
+        // Check by email first
+        if (request.getEmail() != null && !request.getEmail().trim().isEmpty()) {
+            existingStudent = studentRepository.findByEmail(request.getEmail()).orElse(null);
+        }
+        
+        // If no email match, check by phone number
+        if (existingStudent == null && request.getPhone() != null && !request.getPhone().trim().isEmpty()) {
+            existingStudent = studentRepository.findByPhone(request.getPhone()).orElse(null);
+        }
         
         if (existingStudent != null) {
             // Update existing student
@@ -372,38 +593,40 @@ public class StudentService {
     }
 
     private Student createNewStudent(StudentOnboardingRequest request, User currentUser, CustomUserDetails currentUserDetails) {
+        // No email validation for student creation - users with rights can create students without email
+        
         // Generate random password
         String generatedPassword = generateRandomPassword();
         
-        // Create user account
-        User user = new User();
-        user.setFirstName(request.getFirstName());
-        user.setLastName(request.getLastName());
-        user.setEmail(request.getEmail());
-        user.setPhone(request.getPhone());
-        user.setPassword(passwordEncoder.encode(generatedPassword));
-        user.setCreatedBy(currentUser.getId());
-        
-        // Set role - fetch STUDENT role from cache
-        Role studentRole = roleCacheService.getRoleByName("STUDENT");
-        user.setRole(studentRole);
-        
-        user = userRepository.save(user);
+        try {
+            // Create user account (even with null email)
+            User user = new User();
+            user.setFirstName(request.getFirstName());
+            user.setLastName(request.getLastName());
+            user.setEmail(request.getEmail()); // Can be null
+            user.setPhone(request.getPhone());
+            user.setPassword(passwordEncoder.encode(generatedPassword));
+            user.setCreatedBy(currentUser.getId());
+            
+            // Set mobile country code if provided
+            if (request.getMobileCountryCodeId() != null) {
+                MobileCountryCode mobileCountryCode = mobileCountryCodeRepository.findById(request.getMobileCountryCodeId())
+                    .orElseThrow(() -> new RuntimeException("Mobile country code not found"));
+                user.setMobileCountryCode(mobileCountryCode);
+            }
+            
+            // Set role - fetch STUDENT role from cache
+            Role studentRole = roleCacheService.getRoleByName("STUDENT");
+            user.setRole(studentRole);
+            
+            user = userRepository.save(user);
         
         // Create student record
         Student student = new Student();
         student.setUser(user);
         student.setEmail(request.getEmail());
-        student.setPhone(request.getPhone());
         student.setStatus(StudentStatus.LEAD);
         student.setCreatedBy(currentUser.getId());
-        
-        // Set optional fields
-        if (request.getMobileCountryCodeId() != null) {
-            MobileCountryCode mobileCountryCode = mobileCountryCodeRepository.findById(request.getMobileCountryCodeId())
-                .orElseThrow(() -> new RuntimeException("Mobile country code not found"));
-            student.setMobileCountryCode(mobileCountryCode);
-        }
         
         if (request.getBranchId() != null) {
             Branch branch = branchRepository.findById(request.getBranchId())
@@ -429,6 +652,14 @@ public class StudentService {
         
         // Save student first
         student = studentRepository.save(student);
+        
+        // Handle assignedToId if provided
+        if (request.getAssignedToId() != null) {
+            User assignedToUser = userRepository.findById(request.getAssignedToId())
+                .orElseThrow(() -> new RuntimeException("Assigned user not found with ID: " + request.getAssignedToId()));
+            student.setAssignedBy(assignedToUser);
+            student = studentRepository.save(student); // Save again to update the assignedBy relationship
+        }
         
         // Save academic history
         if (request.getAcademicHistory() != null && !request.getAcademicHistory().isEmpty()) {
@@ -483,36 +714,56 @@ public class StudentService {
             }
         }
         
-        // Send login credentials via email
-        try {
-            emailService.sendLoginCredentials(request.getEmail(), generatedPassword);
-        } catch (Exception e) {
-            // Log error but don't fail the operation
-            System.err.println("Failed to send login credentials: " + e.getMessage());
-        }
+        // Email sending moved to status change API to handle nullable emails
+        // Password will be generated and sent when student status is changed
         
         return student;
+        
+        } catch (DataIntegrityViolationException e) {
+            String errorMessage = e.getMessage();
+            if (errorMessage != null) {
+                if (errorMessage.contains("email")) {
+                    throw new RuntimeException("Email already exists");
+                }
+                if (errorMessage.contains("phone") || errorMessage.contains("uk_users_phone")) {
+                    throw new RuntimeException("Phone number already exists");
+                }
+            }
+            throw new RuntimeException("Database constraint violation: " + e.getMessage());
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to create student: " + e.getMessage());
+        }
     }
 
     private Student updateStudentData(Student student, StudentOnboardingRequest request, User currentUser) {
         // Update user information if user exists
         if (student.getUser() != null) {
             User user = student.getUser();
+            
+            // Check if phone number is being changed and if new phone already exists (exclude current user)
+            if (request.getPhone() != null && !request.getPhone().equals(user.getPhone())) {
+                if (userRepository.existsByPhoneExcludingUser(request.getPhone(), user.getId())) {
+                    throw new RuntimeException("Phone number already exists");
+                }
+            }
+            
             user.setFirstName(request.getFirstName());
             user.setLastName(request.getLastName());
+            user.setEmail(request.getEmail());
             user.setPhone(request.getPhone());
+            
+            // Update mobile country code if provided
+            if (request.getMobileCountryCodeId() != null) {
+                MobileCountryCode mobileCountryCode = mobileCountryCodeRepository.findById(request.getMobileCountryCodeId())
+                    .orElseThrow(() -> new RuntimeException("Mobile country code not found"));
+                user.setMobileCountryCode(mobileCountryCode);
+            }
+            
             userRepository.save(user);
         }
         
         // Update student information
         student.setEmail(request.getEmail());
-        student.setPhone(request.getPhone());
-        
-        if (request.getMobileCountryCodeId() != null) {
-            MobileCountryCode mobileCountryCode = mobileCountryCodeRepository.findById(request.getMobileCountryCodeId())
-                .orElseThrow(() -> new RuntimeException("Mobile country code not found"));
-            student.setMobileCountryCode(mobileCountryCode);
-        }
         
         if (request.getBranchId() != null) {
             Branch branch = branchRepository.findById(request.getBranchId())
@@ -535,6 +786,14 @@ public class StudentService {
         student.setNotes(request.getNotes());
         student.setCourseName(request.getCourseName());
         student.setIntakePeriod(request.getIntakePeriod());
+        student.setUpdatedBy(currentUser.getId());
+        
+        // Handle assignedToId if provided
+        if (request.getAssignedToId() != null) {
+            User assignedToUser = userRepository.findById(request.getAssignedToId())
+                .orElseThrow(() -> new RuntimeException("Assigned user not found with ID: " + request.getAssignedToId()));
+            student.setAssignedBy(assignedToUser);
+        }
         
         // Update academic history - remove existing and add new
         studentAcademicHistoryRepository.deleteByStudentId(student.getId());
@@ -582,6 +841,8 @@ public class StudentService {
         }
         return password.toString();
     }
+    
+    // Phone validation is now handled at User entity level with database constraints
 
     public java.util.Map<String, java.util.List<String>> getRequiredDocuments() {
         java.util.Map<String, java.util.List<String>> requiredDocuments = new java.util.HashMap<>();
@@ -622,6 +883,56 @@ public class StudentService {
         
         // Only update if status is actually changing
         if (!oldStatus.equals(newStatus)) {
+            // Check if email is mandatory for REGISTERED status
+            if (newStatus == StudentStatus.REGISTERED) {
+                if (student.getEmail() == null || student.getEmail().trim().isEmpty()) {
+                    throw new RuntimeException("Email is mandatory to convert student to registered");
+                }
+                
+                // Handle user account creation and email sending for REGISTERED status
+                try {
+                    if (student.getUser() == null) {
+                        // Create new user account
+                        String generatedPassword = generateRandomPassword();
+                        
+                        User user = new User();
+                        // Use email prefix as default first name
+                        String emailPrefix = student.getEmail().split("@")[0];
+                        user.setFirstName(emailPrefix);
+                        user.setLastName("");
+                        user.setEmail(student.getEmail());
+                        user.setPhone(student.getUser() != null ? student.getUser().getPhone() : null);
+                        user.setPassword(passwordEncoder.encode(generatedPassword));
+                        user.setCreatedBy(currentUser.getId());
+                        
+                        // Set role - fetch STUDENT role from cache
+                        Role studentRole = roleCacheService.getRoleByName("STUDENT");
+                        user.setRole(studentRole);
+                        
+                        user = userRepository.save(user);
+                        student.setUser(user);
+                        
+                        // Send login credentials via email
+                        emailService.sendLoginCredentials(student.getEmail(), generatedPassword);
+                    } else {
+                        // User already exists - generate new password and update user account
+                        String generatedPassword = generateRandomPassword();
+                        
+                        // Update the existing user's password
+                        User existingUser = student.getUser();
+                        existingUser.setPassword(passwordEncoder.encode(generatedPassword));
+                        existingUser.setUpdatedBy(currentUser.getId());
+                        userRepository.save(existingUser);
+                        
+                        // Send login credentials with the new password
+                        emailService.sendLoginCredentials(student.getEmail(), generatedPassword);
+                    }
+                } catch (Exception e) {
+                    // Log error but don't fail the status change
+                    System.err.println("Failed to handle user account or send email: " + e.getMessage());
+                }
+            }
+            
             // Update student status
             student.setStatus(newStatus);
             student.setUpdatedBy(currentUser.getId());
@@ -678,6 +989,49 @@ public class StudentService {
         return studentPaymentRepository.save(payment);
     }
     
+    public ClientPayout updateClientPayoutAmount(ClientPayoutAmountUpdateRequest request) {
+        ClientPayout payout = clientPayoutRepository.findById(request.getClientPayoutId())
+            .orElseThrow(() -> new RuntimeException("Client payout not found with id: " + request.getClientPayoutId()));
+        
+        // Validate that the payout can be updated
+        if (payout.getPayoutStatus() == com.lab.atlasmentor.enums.ClientPayoutStatus.ACCEPTED) {
+            throw new RuntimeException("Cannot update amount for an accepted payout");
+        }
+        
+        if (payout.getPayoutStatus() == com.lab.atlasmentor.enums.ClientPayoutStatus.DISPUTE) {
+            throw new RuntimeException("Cannot update amount for a disputed payout");
+        }
+        
+        BigDecimal oldAmount = payout.getAssignedAmount();
+        payout.setAssignedAmount(request.getAssignedAmount());
+        
+        // Update status based on new amount
+        payout.updateStatusBasedOnPayment();
+        
+        if (request.getNotes() != null && !request.getNotes().trim().isEmpty()) {
+            payout.setNotes(request.getNotes());
+        }
+        
+        // Set assignment details
+        var currentUserDetails = SecurityUtils.getCurrentUser();
+        payout.setAssignedBy(userRepository.findById(currentUserDetails.getUserId()).orElse(null));
+        payout.setAssignedAt(java.time.LocalDateTime.now());
+        
+        ClientPayout savedPayout = clientPayoutRepository.save(payout);
+        
+        // Log activity
+        clientPayoutService.logActivity(
+            savedPayout, 
+            com.lab.atlasmentor.enums.ClientPayoutAction.AMOUNT_ASSIGNED,
+            oldAmount != null ? oldAmount.toString() : "0", 
+            request.getAssignedAmount().toString(), 
+            request.getNotes(), 
+            currentUserDetails.getUserId()
+        );
+        
+        return savedPayout;
+    }
+    
     @Transactional
     public StudentPayment updateStudentPaymentStatus(StudentPaymentStatusUpdateRequest request) {
         try {
@@ -701,59 +1055,224 @@ public class StudentService {
         }
     }
     
-    public List<StudentWithStudentPaymentDto> getStudentsWithPaymentByReferralAndCompany() {
+    public List<ClientPayoutDto> getStudentsWithPaymentByReferralAndCompany() {
         var currentUserDetails = SecurityUtils.getCurrentUser();
         String userRole = currentUserDetails.getRole();
-        List<StudentWithStudentPaymentDto> students;
+        List<ClientPayout> clientPayouts;
+        
+        List<SourceType> sourceTypes = List.of(SourceType.REFERRAL, SourceType.COMPANY);
         
         if ("ADMIN".equalsIgnoreCase(userRole)) {
-            // Admin: Return all students with payment by referral and company
-            students = studentRepository.findStudentsWithPaymentByReferralAndCompany();
-        } else if ("MANAGER".equalsIgnoreCase(userRole)) {
-            // Manager: Return students from their branch with payment by referral and company
+            // Admin: Return all client payouts with referral and company source types
+            clientPayouts = clientPayoutRepository.findBySourceTypeIn(sourceTypes);
+        } else if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole)) {
+            // Manager/Branch Partner: Return client payouts from their branch with referral and company source types
             Long branchId = currentUserDetails.getBranchId();
             if (branchId == null) {
                 throw new RuntimeException("Manager must be assigned to a branch");
             }
-            students = studentRepository.findStudentsWithPaymentByBranch(branchId);
+            clientPayouts = clientPayoutRepository.findByBranchIdAndSourceTypeIn(branchId, sourceTypes);
         } else if ("REFERRAL".equalsIgnoreCase(userRole)) {
-            // Referral: Return only students they added
-            students = studentRepository.findStudentsWithPaymentByReferral(currentUserDetails.getUserId());
+            // Referral: Return only their client payouts
+            clientPayouts = clientPayoutRepository.findByUserIdAndSourceType(currentUserDetails.getUserId(), SourceType.REFERRAL);
         } else if ("COMPANY".equalsIgnoreCase(userRole)) {
-            // Company: Return only students they added
-            students = studentRepository.findStudentsWithPaymentByCompany(currentUserDetails.getUserId());
+            // Company: Return only their client payouts
+            clientPayouts = clientPayoutRepository.findByUserIdAndSourceType(currentUserDetails.getUserId(), SourceType.COMPANY);
         } else {
             // Other roles: Return empty list or throw exception
             throw new RuntimeException("Access denied. This API is only available for ADMIN, MANAGER, REFERRAL, and COMPANY roles.");
         }
         
-        // Add dispute status information to each student
-        return students.stream()
-            .map(this::addDisputeStatusToStudentDto)
-            .collect(java.util.stream.Collectors.toList());
+        // Convert to DTOs
+        return clientPayouts.stream()
+                .map(this::convertToClientPayoutDto)
+                .collect(java.util.stream.Collectors.toList());
     }
     
-    /**
-     * Helper method to add dispute status to student DTO
-     */
-    private StudentWithStudentPaymentDto addDisputeStatusToStudentDto(StudentWithStudentPaymentDto studentDto) {
-        if (studentDto.getStudentId() == null) {
-            return studentDto;
+    public ClientPayoutWithSummaryDto getStudentsWithPaymentByReferralAndCompanyWithSummary(
+            String search, String source, Long branch, String paymentStatus, String dateFrom, String dateTo, int page, int size) {
+        var currentUserDetails = SecurityUtils.getCurrentUser();
+        String userRole = currentUserDetails.getRole();
+        List<ClientPayout> clientPayouts;
+        
+        // Parse filter parameters
+        String searchParam = (search != null && !search.trim().isEmpty()) ? search.trim() : null;
+        SourceType sourceParam = null;
+        if (source != null && !source.trim().isEmpty()) {
+            try {
+                sourceParam = SourceType.valueOf(source.trim().toUpperCase());
+            } catch (IllegalArgumentException e) {
+                throw new RuntimeException("Invalid source type. Valid values: REFERRAL, COMPANY");
+            }
         }
         
-        // Find the most recent active dispute for this student
-        List<Dispute> disputes = disputeRepository.findActiveByStudentIdOrderByRaisedAtDesc(studentDto.getStudentId());
+        ClientPayoutStatus paymentStatusParam = null;
+        if (paymentStatus != null && !paymentStatus.trim().isEmpty()) {
+            try {
+                paymentStatusParam = ClientPayoutStatus.valueOf(paymentStatus.trim().toUpperCase());
+            } catch (IllegalArgumentException e) {
+                throw new RuntimeException("Invalid payment status. Valid values: " + java.util.Arrays.toString(ClientPayoutStatus.values()));
+            }
+        }
         
-        if (disputes.isEmpty()) {
-            // No disputes found
-            studentDto.setDisputeStatus(null);
+        LocalDateTime dateFromParam = null;
+        if (dateFrom != null && !dateFrom.trim().isEmpty()) {
+            try {
+                dateFromParam = LocalDateTime.parse(dateFrom.trim());
+            } catch (Exception e) {
+                throw new RuntimeException("Invalid dateFrom format. Use ISO format: yyyy-MM-ddTHH:mm:ss");
+            }
+        }
+        
+        LocalDateTime dateToParam = null;
+        if (dateTo != null && !dateTo.trim().isEmpty()) {
+            try {
+                dateToParam = LocalDateTime.parse(dateTo.trim());
+            } catch (Exception e) {
+                throw new RuntimeException("Invalid dateTo format. Use ISO format: yyyy-MM-ddTHH:mm:ss");
+            }
+        }
+        
+        if ("ADMIN".equalsIgnoreCase(userRole)) {
+            // Admin: Use advanced filtering
+            clientPayouts = clientPayoutRepository.findWithFiltersForAdmin(
+                searchParam, sourceParam != null ? sourceParam.name() : null, branch, 
+                paymentStatusParam != null ? paymentStatusParam.name() : null, dateFromParam, dateToParam);
+        } else if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole)) {
+            // Manager/Branch Partner: Use branch-specific filtering
+            Long branchId = currentUserDetails.getBranchId();
+            if (branchId == null) {
+                throw new RuntimeException("Manager must be assigned to a branch");
+            }
+            // Override branch parameter with user's branch for security
+            clientPayouts = clientPayoutRepository.findWithFiltersForBranch(
+                branchId, searchParam, sourceParam != null ? sourceParam.name() : null, 
+                paymentStatusParam != null ? paymentStatusParam.name() : null, dateFromParam, dateToParam);
+        } else if ("REFERRAL".equalsIgnoreCase(userRole)) {
+            // Referral: Use user-specific filtering
+            clientPayouts = clientPayoutRepository.findWithFiltersForUser(
+                currentUserDetails.getUserId(), SourceType.REFERRAL.name(), searchParam, 
+                paymentStatusParam != null ? paymentStatusParam.name() : null, dateFromParam, dateToParam);
+        } else if ("COMPANY".equalsIgnoreCase(userRole)) {
+            // Company: Use user-specific filtering
+            clientPayouts = clientPayoutRepository.findWithFiltersForUser(
+                currentUserDetails.getUserId(), SourceType.COMPANY.name(), searchParam, 
+                paymentStatusParam != null ? paymentStatusParam.name() : null, dateFromParam, dateToParam);
         } else {
-            // Get the status of the most recent dispute
-            DisputeStatus disputeStatus = disputes.get(0).getStatus();
-            studentDto.setDisputeStatus(disputeStatus);
+            // Other roles: Return empty list or throw exception
+            throw new RuntimeException("Access denied. This API is only available for ADMIN, MANAGER, REFERRAL, and COMPANY roles.");
         }
         
-        return studentDto;
+        // Apply pagination
+        int startIndex = page * size;
+        int endIndex = Math.min(startIndex + size, clientPayouts.size());
+        List<ClientPayout> paginatedPayouts = clientPayouts.subList(startIndex, endIndex);
+        
+        // Convert to DTOs
+        List<ClientPayoutDto> payoutDtos = paginatedPayouts.stream()
+                .map(this::convertToClientPayoutDto)
+                .collect(java.util.stream.Collectors.toList());
+        
+        // Calculate summary statistics based on filtered results
+        ClientPayoutSummaryDto summary = calculateClientPayoutSummary(clientPayouts);
+        
+        return new ClientPayoutWithSummaryDto(payoutDtos, summary);
+    }
+    
+    private ClientPayoutSummaryDto calculateClientPayoutSummary(List<ClientPayout> clientPayouts) {
+        // Initialize counters
+        long totalAssigned = 0;
+        long totalPaid = 0;
+        long totalPending = 0;
+        long pendingApprovals = 0;
+        long disputes = 0;
+        long rejected = 0;
+        long partialPayments = 0;
+        
+        // Initialize amount totals
+        java.math.BigDecimal totalAssignedAmount = java.math.BigDecimal.ZERO;
+        java.math.BigDecimal totalPaidAmount = java.math.BigDecimal.ZERO;
+        java.math.BigDecimal totalPendingAmount = java.math.BigDecimal.ZERO;
+        java.math.BigDecimal totalDisputedAmount = java.math.BigDecimal.ZERO;
+        java.math.BigDecimal totalRejectedAmount = java.math.BigDecimal.ZERO;
+        java.math.BigDecimal totalPartialAmount = java.math.BigDecimal.ZERO;
+        
+        for (ClientPayout payout : clientPayouts) {
+            // Count-based statistics
+            if (payout.getAssignedAmount() != null && payout.getAssignedAmount().compareTo(java.math.BigDecimal.ZERO) > 0) {
+                totalAssigned++;
+                totalAssignedAmount = totalAssignedAmount.add(payout.getAssignedAmount());
+                
+                if (payout.getPayoutStatus() == com.lab.atlasmentor.enums.ClientPayoutStatus.PAID) {
+                    totalPaid++;
+                    totalPaidAmount = totalPaidAmount.add(payout.getPaidAmount() != null ? payout.getPaidAmount() : java.math.BigDecimal.ZERO);
+                } else if (payout.getPayoutStatus() == com.lab.atlasmentor.enums.ClientPayoutStatus.PARTIAL_PAID) {
+                    partialPayments++;
+                    totalPartialAmount = totalPartialAmount.add(payout.getPaidAmount() != null ? payout.getPaidAmount() : java.math.BigDecimal.ZERO);
+                    totalPendingAmount = totalPendingAmount.add(
+                        payout.getAssignedAmount().subtract(payout.getPaidAmount() != null ? payout.getPaidAmount() : java.math.BigDecimal.ZERO)
+                    );
+                } else if (payout.getPayoutStatus() == com.lab.atlasmentor.enums.ClientPayoutStatus.AMOUNT_ASSIGNED) {
+                    pendingApprovals++;
+                    totalPendingAmount = totalPendingAmount.add(payout.getAssignedAmount());
+                }
+            } else {
+                totalPending++;
+            }
+            
+            if (payout.getPayoutStatus() == com.lab.atlasmentor.enums.ClientPayoutStatus.DISPUTE) {
+                disputes++;
+                totalDisputedAmount = totalDisputedAmount.add(
+                    payout.getDisputeAmount() != null ? payout.getDisputeAmount() : 
+                    (payout.getAssignedAmount() != null ? payout.getAssignedAmount() : java.math.BigDecimal.ZERO)
+                );
+            }
+            
+            if (payout.getPayoutStatus() == com.lab.atlasmentor.enums.ClientPayoutStatus.REJECTED) {
+                rejected++;
+                totalRejectedAmount = totalRejectedAmount.add(
+                    payout.getAssignedAmount() != null ? payout.getAssignedAmount() : java.math.BigDecimal.ZERO
+                );
+            }
+        }
+        
+        ClientPayoutSummaryDto summary = new ClientPayoutSummaryDto(
+            totalAssigned, totalPaid, totalPending, pendingApprovals, disputes,
+            totalAssignedAmount, totalPaidAmount, totalPendingAmount, totalDisputedAmount,
+            partialPayments, totalPartialAmount
+        );
+        
+        // Set rejected values after construction
+        summary.setRejected(rejected);
+        summary.setTotalRejectedAmount(totalRejectedAmount);
+        return summary;
+    }
+    
+    private PaymentDisputeActivityDto convertToDisputeDto(PaymentDisputeActivity activity) {
+        UserInfoDto doneByDto = null;
+        if (activity.getDoneBy() != null) {
+            User user = activity.getDoneBy();
+            doneByDto = new UserInfoDto(
+                    user.getId(),
+                    user.getFirstName() + " " + user.getLastName(),
+                    user.getEmail(),
+                    user.getRole() != null ? user.getRole().getName() : null
+            );
+        }
+
+        PaymentDisputeActivityDto dto = new PaymentDisputeActivityDto(
+                activity.getId(),
+                activity.getPayment() != null ? activity.getPayment().getId() : null,
+                activity.getAction(),
+                activity.getOldValue(),
+                activity.getNewValue(),
+                activity.getReason(),
+                doneByDto,
+                activity.getDoneAt()
+        );
+        dto.setStatus(activity.getStatus());
+        dto.setUpdatedAt(activity.getUpdatedAt());
+        return dto;
     }
     
     @Transactional(readOnly = true)
@@ -791,5 +1310,60 @@ public class StudentService {
             payment.getCreatedAt(),
             payment.getUpdatedAt()
         );
+    }
+    
+    public ClientPayoutDto convertToClientPayoutDto(ClientPayout payout) {
+        ClientPayoutDto dto = new ClientPayoutDto();
+        dto.setId(payout.getId());
+        dto.setStudentId(payout.getStudentId());
+        dto.setStudentName(payout.getStudent() != null && payout.getStudent().getUser() != null ? 
+            payout.getStudent().getUser().getFirstName() + " " + payout.getStudent().getUser().getLastName() : null);
+        dto.setSourceType(payout.getSourceType());
+        dto.setAssignedAmount(payout.getAssignedAmount());
+        dto.setPaidAmount(payout.getPaidAmount());
+        dto.setBalanceAmount(payout.getBalanceAmount());
+        dto.setSettledAmount(payout.getSettledAmount());
+        
+        // Use enum display logic for status and payment stage
+        dto.setPayoutStatus(payout.getPayoutStatus().getEffectiveStatus(payout.getAssignedAmount()));
+        dto.setPaymentStageDisplay(payout.getPayoutStatus().getDisplayStatus(payout.getAssignedAmount()));
+        
+        dto.setPreviousStatus(payout.getPreviousStatus());
+        dto.setPaymentProgress(payout.getPaymentProgress());
+        
+        // Dispute tracking
+        dto.setDisputeReason(payout.getDisputeReason());
+        dto.setDisputeResponse(payout.getDisputeResponse());
+        dto.setDisputeAmount(payout.getDisputeAmount());
+        dto.setDisputedAt(payout.getDisputedAt());
+        dto.setRespondedAt(payout.getRespondedAt());
+        
+        // User tracking
+        if (payout.getUser() != null) {
+            dto.setUser(convertToUserInfoDto(payout.getUser()));
+        }
+        if (payout.getAssignedBy() != null) {
+            dto.setAssignedBy(convertToUserInfoDto(payout.getAssignedBy()));
+        }
+        if (payout.getDisputedBy() != null) {
+            dto.setDisputedBy(convertToUserInfoDto(payout.getDisputedBy()));
+        }
+        if (payout.getRespondedBy() != null) {
+            dto.setRespondedBy(convertToUserInfoDto(payout.getRespondedBy()));
+        }
+        if (payout.getLastPaidBy() != null) {
+            dto.setLastPaidBy(convertToUserInfoDto(payout.getLastPaidBy()));
+        }
+        
+        return dto;
+    }
+    
+    private UserInfoDto convertToUserInfoDto(User user) {
+        UserInfoDto dto = new UserInfoDto();
+        dto.setId(user.getId());
+        dto.setUsername(user.getFullName());
+        dto.setEmail(user.getEmail());
+        dto.setRole(user.getRole().getName());
+        return dto;
     }
 }

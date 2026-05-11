@@ -17,7 +17,6 @@ public class StudentOnboardingRequest {
     @Size(max = 50, message = "Last name must not exceed 50 characters")
     private String lastName;
     
-    @NotBlank(message = "Email is required")
     @Email(message = "Email should be valid")
     @Size(max = 150, message = "Email must not exceed 150 characters")
     private String email;
@@ -56,6 +55,7 @@ public class StudentOnboardingRequest {
     // Additional fields
     private String notes;
     private String referralCode;
+    private Long assignedToId; // Optional field for assigning student to a counsellor
     
     public static class AcademicHistory {
         private String level; // 10th, 12th, Graduation, etc.
@@ -130,4 +130,7 @@ public class StudentOnboardingRequest {
     
     public String getReferralCode() { return referralCode; }
     public void setReferralCode(String referralCode) { this.referralCode = referralCode; }
+    
+    public Long getAssignedToId() { return assignedToId; }
+    public void setAssignedToId(Long assignedToId) { this.assignedToId = assignedToId; }
 }

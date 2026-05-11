@@ -28,6 +28,12 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("UPDATE User u SET u.isVerified = true, u.verificationToken = null, u.verificationTokenExpiresAt = null WHERE u.id = :userId")
     void verifyUser(@Param("userId") Long userId);
     
+    @Query("SELECT CASE WHEN COUNT(u) > 0 THEN true ELSE false END FROM User u WHERE u.phone = :phone")
+    boolean existsByPhone(@Param("phone") String phone);
+    
+    @Query("SELECT CASE WHEN COUNT(u) > 0 THEN true ELSE false END FROM User u WHERE u.phone = :phone AND u.id != :excludeUserId")
+    boolean existsByPhoneExcludingUser(@Param("phone") String phone, @Param("excludeUserId") Long excludeUserId);
+    
     @Modifying
     @Query("UPDATE User u SET u.password = :password, u.passwordResetToken = null, u.passwordResetTokenExpiresAt = null WHERE u.id = :userId")
     void resetPassword(@Param("userId") Long userId, @Param("password") String password);
@@ -82,6 +88,12 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("SELECT u FROM User u WHERE u.role.name NOT IN :excludedRoles AND (:roleId IS NULL OR u.role.id = :roleId)")
     List<User> findUsersExcludingRolesWithRoleId(@Param("excludedRoles") List<String> excludedRoles, @Param("roleId") Long roleId);
     
+    @Query("SELECT u FROM User u WHERE u.role.name NOT IN :excludedRoles AND (:roleIds IS NULL OR u.role.id IN :roleIds) AND (:branchId IS NULL OR u.branch.id = :branchId)")
+    List<User> findUsersExcludingRolesWithRoleIdsAndBranchId(@Param("excludedRoles") List<String> excludedRoles, @Param("roleIds") List<Long> roleIds, @Param("branchId") Long branchId);
+    
+    @Query("SELECT u FROM User u WHERE u.role.name NOT IN :excludedRoles AND (:roleIds IS NULL OR u.role.id IN :roleIds)")
+    List<User> findUsersExcludingRolesWithRoleIds(@Param("excludedRoles") List<String> excludedRoles, @Param("roleIds") List<Long> roleIds);
+    
     @Query("SELECT u FROM User u WHERE u.role.name NOT IN :excludedRoles AND (:branchId IS NULL OR u.branch.id = :branchId)")
     List<User> findUsersExcludingRolesWithBranchId(@Param("excludedRoles") List<String> excludedRoles, @Param("branchId") Long branchId);
     
@@ -99,7 +111,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query(value = "SELECT u.* FROM users u WHERE (:isAdmin = true OR u.branch_id = :branchId)", nativeQuery = true)
     List<User> findAllWithAccess(@Param("isAdmin") boolean isAdmin, @Param("branchId") Long branchId);
     
-    @Query(value = "SELECT u.* FROM users u WHERE (:isAdmin = true OR u.branch_id = :branchId) AND u.is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT u.* FROM users u WHERE (:isAdmin = true OR u.branch_id = :branchId)", nativeQuery = true)
     List<User> findAllActiveWithAccess(@Param("isAdmin") boolean isAdmin, @Param("branchId") Long branchId);
     
     @Query(value = "SELECT u.* FROM users u WHERE (:isAdmin = true OR u.branch_id = :branchId) AND u.role_id IN (SELECT r.id FROM roles r WHERE r.name IN :roleNames)", nativeQuery = true)
@@ -112,4 +124,20 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("SELECT u.id FROM User u WHERE u.reportingManager.id = :seniorId AND u.role.name = 'JUNIOR_COUNSELLOR' AND u.branch.id = :branchId")
     List<Long> findJuniorCounsellorIdsBySeniorIdAndBranchId(@Param("seniorId") Long seniorId, @Param("branchId") Long branchId);
     
+    @Query("SELECT u FROM User u WHERE u.role.name = :roleName")
+    Optional<User> findFirstByRoleName(@Param("roleName") String roleName);
+    
+    @Query("SELECT u FROM User u WHERE u.role.name IN ('SENIOR_COUNSELLOR', 'JUNIOR_COUNSELLOR', 'COUNSELLOR') AND u.branch.id = :branchId AND u.status = 'ACTIVE'")
+    List<User> findActiveCounsellorsByBranchId(@Param("branchId") Long branchId);
+    
+    // Task bundle related queries
+    @Query("SELECT u FROM User u WHERE u.role.id = :roleId AND u.status = :status")
+    List<User> findByRoleIdAndStatus(@Param("roleId") Long roleId, @Param("status") UserStatus status);
+
+    @Query("SELECT u FROM User u WHERE u.role.id IN :roleIds AND u.branch.id = :branchId AND u.status = 'ACTIVE'")
+    List<User> findActiveUsersByRoleIdsAndBranchId(@Param("roleIds") List<Long> roleIds, @Param("branchId") Long branchId);
+
+    @Query("SELECT u FROM User u WHERE u.role.id = :roleId AND u.branch.id = :branchId AND u.status = 'ACTIVE'")
+    List<User> findActiveUsersByRoleIdAndBranchId(@Param("roleId") Long roleId, @Param("branchId") Long branchId);
+
 }

@@ -7,7 +7,8 @@ import java.util.stream.Collectors;
 
 public class EmployeeResponse {
     private Long id;
-    private String name;
+    private String firstName;
+    private String lastName;
     private String email;
     private String phone;
     private Long branchId;
@@ -24,12 +25,13 @@ public class EmployeeResponse {
 
     public EmployeeResponse() {}
 
-    public EmployeeResponse(Long id, String name, String email, String phone, Long branchId, BranchDto branch,
+    public EmployeeResponse(Long id, String firstName, String lastName, String email, String phone, Long branchId, BranchDto branch,
                          String status, Boolean isVerified, RoleDto role, 
                          LocalDateTime createdAt, LocalDateTime updatedAt, Long createdBy, Long updatedBy,
                          MobileCountryCodeDto mobileCountryCode, TaskCount taskCount) {
         this.id = id;
-        this.name = name;
+        this.firstName = firstName;
+        this.lastName = lastName;
         this.email = email;
         this.phone = phone;
         this.branchId = branchId;
@@ -49,8 +51,11 @@ public class EmployeeResponse {
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
+    public String getFirstName() { return firstName; }
+    public void setFirstName(String firstName) { this.firstName = firstName; }
+
+    public String getLastName() { return lastName; }
+    public void setLastName(String lastName) { this.lastName = lastName; }
 
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }

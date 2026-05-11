@@ -2,6 +2,7 @@ package com.lab.atlasmentor.repository;
 
 import com.lab.atlasmentor.model.PaymentAudit;
 import com.lab.atlasmentor.enums.PaymentAuditAction;
+import com.lab.atlasmentor.model.Student;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -32,4 +33,6 @@ public interface PaymentAuditRepository extends JpaRepository<PaymentAudit, Long
     
     @Query("SELECT COUNT(pa) FROM PaymentAudit pa WHERE pa.student.id = :studentId AND pa.action = :action AND pa.createdAt BETWEEN :startDate AND :endDate")
     Long countByStudentIdAndActionAndDateRange(@Param("studentId") Long studentId, @Param("action") PaymentAuditAction action, @Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
+
+    void deleteByStudent(Student student);
 }

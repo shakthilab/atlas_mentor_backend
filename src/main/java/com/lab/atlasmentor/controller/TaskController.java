@@ -11,7 +11,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -47,7 +50,7 @@ public class TaskController {
     }
 
     @GetMapping
-    public ResponseEntity<List<TaskResponse>> getAllTasks(
+    public ResponseEntity<Page<TaskResponse>> getAllTasks(
             @RequestParam(required = false) TaskStatus status,
             @RequestParam(required = false) Long assigneeId,
             @RequestParam(required = false) Long branchId,
@@ -59,11 +62,18 @@ public class TaskController {
             @RequestParam(required = false) String dueDateFrom,
             @RequestParam(required = false) String dueDateTo,
             @RequestParam(required = false) String assignedDateFrom,
-            @RequestParam(required = false) String assignedDateTo) {
-        log.info("Get tasks with filters: status={}, assigneeId={}, branchId={}, priority={}, createdBy={}, keyword={}, overdue={}, search={}, dueDateFrom={}, dueDateTo={}, assignedDateFrom={}, assignedDateTo={}", 
-                status, assigneeId, branchId, priority, createdBy, keyword, overdue, search, dueDateFrom, dueDateTo, assignedDateFrom, assignedDateTo);
-        
-        List<TaskResponse> tasks = taskService.getTasksWithFilters(status, assigneeId, branchId, priority, createdBy, keyword, overdue, search, dueDateFrom, dueDateTo, assignedDateFrom, assignedDateTo);
+            @RequestParam(required = false) String assignedDateTo,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "createdAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortDir) {
+        log.info("Get tasks with filters: status={}, assigneeId={}, branchId={}, priority={}, createdBy={}, keyword={}, overdue={}, search={}, dueDateFrom={}, dueDateTo={}, assignedDateFrom={}, assignedDateTo={}, page={}, size={}", 
+                status, assigneeId, branchId, priority, createdBy, keyword, overdue, search, dueDateFrom, dueDateTo, assignedDateFrom, assignedDateTo, page, size);
+
+        Sort.Direction direction = sortDir.equalsIgnoreCase("desc") ? Sort.Direction.DESC : Sort.Direction.ASC;
+        Pageable pageable = PageRequest.of(page, size, Sort.by(direction, sortBy));
+
+        Page<TaskResponse> tasks = taskService.getTasksWithFiltersPaginated(status, assigneeId, branchId, priority, createdBy, keyword, overdue, search, dueDateFrom, dueDateTo, assignedDateFrom, assignedDateTo, pageable);
         return ResponseEntity.ok(tasks);
     }
 
@@ -191,5 +201,35 @@ public class TaskController {
         
         taskService.deleteTask(id, currentUserId);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/statuses")
+    public ResponseEntity<List<Map<String, String>>> getTaskStatuses() {
+        log.info("Get all task statuses");
+        List<Map<String, String>> statuses = Arrays.stream(TaskStatus.values())
+                .map(status -> Map.of(
+                        "value", status.name(),
+                        "label", formatEnumLabel(status.name())
+                ))
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(statuses);
+    }
+
+    @GetMapping("/priorities")
+    public ResponseEntity<List<Map<String, String>>> getTaskPriorities() {
+        log.info("Get all task priorities");
+        List<Map<String, String>> priorities = Arrays.stream(Priority.values())
+                .map(priority -> Map.of(
+                        "value", priority.name(),
+                        "label", formatEnumLabel(priority.name())
+                ))
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(priorities);
+    }
+
+    private String formatEnumLabel(String enumName) {
+        return Arrays.stream(enumName.split("_"))
+                .map(word -> word.charAt(0) + word.substring(1).toLowerCase())
+                .collect(Collectors.joining(" "));
     }
 }

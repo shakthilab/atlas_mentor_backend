@@ -6,6 +6,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
+import java.util.List;
+
 @Data
 public class ReferralRequest {
     
@@ -23,6 +25,8 @@ public class ReferralRequest {
     private ReferralType referralType;
     
     private Long branchId; // Optional: Branch ID to assign the referral to
+    
+    private List<Long> assignedToIds; // Optional: List of user IDs to assign the referral to
     
     private String institutionName; // For COACHING_CENTER type
     private Integer graduationYear; // For ALUMNI type

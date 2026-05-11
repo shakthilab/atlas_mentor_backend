@@ -57,6 +57,9 @@ public class AdminService {
     @Autowired
     private MobileCountryCodeRepository mobileCountryCodeRepository;
 
+    @Autowired
+    private ReferralAssignmentRepository referralAssignmentRepository;
+
     public UserResponse createUser(CreateUserRequest request, String createdByRoleName) {
         // Validate role creation permissions
         validateRoleCreation(request.getRole(), createdByRoleName);
@@ -89,14 +92,14 @@ public class AdminService {
                 .collect(Collectors.toList());
     }
 
-    public List<UserResponse> getUsersExcludingAdminAndStudent(Long roleId, Long branchId) {
+    public List<UserResponse> getUsersExcludingAdminAndStudent(List<Long> roleIds, Long branchId) {
         List<String> excludedRoles = List.of("ADMIN", "STUDENT");
         List<User> users;
         
-        if (roleId != null && branchId != null) {
-            users = userRepository.findUsersExcludingRolesWithRoleIdAndBranchId(excludedRoles, roleId, branchId);
-        } else if (roleId != null) {
-            users = userRepository.findUsersExcludingRolesWithRoleId(excludedRoles, roleId);
+        if (roleIds != null && !roleIds.isEmpty() && branchId != null) {
+            users = userRepository.findUsersExcludingRolesWithRoleIdsAndBranchId(excludedRoles, roleIds, branchId);
+        } else if (roleIds != null && !roleIds.isEmpty()) {
+            users = userRepository.findUsersExcludingRolesWithRoleIds(excludedRoles, roleIds);
         } else if (branchId != null) {
             users = userRepository.findUsersExcludingRolesWithBranchId(excludedRoles, branchId);
         } else {
@@ -109,7 +112,7 @@ public class AdminService {
     }
 
     public List<UserResponse> getUsersExcludingAdminAndStudent(Long roleId) {
-        return getUsersExcludingAdminAndStudent(roleId, null);
+        return getUsersExcludingAdminAndStudent(roleId != null ? List.of(roleId) : null, null);
     }
 
     public List<UserResponse> getUsersExcludingAdminAndStudent() {
@@ -125,7 +128,7 @@ public class AdminService {
 
     public List<ManagerResponse> getAllManagers() {
         return userRepository.findAll().stream()
-                .filter(user -> user.hasRole("MANAGER"))
+                .filter(user -> user.hasRole("MANAGER") || user.hasRole("BRANCH_PARTNER"))
                 .filter(user -> user.getStatus() == com.lab.atlasmentor.enums.UserStatus.ACTIVE)
                 .map(this::convertToManagerResponse)
                 .collect(Collectors.toList());
@@ -317,6 +320,30 @@ public class AdminService {
             ReferralDetails savedReferralDetails = referralDetailsRepository.save(referralDetails);
             System.out.println("Step 4: ReferralDetails saved successfully with ID: " + savedReferralDetails.getId());
             System.out.println("Step 5: ReferralDetails saved - userId: " + savedReferralDetails.getUserId() + ", type: " + savedReferralDetails.getReferralType());
+            
+            // Handle multiple assignments if provided
+            if (referralRequest.getAssignedToIds() != null && !referralRequest.getAssignedToIds().isEmpty()) {
+                System.out.println("Step 6: Creating referral assignments");
+                for (Long assignedToId : referralRequest.getAssignedToIds()) {
+                    try {
+                        // Validate that assignedTo user exists
+                        User assignedToUser = userRepository.findById(assignedToId)
+                            .orElseThrow(() -> new RuntimeException("Assigned user not found with ID: " + assignedToId));
+                        
+                        ReferralAssignment assignment = new ReferralAssignment(savedUser, assignedToUser);
+                        if (currentUser != null) {
+                            assignment.setCreatedBy(currentUser.getId());
+                            assignment.setUpdatedBy(currentUser.getId());
+                        }
+                        
+                        referralAssignmentRepository.save(assignment);
+                        System.out.println("Assignment created: referralId=" + savedUser.getId() + ", assignedToId=" + assignedToId);
+                    } catch (Exception e) {
+                        System.err.println("Error creating assignment for user " + assignedToId + ": " + e.getMessage());
+                        // Continue with other assignments even if one fails
+                    }
+                }
+            }
         } catch (Exception e) {
             System.err.println("ERROR in ReferralDetails save process:");
             System.err.println("Error message: " + e.getMessage());
@@ -325,12 +352,12 @@ public class AdminService {
             throw new RuntimeException("Failed to save referral details: " + e.getMessage());
         }
         
-        // Send credentials email
-        emailService.sendEmployeeCredentialsEmail(
-            savedUser.getEmail(), 
-            savedUser.getFullName(), 
-            generatedPassword
-        );
+        // Send credentials email - Temporarily commented out for testing
+         emailService.sendEmployeeCredentialsEmail(
+             savedUser.getEmail(),
+             savedUser.getFullName(),
+             generatedPassword
+         );
         
         return savedUser;
     }
@@ -628,16 +655,19 @@ public class AdminService {
         
         // Get referral type and assignedTo for users with REFERRAL role
         com.lab.atlasmentor.enums.ReferralType referralType = null;
-        String assignedToUsername = null;
+        List<UserResponse> assignedToUsers = null;
         if (primaryRole != null && "REFERRAL".equals(primaryRole.getName())) {
             referralType = referralDetailsRepository.findByUserId(user.getId())
                     .map(ReferralDetails::getReferralType)
                     .orElse(null);
             
-            assignedToUsername = referralDetailsRepository.findByUserId(user.getId())
-                    .map(referralDetails -> referralDetails.getAssignedTo() != null ? 
-                            referralDetails.getAssignedTo().getFullName() : null)
-                    .orElse(null);
+            // Get multiple assigned users using ReferralAssignment
+            List<User> assignedUsersList = referralAssignmentRepository.findAssignedUsersByReferralId(user.getId());
+            if (assignedUsersList != null && !assignedUsersList.isEmpty()) {
+                assignedToUsers = assignedUsersList.stream()
+                        .map(assignedUser -> convertToUserResponse(assignedUser))
+                        .collect(Collectors.toList());
+            }
         }
         
         // Get company details for users with COMPANY role
@@ -710,7 +740,7 @@ public class AdminService {
                 user.getUpdatedAt(),
                 referralType,
                 companyDetails,
-                assignedToUsername,
+                assignedToUsers,
                 userCounts
         );
     }

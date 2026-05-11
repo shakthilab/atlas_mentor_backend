@@ -8,7 +8,11 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.lab.atlasmentor.enums.TaskAction;
 
 @Entity
-@Table(name = "task_activity")
+@Table(name = "task_activity",
+       indexes = {
+           @Index(name = "idx_task_activity_task_id", columnList = "task_id"),
+           @Index(name = "idx_task_activity_done_by", columnList = "done_by")
+       })
 @Data
 @EqualsAndHashCode(callSuper = true)
 @ToString(callSuper = true)

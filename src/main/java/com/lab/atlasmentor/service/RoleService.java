@@ -105,7 +105,7 @@ public class RoleService {
     }
 
     public void initializeDefaultRoles() {
-        String[] defaultRoles = { "ADMIN", "MANAGER", "VIDEO_EDITOR", "COUNSELLOR", "REFERRAL", "COMPANY", "STUDENT" };
+        String[] defaultRoles = { "ADMIN", "MANAGER", "BRANCH_PARTNER", "VIDEO_EDITOR", "COUNSELLOR", "REFERRAL", "COMPANY", "STUDENT" };
         for (String roleName : defaultRoles) {
             findOrCreateRole(roleName);
         }

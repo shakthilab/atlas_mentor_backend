@@ -21,4 +21,10 @@ public interface EmployeeDetailsRepository extends JpaRepository<EmployeeDetails
     
     @Query("SELECT ed FROM EmployeeDetails ed WHERE ed.isSenior = true")
     List<EmployeeDetails> findSeniorEmployees();
+    
+    void deleteByUser_Id(Long userId);
+    
+    void deleteByManager_Id(Long managerId);
+    
+    void deleteByAssignedTo_Id(Long assignedToId);
 }

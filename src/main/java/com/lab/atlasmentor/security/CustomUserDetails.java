@@ -71,4 +71,8 @@ public class CustomUserDetails implements UserDetails {
     public boolean isAdmin() {
         return "ADMIN".equalsIgnoreCase(role);
     }
+    
+    public boolean isManager() {
+        return "MANAGER".equalsIgnoreCase(role) || "BRANCH_PARTNER".equalsIgnoreCase(role);
+    }
 }

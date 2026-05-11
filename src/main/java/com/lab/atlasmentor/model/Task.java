@@ -2,15 +2,28 @@ package com.lab.atlasmentor.model;
 
 import jakarta.persistence.*;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
 import com.lab.atlasmentor.enums.TaskStatus;
 import com.lab.atlasmentor.enums.Priority;
+import com.lab.atlasmentor.enums.TaskSource;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 @Entity
-@Table(name = "tasks")
+@Table(name = "tasks",
+       indexes = {
+           @Index(name = "idx_tasks_assigned_to", columnList = "assigned_to"),
+           @Index(name = "idx_tasks_assigned_by", columnList = "assigned_by"),
+           @Index(name = "idx_tasks_created_by", columnList = "created_by"),
+           @Index(name = "idx_tasks_branch_id", columnList = "branch_id"),
+           @Index(name = "idx_tasks_status", columnList = "status"),
+           @Index(name = "idx_tasks_priority", columnList = "priority"),
+           @Index(name = "idx_tasks_due_date", columnList = "due_date"),
+           @Index(name = "idx_tasks_reference", columnList = "reference_type, reference_id"),
+           @Index(name = "idx_tasks_bundle_id", columnList = "task_bundle_id")
+       })
 @Data
 @EqualsAndHashCode(callSuper = true)
 @ToString(callSuper = true)
@@ -66,6 +79,21 @@ public class Task extends BaseEntity {
     @Column(name = "is_deleted", nullable = false)
     private Boolean isDeleted = false;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "task_bundle_id", nullable = true)
+    @JsonIgnoreProperties({"tasks", "taskBundleTasks", "schedule"})
+    private TaskBundle taskBundle;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "source_type")
+    private TaskSource sourceType = TaskSource.MANUAL;
+
+    @Column(name = "execution_date")
+    private LocalDate executionDate;
+
+    @Column(name = "due_time")
+    private LocalDateTime dueTime;
+
     public Task() {}
 
     public Task(String title, String description, User assignedTo, User assignedBy, User createdByUser, Priority priority, LocalDate dueDate, Branch branch) {
@@ -79,6 +107,23 @@ public class Task extends BaseEntity {
         this.branch = branch;
         this.status = TaskStatus.PENDING;
         this.isDeleted = false;
+        this.sourceType = TaskSource.MANUAL;
+    }
+
+    public Task(String title, String description, User assignedTo, User assignedBy, User createdByUser, Priority priority, LocalDate dueDate, Branch branch, TaskBundle taskBundle, TaskSource sourceType, LocalDate executionDate) {
+        this.title = title;
+        this.description = description;
+        this.assignedTo = assignedTo;
+        this.assignedBy = assignedBy;
+        this.createdByUser = createdByUser;
+        this.priority = priority != null ? priority : Priority.MEDIUM;
+        this.dueDate = dueDate;
+        this.branch = branch;
+        this.status = TaskStatus.PENDING;
+        this.isDeleted = false;
+        this.taskBundle = taskBundle;
+        this.sourceType = sourceType != null ? sourceType : TaskSource.MANUAL;
+        this.executionDate = executionDate;
     }
 
     /**
@@ -97,6 +142,25 @@ public class Task extends BaseEntity {
         } else {
             this.branch = new Branch();
             this.branch.setId(branchId);
+        }
+    }
+
+    /**
+     * Get task bundle ID for backward compatibility
+     */
+    public Long getTaskBundleId() {
+        return taskBundle != null ? taskBundle.getId() : null;
+    }
+
+    /**
+     * Set task bundle by ID for backward compatibility
+     */
+    public void setTaskBundleId(Long taskBundleId) {
+        if (taskBundleId == null) {
+            this.taskBundle = null;
+        } else {
+            this.taskBundle = new TaskBundle();
+            this.taskBundle.setId(taskBundleId);
         }
     }
 }

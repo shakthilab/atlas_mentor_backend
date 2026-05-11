@@ -37,9 +37,7 @@ public class EnhancedPaymentServiceV2 {
     @Autowired
     private ApprovalConfigRepository approvalConfigRepository;
     
-    @Autowired
-    private DisputeRepository disputeRepository;
-    
+        
     @Autowired
     private StudentRepository studentRepository;
     
@@ -88,16 +86,16 @@ public class EnhancedPaymentServiceV2 {
         var currentUserDetails = SecurityUtils.getCurrentUser();
         String userRole = currentUserDetails.getRole();
         
-        // Only ADMIN and MANAGER can assign amounts
-        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole))) {
-            throw new RuntimeException("Access denied. Only ADMIN and MANAGER can assign amounts.");
+        // Only ADMIN and MANAGER/BRANCH_PARTNER can assign amounts
+        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole))) {
+            throw new RuntimeException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can assign amounts.");
         }
 
         StudentPayment studentPayment = studentPaymentRepository.findActiveByStudentId(studentId)
                 .orElseThrow(() -> new RuntimeException("Student payment not found for student: " + studentId));
 
-        // Validate manager branch access if user is MANAGER
-        if ("MANAGER".equalsIgnoreCase(userRole)) {
+        // Validate manager branch access if user is MANAGER or BRANCH_PARTNER
+        if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole)) {
             validateManagerBranchAccess(studentPayment.getBranchId());
         }
 
@@ -134,16 +132,16 @@ public class EnhancedPaymentServiceV2 {
         var currentUserDetails = SecurityUtils.getCurrentUser();
         String userRole = currentUserDetails.getRole();
         
-        // Only ADMIN and MANAGER can add payment transactions
-        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole))) {
-            throw new RuntimeException("Access denied. Only ADMIN and MANAGER can add payment transactions.");
+        // Only ADMIN and MANAGER/BRANCH_PARTNER can add payment transactions
+        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole))) {
+            throw new RuntimeException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can add payment transactions.");
         }
 
         StudentPayment studentPayment = studentPaymentRepository.findActiveByStudentId(studentId)
                 .orElseThrow(() -> new RuntimeException("Student payment not found for student: " + studentId));
 
-        // Validate manager branch access if user is MANAGER
-        if ("MANAGER".equalsIgnoreCase(userRole)) {
+        // Validate manager branch access if user is MANAGER or BRANCH_PARTNER
+        if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole)) {
             validateManagerBranchAccess(studentPayment.getBranchId());
         }
 
@@ -189,16 +187,16 @@ public class EnhancedPaymentServiceV2 {
         var currentUserDetails = SecurityUtils.getCurrentUser();
         String userRole = currentUserDetails.getRole();
         
-        // Only ADMIN and MANAGER can request amount changes
-        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole))) {
-            throw new RuntimeException("Access denied. Only ADMIN and MANAGER can request amount changes.");
+        // Only ADMIN and MANAGER/BRANCH_PARTNER can request amount changes
+        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole))) {
+            throw new RuntimeException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can request amount changes.");
         }
 
         StudentPayment studentPayment = studentPaymentRepository.findActiveByStudentId(studentId)
                 .orElseThrow(() -> new RuntimeException("Student payment not found for student: " + studentId));
 
-        // Validate manager branch access if user is MANAGER
-        if ("MANAGER".equalsIgnoreCase(userRole)) {
+        // Validate manager branch access if user is MANAGER or BRANCH_PARTNER
+        if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole)) {
             validateManagerBranchAccess(studentPayment.getBranchId());
         }
 
@@ -285,16 +283,16 @@ public class EnhancedPaymentServiceV2 {
         var currentUserDetails = SecurityUtils.getCurrentUser();
         String userRole = currentUserDetails.getRole();
         
-        // Only ADMIN and MANAGER can request status changes
-        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole))) {
-            throw new RuntimeException("Access denied. Only ADMIN and MANAGER can request status changes.");
+        // Only ADMIN and MANAGER/BRANCH_PARTNER can request status changes
+        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole))) {
+            throw new RuntimeException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can request status changes.");
         }
 
         StudentPayment studentPayment = studentPaymentRepository.findActiveByStudentId(studentId)
                 .orElseThrow(() -> new RuntimeException("Student payment not found for student: " + studentId));
 
-        // Validate manager branch access if user is MANAGER
-        if ("MANAGER".equalsIgnoreCase(userRole)) {
+        // Validate manager branch access if user is MANAGER or BRANCH_PARTNER
+        if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole)) {
             validateManagerBranchAccess(studentPayment.getBranchId());
         }
 
@@ -387,83 +385,7 @@ public class EnhancedPaymentServiceV2 {
         }
     }
 
-    @Transactional
-    public Dispute raiseDispute(Long approvalRequestId, String disputeReason) {
-        var currentUserDetails = SecurityUtils.getCurrentUser();
-        String userRole = currentUserDetails.getRole();
-        
-        StudentStatusApproval statusApproval = studentStatusApprovalRepository.findById(approvalRequestId)
-                .orElseThrow(() -> new RuntimeException("Status approval request not found: " + approvalRequestId));
-
-        // Only REFERRAL and COMPANY can raise disputes for their own students
-        if (!("REFERRAL".equalsIgnoreCase(userRole) || "COMPANY".equalsIgnoreCase(userRole))) {
-            throw new RuntimeException("Access denied. Only REFERRAL and COMPANY can raise disputes.");
-        }
-
-        // Validate that the user owns this student
-        StudentPayment studentPayment = studentPaymentRepository.findActiveByStudentId(statusApproval.getStudent().getId())
-                .orElseThrow(() -> new RuntimeException("Student payment not found"));
-
-        if (!canAccessStudent(studentPayment, userRole, currentUserDetails.getUserId())) {
-            throw new RuntimeException("Access denied. You can only raise disputes for your own students.");
-        }
-
-        // Create dispute
-        Dispute dispute = new Dispute(statusApproval.getStudent(), statusApproval, currentUserDetails.getUserId(), disputeReason);
-        
-        Dispute savedDispute = disputeRepository.save(dispute);
-        
-        // Update student status to DISPUTED if it was REJECTED_PENDING
-        if (StudentStatusEnhanced.REJECTED_PENDING.equals(statusApproval.getRequestedStatus())) {
-            Student student = statusApproval.getStudent();
-            student.setEnhancedStatus(StudentStatusEnhanced.DISPUTED);
-            student.setUpdatedBy(currentUserDetails.getUserId());
-            studentRepository.save(student);
-        }
-        
-        // Create audit log
-        createAuditLog(statusApproval.getStudent(), PaymentAuditAction.REJECTION_REJECTED, 
-                      "Dispute raised against: " + statusApproval.getRequestedStatus(), 
-                      "DISPUTED", "Dispute", 
-                      currentUserDetails.getUserId(), disputeReason);
-        
-        return savedDispute;
-    }
-
-    @Transactional
-    public Dispute resolveDispute(Long disputeId, String resolutionNotes) {
-        var currentUserDetails = SecurityUtils.getCurrentUser();
-        String userRole = currentUserDetails.getRole();
-        
-        // Only ADMIN and MANAGER can resolve disputes
-        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole))) {
-            throw new RuntimeException("Access denied. Only ADMIN and MANAGER can resolve disputes.");
-        }
-
-        Dispute dispute = disputeRepository.findById(disputeId)
-                .orElseThrow(() -> new RuntimeException("Dispute not found: " + disputeId));
-
-        if (!dispute.isOpen() && !dispute.isInProgress()) {
-            throw new RuntimeException("This dispute cannot be resolved.");
-        }
-
-        // Validate manager branch access if user is MANAGER
-        if ("MANAGER".equalsIgnoreCase(userRole)) {
-            validateManagerBranchAccess(dispute.getStudent().getBranch() != null ? dispute.getStudent().getBranch().getId() : null);
-        }
-
-        // Resolve the dispute
-        dispute.resolve(currentUserDetails.getUserId(), resolutionNotes);
-        disputeRepository.save(dispute);
-        
-        // Create audit log
-        createAuditLog(dispute.getStudent(), PaymentAuditAction.REJECTION_APPROVED, 
-                      "DISPUTED", "RESOLVED", "Dispute", 
-                      currentUserDetails.getUserId(), resolutionNotes);
-        
-        return dispute;
-    }
-
+    
     // Helper methods
     private void validateManagerBranchAccess(Long studentBranchId) {
         var currentUserDetails = SecurityUtils.getCurrentUser();
@@ -484,7 +406,7 @@ public class EnhancedPaymentServiceV2 {
 
         if ("ADMIN".equalsIgnoreCase(userRole)) {
             return; // Admin can approve all
-        } else if ("MANAGER".equalsIgnoreCase(userRole)) {
+        } else if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole)) {
             validateManagerBranchAccess(studentPayment.getBranchId());
         } else if ("REFERRAL".equalsIgnoreCase(userRole)) {
             if (!SourceType.REFERRAL.equals(studentPayment.getSourceType()) || 
@@ -505,10 +427,10 @@ public class EnhancedPaymentServiceV2 {
 
         if ("ADMIN".equalsIgnoreCase(userRole)) {
             return; // Admin can approve all
-        } else if ("MANAGER".equalsIgnoreCase(userRole)) {
+        } else if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole)) {
             validateManagerBranchAccess(studentPayment.getBranchId());
         } else {
-            throw new RuntimeException("Access denied. Only ADMIN and MANAGER can approve amount changes.");
+            throw new RuntimeException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can approve amount changes.");
         }
     }
 

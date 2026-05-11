@@ -15,6 +15,7 @@ import com.lab.atlasmentor.model.EmployeeDetails;
 import com.lab.atlasmentor.model.MobileCountryCode;
 import com.lab.atlasmentor.model.Role;
 import com.lab.atlasmentor.model.User;
+import com.lab.atlasmentor.repository.CounsellorHierarchyRepository;
 import com.lab.atlasmentor.repository.EmployeeDetailsRepository;
 import com.lab.atlasmentor.repository.MobileCountryCodeRepository;
 import com.lab.atlasmentor.repository.TaskRepository;
@@ -79,6 +80,9 @@ public class AuthService {
 
     @Autowired
     private TaskRepository taskRepository;
+
+    @Autowired
+    private CounsellorHierarchyRepository counsellorHierarchyRepository;
 
     public User register(RegisterRequest registerRequest) {
         if (userRepository.existsByEmail(registerRequest.getEmail())) {
@@ -374,7 +378,8 @@ public class AuthService {
             
             return new EmployeeResponse(
                 user.getId(),
-                user.getFullName(),
+                user.getFirstName(),
+                user.getLastName(),
                 user.getEmail(),
                 user.getPhone(),
                 user.getBranchId(),
@@ -401,7 +406,7 @@ public class AuthService {
         } catch (Exception e) {
             log.error("Error getting current user for employee filtering: {}", e.getMessage(), e);
             // Fallback to original behavior without branch filtering
-            List<String> employeeRoleNames = List.of("ADMIN", "MANAGER", "VIDEO_EDITOR", "JUNIOR_COUNSELLOR", "SENIOR_COUNSELLOR", "COUNSELLOR");
+            List<String> employeeRoleNames = List.of("ADMIN", "MANAGER", "VIDEO_EDITOR", "JUNIOR_COUNSELLOR", "SENIOR_COUNSELLOR", "COUNSELLOR", "BRANCH_PARTNER");
             String searchLower = search != null ? search.toLowerCase() : null;
             Pageable pageable = PageRequest.of(page, size);
             Page<User> employees = userRepository.findEmployeesWithFilters(role, branch, searchLower, employeeRoleNames, pageable);
@@ -415,7 +420,8 @@ public class AuthService {
                     );
                     return new EmployeeResponse(
                         user.getId(),
-                        user.getFullName(),
+                        user.getFirstName(),
+                        user.getLastName(),
                         user.getEmail(),
                         user.getPhone(),
                         user.getBranchId(),
@@ -448,12 +454,9 @@ public class AuthService {
         User employee = userRepository.findById(employeeId)
             .orElseThrow(() -> new RuntimeException("Employee not found with id: " + employeeId));
         
-        // Verify it's an employee (not a student or other role)
-        List<String> employeeRoleNames = List.of("ADMIN", "MANAGER", "VIDEO_EDITOR", "SENIOR_COUNSELLOR", "JUNIOR_COUNSELLOR");
-        boolean isEmployee = employeeRoleNames.contains(employee.getRole().getName());
-        
-        if (!isEmployee) {
-            throw new RuntimeException("User is not an employee");
+        // Verify user is not a student (students cannot be edited via employee endpoint)
+        if (employee.getRole() != null && "STUDENT".equals(employee.getRole().getName())) {
+            throw new RuntimeException("Students cannot be edited via employee endpoint");
         }
         
         // Update editable fields (email is excluded)
@@ -524,7 +527,8 @@ public class AuthService {
         
         return new EmployeeResponse(
             user.getId(),
-            user.getFullName(),
+            user.getFirstName(),
+            user.getLastName(),
             user.getEmail(),
             user.getPhone(),
             user.getBranchId(),
@@ -546,12 +550,9 @@ public class AuthService {
         User employee = userRepository.findById(employeeId)
             .orElseThrow(() -> new RuntimeException("Employee not found with id: " + employeeId));
         
-        // Verify it's an employee (not a student or other role)
-        List<String> employeeRoleNames = List.of("ADMIN", "MANAGER", "EMPLOYEE", "VIDEO_EDITOR", "COUNSELLOR");
-        boolean isEmployee = employeeRoleNames.contains(employee.getRole().getName());
-        
-        if (!isEmployee) {
-            throw new RuntimeException("User is not an employee");
+        // Verify user is not a student (student status cannot be updated via employee endpoint)
+        if (employee.getRole() != null && "STUDENT".equals(employee.getRole().getName())) {
+            throw new RuntimeException("Students cannot be updated via employee endpoint");
         }
         
         UserStatus newStatus = UserStatus.valueOf(status.toUpperCase());
@@ -571,13 +572,19 @@ public class AuthService {
         User employee = userRepository.findById(employeeId)
             .orElseThrow(() -> new RuntimeException("Employee not found with id: " + employeeId));
         
-        // Verify it's an employee (not a student or other role)
-        List<String> employeeRoleNames = List.of("ADMIN", "MANAGER", "EMPLOYEE", "VIDEO_EDITOR", "COUNSELLOR");
-        boolean isEmployee = employeeRoleNames.contains(employee.getRole().getName());
-        
-        if (!isEmployee) {
-            throw new RuntimeException("User is not an employee");
+        // Verify user is not a student (students cannot be deleted via employee endpoint)
+        if (employee.getRole() != null && "STUDENT".equals(employee.getRole().getName())) {
+            throw new RuntimeException("Students cannot be deleted via employee endpoint");
         }
+        
+        // Delete counsellor hierarchy entries where employee is senior or junior
+        counsellorHierarchyRepository.deleteBySeniorCounsellor_Id(employeeId);
+        counsellorHierarchyRepository.deleteByJuniorCounsellor_Id(employeeId);
+        
+        // Delete employee_details entries where employee is user, manager, or assignedTo
+        employeeDetailsRepository.deleteByUser_Id(employeeId);
+        employeeDetailsRepository.deleteByManager_Id(employeeId);
+        employeeDetailsRepository.deleteByAssignedTo_Id(employeeId);
         
         userRepository.delete(employee);
     }

@@ -1,5 +1,8 @@
 package com.lab.atlasmentor.service;
 
+import com.lab.atlasmentor.dto.PaymentDisputeActivityDto;
+import com.lab.atlasmentor.dto.PaymentTransactionDto;
+import com.lab.atlasmentor.dto.UserInfoDto;
 import com.lab.atlasmentor.model.*;
 import com.lab.atlasmentor.repository.*;
 import com.lab.atlasmentor.enums.*;
@@ -38,17 +41,21 @@ public class FinalPaymentService {
     @Autowired
     private ApprovalConfigRepository approvalConfigRepository;
     
-    @Autowired
-    private DisputeRepository disputeRepository;
-    
+        
     @Autowired
     private StudentRepository studentRepository;
     
     @Autowired
     private UserRepository userRepository;
-    
+
+    @Autowired
+    private PaymentDisputeActivityRepository paymentDisputeActivityRepository;
+
     @Autowired
     private ObjectMapper objectMapper;
+    
+    @Autowired
+    private ClientPayoutService clientPayoutService;
 
     // ==================== STUDENT PAYMENT MANAGEMENT ====================
 
@@ -79,6 +86,16 @@ public class FinalPaymentService {
         // Save payment
         StudentPayment savedPayment = studentPaymentRepository.save(studentPayment);
         
+        // Create client payout if source type is REFERRAL or COMPANY
+        if (sourceType == SourceType.REFERRAL || sourceType == SourceType.COMPANY) {
+            try {
+                clientPayoutService.createClientPayoutForStudent(student);
+            } catch (Exception e) {
+                // Log error but don't fail the payment creation
+                System.err.println("Failed to create client payout for student " + studentId + ": " + e.getMessage());
+            }
+        }
+        
         // Create audit log
         createAuditLog(student, PaymentAuditAction.STUDENT_CREATED, 
                       null, "Payment record created", "StudentPayment", 
@@ -93,16 +110,16 @@ public class FinalPaymentService {
         String userRole = currentUserDetails.getRole();
         String requestId = generateRequestId();
         
-        // Only ADMIN and MANAGER can assign amounts
-        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole))) {
-            throw new RuntimeException("Access denied. Only ADMIN and MANAGER can assign amounts.");
+        // Only ADMIN and MANAGER/BRANCH_PARTNER can assign amounts
+        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole))) {
+            throw new RuntimeException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can assign amounts.");
         }
 
         StudentPayment studentPayment = studentPaymentRepository.findActiveByStudentId(studentId)
                 .orElseThrow(() -> new RuntimeException("Student payment not found for student: " + studentId));
 
-        // Validate manager branch access if user is MANAGER
-        if ("MANAGER".equalsIgnoreCase(userRole)) {
+        // Validate manager branch access if user is MANAGER or BRANCH_PARTNER
+        if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole)) {
             validateManagerBranchAccess(studentPayment.getBranchId());
         }
 
@@ -142,16 +159,16 @@ public class FinalPaymentService {
         String userRole = currentUserDetails.getRole();
         String requestId = generateRequestId();
         
-        // Only ADMIN and MANAGER can add payment transactions
-        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole))) {
-            throw new RuntimeException("Access denied. Only ADMIN and MANAGER can add payment transactions.");
+        // Only ADMIN and MANAGER/BRANCH_PARTNER can add payment transactions
+        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole))) {
+            throw new RuntimeException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can add payment transactions.");
         }
 
         StudentPayment studentPayment = studentPaymentRepository.findActiveByStudentId(studentId)
                 .orElseThrow(() -> new RuntimeException("Student payment not found for student: " + studentId));
 
-        // Validate manager branch access if user is MANAGER
-        if ("MANAGER".equalsIgnoreCase(userRole)) {
+        // Validate manager branch access if user is MANAGER or BRANCH_PARTNER
+        if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole)) {
             validateManagerBranchAccess(studentPayment.getBranchId());
         }
 
@@ -217,16 +234,16 @@ public class FinalPaymentService {
         String userRole = currentUserDetails.getRole();
         String requestId = generateRequestId();
         
-        // Only ADMIN and MANAGER can request amount changes
-        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole))) {
-            throw new RuntimeException("Access denied. Only ADMIN and MANAGER can request amount changes.");
+        // Only ADMIN and MANAGER/BRANCH_PARTNER can request amount changes
+        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole))) {
+            throw new RuntimeException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can request amount changes.");
         }
 
         StudentPayment studentPayment = studentPaymentRepository.findActiveByStudentId(studentId)
                 .orElseThrow(() -> new RuntimeException("Student payment not found for student: " + studentId));
 
-        // Validate manager branch access if user is MANAGER
-        if ("MANAGER".equalsIgnoreCase(userRole)) {
+        // Validate manager branch access if user is MANAGER or BRANCH_PARTNER
+        if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole)) {
             validateManagerBranchAccess(studentPayment.getBranchId());
         }
 
@@ -322,16 +339,16 @@ public class FinalPaymentService {
         String userRole = currentUserDetails.getRole();
         String requestId = generateRequestId();
         
-        // Only ADMIN and MANAGER can request status changes
-        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole))) {
-            throw new RuntimeException("Access denied. Only ADMIN and MANAGER can request status changes.");
+        // Only ADMIN and MANAGER/BRANCH_PARTNER can request status changes
+        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole))) {
+            throw new RuntimeException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can request status changes.");
         }
 
         StudentPayment studentPayment = studentPaymentRepository.findActiveByStudentId(studentId)
                 .orElseThrow(() -> new RuntimeException("Student payment not found for student: " + studentId));
 
-        // Validate manager branch access if user is MANAGER
-        if ("MANAGER".equalsIgnoreCase(userRole)) {
+        // Validate manager branch access if user is MANAGER or BRANCH_PARTNER
+        if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole)) {
             validateManagerBranchAccess(studentPayment.getBranchId());
         }
 
@@ -430,88 +447,7 @@ public class FinalPaymentService {
         }
     }
 
-    // ==================== DISPUTE MANAGEMENT ====================
-
-    @Transactional
-    public Dispute raiseDispute(Long approvalRequestId, String disputeReason, DisputePriority priority) {
-        var currentUserDetails = SecurityUtils.getCurrentUser();
-        String userRole = currentUserDetails.getRole();
-        String requestId = generateRequestId();
-        
-        StudentStatusApproval statusApproval = studentStatusApprovalRepository.findById(approvalRequestId)
-                .orElseThrow(() -> new RuntimeException("Status approval request not found: " + approvalRequestId));
-
-        // Only REFERRAL and COMPANY can raise disputes for their own students
-        if (!("REFERRAL".equalsIgnoreCase(userRole) || "COMPANY".equalsIgnoreCase(userRole))) {
-            throw new RuntimeException("Access denied. Only REFERRAL and COMPANY can raise disputes.");
-        }
-
-        // Validate that the user owns this student
-        StudentPayment studentPayment = studentPaymentRepository.findActiveByStudentId(statusApproval.getStudent().getId())
-                .orElseThrow(() -> new RuntimeException("Student payment not found"));
-
-        if (!canAccessStudent(studentPayment, userRole, currentUserDetails.getUserId())) {
-            throw new RuntimeException("Access denied. You can only raise disputes for your own students.");
-        }
-
-        // Create dispute
-        Dispute dispute = new Dispute(statusApproval.getStudent(), statusApproval, currentUserDetails.getUserId(), disputeReason);
-        dispute.setPriority(priority);
-        
-        Dispute savedDispute = disputeRepository.save(dispute);
-        
-        // Update student status to DISPUTED if it was REJECTED_PENDING
-        if (StudentStatusEnhanced.REJECTED_PENDING.equals(statusApproval.getRequestedStatus())) {
-            Student student = statusApproval.getStudent();
-            student.setEnhancedStatus(StudentStatusEnhanced.DISPUTED);
-            student.setUpdatedBy(currentUserDetails.getUserId());
-            studentRepository.save(student);
-        }
-        
-        // Create audit log
-        createAuditLog(statusApproval.getStudent(), PaymentAuditAction.REJECTION_REJECTED, 
-                      "Dispute raised against: " + statusApproval.getRequestedStatus(), 
-                      "DISPUTED", "Dispute", 
-                      currentUserDetails.getUserId(), requestId, disputeReason);
-        
-        return savedDispute;
-    }
-
-    @Transactional
-    public Dispute resolveDispute(Long disputeId, String resolutionNotes) {
-        var currentUserDetails = SecurityUtils.getCurrentUser();
-        String userRole = currentUserDetails.getRole();
-        String requestId = generateRequestId();
-        
-        // Only ADMIN and MANAGER can resolve disputes
-        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole))) {
-            throw new RuntimeException("Access denied. Only ADMIN and MANAGER can resolve disputes.");
-        }
-
-        Dispute dispute = disputeRepository.findById(disputeId)
-                .orElseThrow(() -> new RuntimeException("Dispute not found: " + disputeId));
-
-        if (!dispute.isOpen() && !dispute.isInProgress()) {
-            throw new RuntimeException("This dispute cannot be resolved.");
-        }
-
-        // Validate manager branch access if user is MANAGER
-        if ("MANAGER".equalsIgnoreCase(userRole)) {
-            validateManagerBranchAccess(dispute.getStudent().getBranch() != null ? dispute.getStudent().getBranch().getId() : null);
-        }
-
-        // Resolve the dispute
-        dispute.resolve(currentUserDetails.getUserId(), resolutionNotes);
-        disputeRepository.save(dispute);
-        
-        // Create audit log
-        createAuditLog(dispute.getStudent(), PaymentAuditAction.REJECTION_APPROVED, 
-                      "DISPUTED", "RESOLVED", "Dispute", 
-                      currentUserDetails.getUserId(), requestId, resolutionNotes);
-        
-        return dispute;
-    }
-
+    
     // ==================== REPORTING METHODS ====================
 
     public ReportingData getReportingData(Long sourceId, SourceType sourceType) {
@@ -678,10 +614,11 @@ public class FinalPaymentService {
         }
     }
 
-    public List<PaymentTransaction> getPaymentTransactions(Long studentId) {
+    @Transactional(readOnly = true)
+    public List<PaymentTransactionDto> getPaymentTransactions(Long studentId) {
         var currentUserDetails = SecurityUtils.getCurrentUser();
         String userRole = currentUserDetails.getRole();
-        
+
         // Validate access
         StudentPayment studentPayment = studentPaymentRepository.findActiveByStudentId(studentId)
                 .orElseThrow(() -> new RuntimeException("Student payment not found"));
@@ -689,8 +626,70 @@ public class FinalPaymentService {
         if (!canAccessStudent(studentPayment, userRole, currentUserDetails.getUserId())) {
             throw new RuntimeException("Access denied");
         }
-        
-        return paymentTransactionRepository.findActiveByStudentIdOrderByCreatedAtDesc(studentId);
+
+        List<PaymentTransaction> transactions = paymentTransactionRepository.findActiveByStudentIdOrderByCreatedAtDesc(studentId);
+
+        // Get dispute activities for this payment
+        List<PaymentDisputeActivity> disputeActivities = paymentDisputeActivityRepository.findByPaymentIdOrderByDoneAtDesc(studentPayment.getId());
+
+        // Convert dispute activities to DTOs
+        List<PaymentDisputeActivityDto> disputeDtos = disputeActivities.stream()
+                .map(this::convertToDisputeDto)
+                .toList();
+
+        // Convert transactions to DTOs
+        return transactions.stream()
+                .map(t -> convertToTransactionDto(t, disputeDtos))
+                .toList();
+    }
+
+    private PaymentTransactionDto convertToTransactionDto(PaymentTransaction transaction, List<PaymentDisputeActivityDto> disputeActivities) {
+        String createdByName = null;
+        if (transaction.getCreatedBy() != null) {
+            createdByName = userRepository.findById(transaction.getCreatedBy())
+                    .map(u -> u.getFirstName() + " " + u.getLastName())
+                    .orElse(null);
+        }
+
+        PaymentTransactionDto dto = new PaymentTransactionDto(
+                transaction.getId(),
+                transaction.getStudent() != null ? transaction.getStudent().getId() : null,
+                transaction.getStudentPayment() != null ? transaction.getStudentPayment().getId() : null,
+                transaction.getAmount(),
+                transaction.getPaymentMethod(),
+                transaction.getTransactionType(),
+                transaction.getTransactionReference(),
+                transaction.getNotes(),
+                transaction.getCreatedBy(),
+                createdByName,
+                transaction.getCreatedAt()
+        );
+        dto.setDisputeActivities(disputeActivities);
+        return dto;
+    }
+
+    private PaymentDisputeActivityDto convertToDisputeDto(PaymentDisputeActivity activity) {
+        UserInfoDto doneByDto = null;
+        if (activity.getDoneBy() != null) {
+            User user = activity.getDoneBy();
+            doneByDto = new UserInfoDto(
+                    user.getId(),
+                    user.getFirstName() + " " + user.getLastName(),
+                    user.getEmail(),
+                    user.getRole() != null ? user.getRole().getName() : null
+            );
+        }
+
+        return new PaymentDisputeActivityDto(
+                activity.getId(),
+                activity.getPayment() != null ? activity.getPayment().getId() : null,
+                activity.getAction(),
+                activity.getOldValue(),
+                activity.getNewValue(),
+                activity.getReason(),
+                doneByDto,
+                activity.getDoneAt()
+        );
     }
 
     public BigDecimal getNetPaidAmount(Long studentId) {

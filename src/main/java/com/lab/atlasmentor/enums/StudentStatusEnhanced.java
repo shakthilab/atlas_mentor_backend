@@ -5,6 +5,5 @@ public enum StudentStatusEnhanced {
     SELECTED,
     ACTIVE,
     REJECTED,
-    REJECTED_PENDING,
-    DISPUTED
+    REJECTED_PENDING
 }

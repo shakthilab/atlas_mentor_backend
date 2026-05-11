@@ -16,7 +16,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/manager")
-@PreAuthorize("hasRole('MANAGER')")
+@PreAuthorize("hasRole('MANAGER') or hasRole('BRANCH_PARTNER')")
 public class ManagerController {
 
     @Autowired

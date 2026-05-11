@@ -7,7 +7,10 @@ import lombok.ToString;
 import com.lab.atlasmentor.enums.ReferralType;
 
 @Entity
-@Table(name = "referral_details")
+@Table(name = "referral_details",
+       indexes = {
+           @Index(name = "idx_referral_details_type", columnList = "referral_type")
+       })
 @Data
 @EqualsAndHashCode(callSuper = false)
 public class ReferralDetails extends BaseEntity {
@@ -25,12 +28,6 @@ public class ReferralDetails extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "referral_type", nullable = false)
     private ReferralType referralType;
-    
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "assigned_to", referencedColumnName = "id")
-    @ToString.Exclude
-    @EqualsAndHashCode.Exclude
-    private User assignedTo;
     
     public ReferralDetails() {}
     

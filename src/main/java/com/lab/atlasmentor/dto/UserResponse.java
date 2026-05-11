@@ -6,6 +6,7 @@ import com.lab.atlasmentor.model.Role;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 public class UserResponse {
@@ -23,13 +24,13 @@ public class UserResponse {
     private LocalDateTime updatedAt;
     private ReferralType referralType;
     private CompanyDetailsResponse companyDetails;
-    private String assignedToUsername;
+    private List<UserResponse> assignedToUsers;
     private UserCounts userCounts;
     
     public UserResponse(Long id, String firstName, String lastName, String email, String phone, Role role, 
                        UserStatus status, Boolean isVerified, BranchResponse branch, 
                        LocalDateTime createdAt, LocalDateTime updatedAt, ReferralType referralType, 
-                       CompanyDetailsResponse companyDetails, String assignedToUsername, UserCounts userCounts) {
+                       CompanyDetailsResponse companyDetails, List<UserResponse> assignedToUsers, UserCounts userCounts) {
         this.id = id;
         this.firstName = firstName;
         this.lastName = lastName;
@@ -43,7 +44,7 @@ public class UserResponse {
         this.updatedAt = updatedAt;
         this.referralType = referralType;
         this.companyDetails = companyDetails;
-        this.assignedToUsername = assignedToUsername;
+        this.assignedToUsers = assignedToUsers;
         this.userCounts = userCounts;
     }
     
