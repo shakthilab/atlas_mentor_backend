@@ -23,4 +23,27 @@ public interface ReferralDetailsRepository extends JpaRepository<ReferralDetails
     
     @Query("SELECT rd.user.id FROM ReferralDetails rd WHERE (:referralType IS NULL OR rd.referralType = :referralType)")
     List<Long> findUserIdsByReferralType(@Param("referralType") ReferralType referralType);
+
+    @Query(value = "SELECT rd.referral_type, COUNT(*) FROM referral_details rd GROUP BY rd.referral_type", nativeQuery = true)
+    List<Object[]> countGroupByReferralType();
+
+    @Query(value = "SELECT u.status, COUNT(*) FROM referral_details rd JOIN users u ON rd.user_id = u.id GROUP BY u.status", nativeQuery = true)
+    List<Object[]> countGroupByUserStatus();
+
+    @Query(value = "SELECT rd.referral_type, COUNT(*) FROM referral_details rd " +
+           "JOIN client_payouts cp ON cp.user_id = rd.user_id " +
+           "JOIN students s ON cp.student_id = s.id " +
+           "WHERE s.branch_id = :branchId GROUP BY rd.referral_type", nativeQuery = true)
+    List<Object[]> countGroupByReferralTypeForBranch(@Param("branchId") Long branchId);
+
+    @Query(value = "SELECT u.status, COUNT(*) FROM referral_details rd " +
+           "JOIN users u ON rd.user_id = u.id " +
+           "JOIN client_payouts cp ON cp.user_id = rd.user_id " +
+           "JOIN students s ON cp.student_id = s.id " +
+           "WHERE s.branch_id = :branchId GROUP BY u.status", nativeQuery = true)
+    List<Object[]> countGroupByUserStatusForBranch(@Param("branchId") Long branchId);
+
+    @Query(value = "SELECT rd.referral_type, u.status FROM referral_details rd " +
+           "JOIN users u ON rd.user_id = u.id WHERE rd.user_id = :userId", nativeQuery = true)
+    List<Object[]> findTypeAndStatusByUserId(@Param("userId") Long userId);
 }

@@ -242,19 +242,19 @@ class StudentServiceBranchAccessTest {
 
             // Then
             assertEquals(1, result.getContent().size());
-            
-            Student response = result.getContent().get(0);
+
+            StudentResponse response = result.getContent().get(0);
             assertEquals(1L, response.getId());
-            assertEquals("John", response.getUser().getFirstName());
-            assertEquals("Doe", response.getUser().getLastName());
+            assertEquals("John", response.getFirstName());
+            assertEquals("Doe", response.getLastName());
             assertEquals("john@test.com", response.getEmail());
-            
-            // Verify branch data is accessible through the branch relationship
-            assertEquals(1L, response.getBranch().getId());
-            assertEquals("Chennai", response.getBranch().getName());
-            
-            // Verify the response contains Student objects, not StudentResponse DTOs
-            assertTrue(result.getContent().get(0) instanceof Student);
+
+            // Verify branch data is accessible through the flattened DTO fields
+            assertEquals(1L, response.getBranchId());
+            assertEquals("Chennai", response.getBranchName());
+
+            // Verify the response contains StudentResponse DTOs
+            assertTrue(result.getContent().get(0) instanceof StudentResponse);
         }
     }
 }

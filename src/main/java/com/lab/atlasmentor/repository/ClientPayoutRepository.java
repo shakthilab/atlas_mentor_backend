@@ -103,6 +103,60 @@ public interface ClientPayoutRepository extends JpaRepository<ClientPayout, Long
     
     // Check if payout exists for student
     boolean existsByStudentId(Long studentId);
+
+    // Dashboard aggregate queries - global (ADMIN)
+    @Query(value = "SELECT cp.payout_status, COUNT(*), " +
+           "COALESCE(SUM(cp.assigned_amount), 0), COALESCE(SUM(cp.paid_amount), 0), COALESCE(SUM(cp.dispute_amount), 0) " +
+           "FROM client_payouts cp WHERE cp.source_type IN ('REFERRAL', 'COMPANY') GROUP BY cp.payout_status", nativeQuery = true)
+    List<Object[]> getPayoutStatsByStatusGlobal();
+
+    // Dashboard aggregate queries - branch-scoped (MANAGER/BRANCH_PARTNER)
+    @Query(value = "SELECT cp.payout_status, COUNT(*), " +
+           "COALESCE(SUM(cp.assigned_amount), 0), COALESCE(SUM(cp.paid_amount), 0), COALESCE(SUM(cp.dispute_amount), 0) " +
+           "FROM client_payouts cp JOIN students s ON cp.student_id = s.id " +
+           "WHERE s.branch_id = :branchId AND cp.source_type IN ('REFERRAL', 'COMPANY') GROUP BY cp.payout_status", nativeQuery = true)
+    List<Object[]> getPayoutStatsByStatusForBranch(@Param("branchId") Long branchId);
+
+    // Dashboard aggregate queries - user-scoped (REFERRAL/COMPANY)
+    @Query(value = "SELECT cp.payout_status, COUNT(*), " +
+           "COALESCE(SUM(cp.assigned_amount), 0), COALESCE(SUM(cp.paid_amount), 0), COALESCE(SUM(cp.dispute_amount), 0) " +
+           "FROM client_payouts cp WHERE cp.user_id = :userId GROUP BY cp.payout_status", nativeQuery = true)
+    List<Object[]> getPayoutStatsByStatusForUser(@Param("userId") Long userId);
+
+    // Commission trend - daily data - global (ADMIN)
+    @Query(value = "SELECT DATE(cp.created_at) as day, " +
+           "COALESCE(SUM(cp.paid_amount), 0) as commission_received, " +
+           "COALESCE(SUM(CASE WHEN cp.assigned_amount IS NOT NULL THEN cp.assigned_amount - COALESCE(cp.paid_amount, 0) ELSE 0 END), 0) as pending_balance " +
+           "FROM client_payouts cp " +
+           "WHERE cp.source_type IN ('REFERRAL', 'COMPANY') " +
+           "AND DATE(cp.created_at) BETWEEN CAST(:fromDate AS DATE) AND CAST(:toDate AS DATE) " +
+           "GROUP BY DATE(cp.created_at) ORDER BY DATE(cp.created_at)", nativeQuery = true)
+    List<Object[]> getTrendDataGlobal(@Param("fromDate") java.time.LocalDate fromDate,
+                                      @Param("toDate") java.time.LocalDate toDate);
+
+    // Commission trend - daily data - branch-scoped (MANAGER/BRANCH_PARTNER)
+    @Query(value = "SELECT DATE(cp.created_at) as day, " +
+           "COALESCE(SUM(cp.paid_amount), 0) as commission_received, " +
+           "COALESCE(SUM(CASE WHEN cp.assigned_amount IS NOT NULL THEN cp.assigned_amount - COALESCE(cp.paid_amount, 0) ELSE 0 END), 0) as pending_balance " +
+           "FROM client_payouts cp JOIN students s ON cp.student_id = s.id " +
+           "WHERE s.branch_id = :branchId AND cp.source_type IN ('REFERRAL', 'COMPANY') " +
+           "AND DATE(cp.created_at) BETWEEN CAST(:fromDate AS DATE) AND CAST(:toDate AS DATE) " +
+           "GROUP BY DATE(cp.created_at) ORDER BY DATE(cp.created_at)", nativeQuery = true)
+    List<Object[]> getTrendDataForBranch(@Param("branchId") Long branchId,
+                                         @Param("fromDate") java.time.LocalDate fromDate,
+                                         @Param("toDate") java.time.LocalDate toDate);
+
+    // Commission trend - daily data - user-scoped (REFERRAL/COMPANY)
+    @Query(value = "SELECT DATE(cp.created_at) as day, " +
+           "COALESCE(SUM(cp.paid_amount), 0) as commission_received, " +
+           "COALESCE(SUM(CASE WHEN cp.assigned_amount IS NOT NULL THEN cp.assigned_amount - COALESCE(cp.paid_amount, 0) ELSE 0 END), 0) as pending_balance " +
+           "FROM client_payouts cp " +
+           "WHERE cp.user_id = :userId " +
+           "AND DATE(cp.created_at) BETWEEN CAST(:fromDate AS DATE) AND CAST(:toDate AS DATE) " +
+           "GROUP BY DATE(cp.created_at) ORDER BY DATE(cp.created_at)", nativeQuery = true)
+    List<Object[]> getTrendDataForUser(@Param("userId") Long userId,
+                                       @Param("fromDate") java.time.LocalDate fromDate,
+                                       @Param("toDate") java.time.LocalDate toDate);
     
     // Find active payouts (not deleted)
     @Query("SELECT cp FROM ClientPayout cp WHERE cp.student.id = :studentId AND cp.payoutStatus != 'ACCEPTED'")
