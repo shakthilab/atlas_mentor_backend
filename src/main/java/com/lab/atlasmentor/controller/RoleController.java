@@ -1,4 +1,5 @@
 package com.lab.atlasmentor.controller;
+import com.lab.atlasmentor.exception.BusinessException;
 
 import com.lab.atlasmentor.dto.ApiResponse;
 import com.lab.atlasmentor.model.Role;
@@ -22,7 +23,7 @@ public class RoleController {
             List<Role> roles = roleService.getAllRoles();
             ApiResponse<List<Role>> response = ApiResponse.success("Roles retrieved successfully", roles);
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<List<Role>> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }

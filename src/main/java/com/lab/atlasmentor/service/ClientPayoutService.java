@@ -1,10 +1,12 @@
 package com.lab.atlasmentor.service;
 
+import com.lab.atlasmentor.exception.BusinessException;
 import com.lab.atlasmentor.dto.ClientPayoutDto;
 import com.lab.atlasmentor.dto.ClientPayoutActivityDto;
 import com.lab.atlasmentor.enums.ClientPayoutAction;
 import com.lab.atlasmentor.enums.ClientPayoutStatus;
 import com.lab.atlasmentor.enums.DisputeStage;
+import com.lab.atlasmentor.enums.FinancialAuditAction;
 import com.lab.atlasmentor.enums.SourceType;
 import com.lab.atlasmentor.model.*;
 import com.lab.atlasmentor.repository.*;
@@ -35,12 +37,15 @@ public class ClientPayoutService {
     
     @Autowired
     private StudentRepository studentRepository;
-    
+
     @Autowired
     private StudentPaymentRepository studentPaymentRepository;
-    
+
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private FinancialAuditService financialAuditService;
     
     // ==================== CLIENT PAYOUT CREATION ====================
 
@@ -51,13 +56,13 @@ public class ClientPayoutService {
         
         // Validate student has source information
         if (student.getSourceType() == null || student.getSourceId() == null) {
-            throw new RuntimeException("Student must have source type and source ID for client payout creation");
+            throw new BusinessException("Student must have source type and source ID for client payout creation");
         }
         
         // Check if client payout already exists
         Optional<ClientPayout> existingPayout = clientPayoutRepository.findByStudentId(student.getId());
         if (existingPayout.isPresent()) {
-            throw new RuntimeException("Client payout already exists for student: " + student.getId());
+            throw new BusinessException("Client payout already exists for student: " + student.getId());
         }
         
         // Get referral/company user
@@ -97,7 +102,7 @@ public class ClientPayoutService {
         
         // Validate amount
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new RuntimeException("Assigned amount must be greater than zero");
+            throw new BusinessException("Assigned amount must be greater than zero");
         }
         
         // Track previous state
@@ -160,18 +165,18 @@ public class ClientPayoutService {
         // Validate payout status
         if (!payout.getPayoutStatus().equals(ClientPayoutStatus.AMOUNT_ASSIGNED) && 
             !payout.getPayoutStatus().equals(ClientPayoutStatus.PARTIAL_PAID)) {
-            throw new RuntimeException("Cannot add payment to payout in status: " + payout.getPayoutStatus());
+            throw new BusinessException("Cannot add payment to payout in status: " + payout.getPayoutStatus());
         }
         
         // Validate amount
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new RuntimeException("Payment amount must be greater than zero");
+            throw new BusinessException("Payment amount must be greater than zero");
         }
         
         // Check for overpayment
         BigDecimal newPaidAmount = payout.getPaidAmount().add(amount);
         if (newPaidAmount.compareTo(payout.getAssignedAmount()) > 0) {
-            throw new RuntimeException("Payment amount exceeds assigned amount");
+            throw new BusinessException("Payment amount exceeds assigned amount");
         }
         
         // Track previous state
@@ -236,7 +241,7 @@ public class ClientPayoutService {
         
         // Validate status
         if (!canInitiateDispute(payout.getPayoutStatus())) {
-            throw new RuntimeException("Cannot initiate dispute for payout in status: " + payout.getPayoutStatus());
+            throw new BusinessException("Cannot initiate dispute for payout in status: " + payout.getPayoutStatus());
         }
         
         // Track previous status
@@ -252,7 +257,14 @@ public class ClientPayoutService {
         // Save payout
         ClientPayout savedPayout = clientPayoutRepository.save(payout);
         
-        // Log activity
+        // Tamper-evident audit for dispute initiation.
+        financialAuditService.record(
+                FinancialAuditAction.PAYOUT_DISPUTE_INITIATED,
+                "ClientPayout", savedPayout.getId(),
+                currentUserDetails.getUserId(),
+                oldStatus.name(), ClientPayoutStatus.DISPUTE.name(), disputeReason);
+
+        // Legacy activity log — kept for dispute stage / status detail.
         ClientPayoutActivity activity = new ClientPayoutActivity(
             savedPayout, ClientPayoutAction.DISPUTE_INITIATED,
             oldStatus.name(), ClientPayoutStatus.DISPUTE.name(),
@@ -262,10 +274,10 @@ public class ClientPayoutService {
         activity.setPreviousStatus(oldStatus.name());
         activity.setNewStatus(ClientPayoutStatus.DISPUTE.name());
         activityRepository.save(activity);
-        
+
         return savedPayout;
     }
-    
+
     @Transactional
     public ClientPayout acceptDispute(Long payoutId, String response) {
         var currentUserDetails = SecurityUtils.getCurrentUser();
@@ -279,7 +291,7 @@ public class ClientPayoutService {
         
         // Validate status
         if (!payout.getPayoutStatus().equals(ClientPayoutStatus.DISPUTE)) {
-            throw new RuntimeException("Only disputed payouts can be accepted");
+            throw new BusinessException("Only disputed payouts can be accepted");
         }
         
         // Update response
@@ -292,7 +304,14 @@ public class ClientPayoutService {
         // Save payout
         ClientPayout savedPayout = clientPayoutRepository.save(payout);
         
-        // Log activity
+        // Tamper-evident audit for dispute acceptance.
+        financialAuditService.record(
+                FinancialAuditAction.PAYOUT_DISPUTE_ACCEPTED,
+                "ClientPayout", savedPayout.getId(),
+                currentUserDetails.getUserId(),
+                ClientPayoutStatus.DISPUTE.name(), ClientPayoutStatus.ACCEPTED.name(), response);
+
+        // Legacy activity log.
         ClientPayoutActivity activity = new ClientPayoutActivity(
             savedPayout, ClientPayoutAction.DISPUTE_ACCEPTED,
             ClientPayoutStatus.DISPUTE.name(), ClientPayoutStatus.ACCEPTED.name(),
@@ -302,10 +321,10 @@ public class ClientPayoutService {
         activity.setPreviousStatus(ClientPayoutStatus.DISPUTE.name());
         activity.setNewStatus(ClientPayoutStatus.ACCEPTED.name());
         activityRepository.save(activity);
-        
+
         return savedPayout;
     }
-    
+
     @Transactional
     public ClientPayout rejectDispute(Long payoutId, String response) {
         var currentUserDetails = SecurityUtils.getCurrentUser();
@@ -319,7 +338,7 @@ public class ClientPayoutService {
         
         // Validate status
         if (!payout.getPayoutStatus().equals(ClientPayoutStatus.DISPUTE)) {
-            throw new RuntimeException("Only disputed payouts can be rejected");
+            throw new BusinessException("Only disputed payouts can be rejected");
         }
         
         // Determine previous status
@@ -334,7 +353,14 @@ public class ClientPayoutService {
         // Save payout
         ClientPayout savedPayout = clientPayoutRepository.save(payout);
         
-        // Log activity
+        // Tamper-evident audit for dispute rejection.
+        financialAuditService.record(
+                FinancialAuditAction.PAYOUT_DISPUTE_REJECTED,
+                "ClientPayout", savedPayout.getId(),
+                currentUserDetails.getUserId(),
+                ClientPayoutStatus.DISPUTE.name(), previousStatus.name(), response);
+
+        // Legacy activity log.
         ClientPayoutActivity activity = new ClientPayoutActivity(
             savedPayout, ClientPayoutAction.DISPUTE_REJECTED,
             ClientPayoutStatus.DISPUTE.name(), previousStatus.name(),
@@ -344,7 +370,7 @@ public class ClientPayoutService {
         activity.setPreviousStatus(ClientPayoutStatus.DISPUTE.name());
         activity.setNewStatus(previousStatus.name());
         activityRepository.save(activity);
-        
+
         return savedPayout;
     }
     
@@ -366,7 +392,7 @@ public class ClientPayoutService {
             case "COMPANY":
                 return clientPayoutRepository.findByUserIdOrderByCreatedAtDesc(userId);
             default:
-                throw new RuntimeException("Access denied for role: " + userRole);
+                throw new BusinessException("Access denied for role: " + userRole);
         }
     }
     
@@ -406,42 +432,42 @@ public class ClientPayoutService {
         String userRole = user.getRole().getName();
         
         if (sourceType.equals(SourceType.REFERRAL) && !userRole.equals("REFERRAL")) {
-            throw new RuntimeException("User must have REFERRAL role for REFERRAL source type");
+            throw new BusinessException("User must have REFERRAL role for REFERRAL source type");
         }
         
         if (sourceType.equals(SourceType.COMPANY) && !userRole.equals("COMPANY")) {
-            throw new RuntimeException("User must have COMPANY role for COMPANY source type");
+            throw new BusinessException("User must have COMPANY role for COMPANY source type");
         }
     }
     
     private void validateAmountAssignmentAccess(String userRole) {
         if (!List.of("ADMIN", "MANAGER", "BRANCH_PARTNER").contains(userRole.toUpperCase())) {
-            throw new RuntimeException("Access denied. Only ADMIN, MANAGER, or BRANCH_PARTNER can assign amounts.");
+            throw new BusinessException("Access denied. Only ADMIN, MANAGER, or BRANCH_PARTNER can assign amounts.");
         }
     }
     
     private void validatePaymentProcessingAccess(String userRole) {
         if (!List.of("ADMIN", "MANAGER", "BRANCH_PARTNER").contains(userRole.toUpperCase())) {
-            throw new RuntimeException("Access denied. Only ADMIN, MANAGER, or BRANCH_PARTNER can process payments.");
+            throw new BusinessException("Access denied. Only ADMIN, MANAGER, or BRANCH_PARTNER can process payments.");
         }
     }
     
     private void validateDisputeInitiationAccess(String userRole) {
         if (!List.of("ADMIN", "MANAGER", "BRANCH_PARTNER").contains(userRole.toUpperCase())) {
-            throw new RuntimeException("Access denied. Only ADMIN, MANAGER, or BRANCH_PARTNER can initiate disputes.");
+            throw new BusinessException("Access denied. Only ADMIN, MANAGER, or BRANCH_PARTNER can initiate disputes.");
         }
     }
     
     private void validateDisputeResponseAccess(Long payoutId, String userRole, Long userId) {
         if (!List.of("REFERRAL", "COMPANY").contains(userRole.toUpperCase())) {
-            throw new RuntimeException("Access denied. Only REFERRAL or COMPANY can respond to disputes.");
+            throw new BusinessException("Access denied. Only REFERRAL or COMPANY can respond to disputes.");
         }
         
         ClientPayout payout = clientPayoutRepository.findById(payoutId)
                 .orElseThrow(() -> new RuntimeException("Client payout not found"));
         
         if (!payout.getUser().getId().equals(userId)) {
-            throw new RuntimeException("Access denied. You can only respond to your own payout disputes.");
+            throw new BusinessException("Access denied. You can only respond to your own payout disputes.");
         }
     }
     
@@ -454,11 +480,11 @@ public class ClientPayoutService {
             case "REFERRAL":
             case "COMPANY":
                 if (!payout.getUser().getId().equals(userId)) {
-                    throw new RuntimeException("Access denied. You can only view your own payouts.");
+                    throw new BusinessException("Access denied. You can only view your own payouts.");
                 }
                 break;
             default:
-                throw new RuntimeException("Access denied for role: " + userRole);
+                throw new BusinessException("Access denied for role: " + userRole);
         }
     }
     
@@ -477,15 +503,38 @@ public class ClientPayoutService {
         }
     }
     
-    public void logActivity(ClientPayout payout, ClientPayoutAction action, 
+    public void logActivity(ClientPayout payout, ClientPayoutAction action,
                           String oldValue, String newValue, String reason, Long userId) {
+        // Tamper-evident audit — must succeed; failure rolls back the enclosing transaction.
+        financialAuditService.record(
+                toFinancialAction(action),
+                "ClientPayout",
+                payout.getId(),
+                userId,
+                oldValue,
+                newValue,
+                reason);
+
+        // Legacy activity log — kept for operational detail (dispute stage, status strings, etc.).
         ClientPayoutActivity activity = new ClientPayoutActivity(
-            payout, action, oldValue, newValue, reason, 
+            payout, action, oldValue, newValue, reason,
             userRepository.findById(userId).orElse(null)
         );
         activityRepository.save(activity);
     }
-    
+
+    private FinancialAuditAction toFinancialAction(ClientPayoutAction action) {
+        return switch (action) {
+            case CREATED          -> FinancialAuditAction.PAYOUT_CREATED;
+            case AMOUNT_ASSIGNED  -> FinancialAuditAction.PAYOUT_AMOUNT_ASSIGNED;
+            case PAYMENT_ADDED    -> FinancialAuditAction.PAYOUT_PAYMENT_ADDED;
+            case DISPUTE_INITIATED -> FinancialAuditAction.PAYOUT_DISPUTE_INITIATED;
+            case DISPUTE_ACCEPTED  -> FinancialAuditAction.PAYOUT_DISPUTE_ACCEPTED;
+            case DISPUTE_REJECTED  -> FinancialAuditAction.PAYOUT_DISPUTE_REJECTED;
+            case STATUS_CHANGED    -> FinancialAuditAction.PAYOUT_STATUS_CHANGED;
+        };
+    }
+
     private String generateRequestId() {
         return UUID.randomUUID().toString().substring(0, 8);
     }

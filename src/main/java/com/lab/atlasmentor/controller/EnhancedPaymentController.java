@@ -1,4 +1,5 @@
 package com.lab.atlasmentor.controller;
+import com.lab.atlasmentor.exception.BusinessException;
 
 import com.lab.atlasmentor.dto.PaymentTransactionDto;
 import com.lab.atlasmentor.dto.PaymentTransactionRequest;
@@ -36,7 +37,7 @@ public class EnhancedPaymentController {
             StudentPayment payment = finalPaymentService.createStudentPayment(studentId, 
                 com.lab.atlasmentor.enums.SourceType.valueOf(sourceType), sourceId);
             return ResponseEntity.ok(payment);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.badRequest().build();
         }
     }
@@ -48,7 +49,7 @@ public class EnhancedPaymentController {
         try {
             StudentPayment payment = finalPaymentService.assignAmount(studentId, amount);
             return ResponseEntity.ok(payment);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.badRequest().body(null);
         }
     }
@@ -68,7 +69,7 @@ public class EnhancedPaymentController {
                 request.getNotes()
             );
             return ResponseEntity.ok(ApiResponse.success("Payment transaction created successfully", transaction));
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
         }
     }
@@ -79,7 +80,7 @@ public class EnhancedPaymentController {
         try {
             List<PaymentTransactionDto> transactions = finalPaymentService.getPaymentTransactions(studentId);
             return ResponseEntity.ok(ApiResponse.success("Payment transactions retrieved successfully", transactions));
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
         }
     }
@@ -90,7 +91,7 @@ public class EnhancedPaymentController {
         try {
             BigDecimal amount = finalPaymentService.getNetPaidAmount(studentId);
             return ResponseEntity.ok(amount);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.badRequest().build();
         }
     }
@@ -107,7 +108,7 @@ public class EnhancedPaymentController {
                 request.getRemarks()
             );
             return ResponseEntity.ok(amountChange);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.badRequest().build();
         }
     }
@@ -119,7 +120,7 @@ public class EnhancedPaymentController {
         try {
             PaymentAmountChange amountChange = finalPaymentService.approveAmountChange(changeRequestId, approvalRemarks);
             return ResponseEntity.ok(amountChange);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.badRequest().build();
         }
     }
@@ -137,7 +138,7 @@ public class EnhancedPaymentController {
                 request.getProofUrl()
             );
             return ResponseEntity.ok(statusApproval);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.badRequest().build();
         }
     }
@@ -149,7 +150,7 @@ public class EnhancedPaymentController {
         try {
             StudentStatusApproval statusApproval = finalPaymentService.approveStatusChange(approvalRequestId, approvalRemarks);
             return ResponseEntity.ok(statusApproval);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.badRequest().build();
         }
     }
@@ -162,7 +163,7 @@ public class EnhancedPaymentController {
         try {
             List<StudentPayment> payments = finalPaymentService.getStudentPaymentsByRole();
             return ResponseEntity.ok(payments);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.badRequest().build();
         }
     }
@@ -179,7 +180,7 @@ public class EnhancedPaymentController {
                 com.lab.atlasmentor.enums.SourceType.valueOf(sourceType)
             );
             return ResponseEntity.ok(data);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.badRequest().build();
         }
     }

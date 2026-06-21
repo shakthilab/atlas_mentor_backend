@@ -1,4 +1,5 @@
 package com.lab.atlasmentor.controller;
+import com.lab.atlasmentor.exception.BusinessException;
 
 import com.lab.atlasmentor.dto.*;
 import com.lab.atlasmentor.enums.TaskStatus;
@@ -43,14 +44,14 @@ public class TaskController {
             
             TaskResponse response = taskService.createTask(request, currentUserId);
             return ResponseEntity.ok(response);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             log.error("Error creating task: {}", e.getMessage(), e);
             return ResponseEntity.status(500).body(null);
         }
     }
 
     @GetMapping
-    public ResponseEntity<Page<TaskResponse>> getAllTasks(
+    public ResponseEntity<TaskPageWithStatsResponse> getAllTasks(
             @RequestParam(required = false) TaskStatus status,
             @RequestParam(required = false) Long assigneeId,
             @RequestParam(required = false) Long branchId,
@@ -67,14 +68,15 @@ public class TaskController {
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "createdAt") String sortBy,
             @RequestParam(defaultValue = "desc") String sortDir) {
-        log.info("Get tasks with filters: status={}, assigneeId={}, branchId={}, priority={}, createdBy={}, keyword={}, overdue={}, search={}, dueDateFrom={}, dueDateTo={}, assignedDateFrom={}, assignedDateTo={}, page={}, size={}", 
+        log.info("Get tasks with filters: status={}, assigneeId={}, branchId={}, priority={}, createdBy={}, keyword={}, overdue={}, search={}, dueDateFrom={}, dueDateTo={}, assignedDateFrom={}, assignedDateTo={}, page={}, size={}",
                 status, assigneeId, branchId, priority, createdBy, keyword, overdue, search, dueDateFrom, dueDateTo, assignedDateFrom, assignedDateTo, page, size);
 
         Sort.Direction direction = sortDir.equalsIgnoreCase("desc") ? Sort.Direction.DESC : Sort.Direction.ASC;
         Pageable pageable = PageRequest.of(page, size, Sort.by(direction, sortBy));
 
         Page<TaskResponse> tasks = taskService.getTasksWithFiltersPaginated(status, assigneeId, branchId, priority, createdBy, keyword, overdue, search, dueDateFrom, dueDateTo, assignedDateFrom, assignedDateTo, pageable);
-        return ResponseEntity.ok(tasks);
+        TaskStatsResponse stats = taskService.getTaskStats(status, assigneeId, branchId, priority, createdBy, keyword, overdue, search, dueDateFrom, dueDateTo, assignedDateFrom, assignedDateTo);
+        return ResponseEntity.ok(new TaskPageWithStatsResponse(stats, tasks));
     }
 
     @GetMapping("/paginated")

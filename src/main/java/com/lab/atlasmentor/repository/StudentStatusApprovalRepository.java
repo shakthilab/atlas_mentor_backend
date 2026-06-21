@@ -41,4 +41,7 @@ public interface StudentStatusApprovalRepository extends JpaRepository<StudentSt
     
     @Query("SELECT COUNT(ssa) FROM StudentStatusApproval ssa WHERE ssa.student.id = :studentId AND ssa.status = 'PENDING'")
     Long countPendingByStudentId(@Param("studentId") Long studentId);
+
+    @Query("SELECT COUNT(ssa) FROM StudentStatusApproval ssa WHERE ssa.status = 'PENDING'")
+    Long countAllPending();
 }

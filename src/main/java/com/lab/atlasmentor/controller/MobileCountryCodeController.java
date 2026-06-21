@@ -1,4 +1,5 @@
 package com.lab.atlasmentor.controller;
+import com.lab.atlasmentor.exception.BusinessException;
 
 import com.lab.atlasmentor.dto.ApiResponse;
 import com.lab.atlasmentor.dto.MobileCountryCodeResponse;
@@ -29,7 +30,7 @@ public class MobileCountryCodeController {
                     .collect(Collectors.toList());
             
             return ResponseEntity.ok(ApiResponse.success("Mobile country codes retrieved successfully", response));
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.internalServerError()
                     .body(ApiResponse.error("Failed to retrieve mobile country codes"));
         }
@@ -44,7 +45,7 @@ public class MobileCountryCodeController {
                     .collect(Collectors.toList());
             
             return ResponseEntity.ok(ApiResponse.success("Active mobile country codes retrieved successfully", response));
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.internalServerError()
                     .body(ApiResponse.error("Failed to retrieve active mobile country codes"));
         }
@@ -61,7 +62,7 @@ public class MobileCountryCodeController {
             } else {
                 return ResponseEntity.notFound().build();
             }
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.internalServerError()
                     .body(ApiResponse.error("Failed to retrieve country code"));
         }
@@ -78,7 +79,7 @@ public class MobileCountryCodeController {
             } else {
                 return ResponseEntity.notFound().build();
             }
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.internalServerError()
                     .body(ApiResponse.error("Failed to retrieve country code"));
         }
@@ -93,7 +94,7 @@ public class MobileCountryCodeController {
                     .collect(Collectors.toList());
             
             return ResponseEntity.ok(ApiResponse.success("Countries found for mobile code", response));
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.internalServerError()
                     .body(ApiResponse.error("Failed to retrieve countries by mobile code"));
         }
@@ -109,7 +110,7 @@ public class MobileCountryCodeController {
                     .collect(Collectors.toList());
             
             return ResponseEntity.ok(ApiResponse.success("Countries found matching search criteria", response));
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.internalServerError()
                     .body(ApiResponse.error("Failed to search countries"));
         }

@@ -1,5 +1,6 @@
 package com.lab.atlasmentor.service;
 
+import com.lab.atlasmentor.exception.BusinessException;
 import com.lab.atlasmentor.dto.*;
 import com.lab.atlasmentor.exception.EmailAlreadyExistsException;
 import com.lab.atlasmentor.exception.UserNotFoundException;
@@ -60,12 +61,28 @@ public class AdminService {
     @Autowired
     private ReferralAssignmentRepository referralAssignmentRepository;
 
+    @Autowired
+    private EmployeeDetailsRepository employeeDetailsRepository;
+
+    @Autowired
+    private RefreshTokenRepository refreshTokenRepository;
+
+    @Autowired
+    private ClientPayoutRepository clientPayoutRepository;
+
+    @Autowired
+    private ClientPayoutActivityRepository clientPayoutActivityRepository;
+
+    @Autowired
+    private ReferralResourceRepository referralResourceRepository;
+
+    @Transactional
     public UserResponse createUser(CreateUserRequest request, String createdByRoleName) {
         // Validate role creation permissions
         validateRoleCreation(request.getRole(), createdByRoleName);
 
         if (userRepository.existsByEmail(request.getEmail())) {
-            throw new RuntimeException("Email already exists");
+            throw new BusinessException("Email already exists");
         }
 
         User user = new User();
@@ -142,54 +159,45 @@ public class AdminService {
                 .collect(Collectors.toList());
     }
 
-    public List<UnassignedEmployeeResponse> getUnassignedEmployees() {
-        try {
-            // Get current user for branch-based filtering
-            var currentUser = SecurityUtils.getCurrentUser();
-            log.info("Getting unassigned employees with branch-based access control: userId={}, role={}, branchId={}, isAdmin={}", 
-                currentUser.getUserId(), currentUser.getRole(), currentUser.getBranchId(), currentUser.isAdmin());
-            
-            // Get all employee IDs that are assigned to managers
-            List<Long> assignedEmployeeIds = managerEmployeeHierarchyRepository.findAll().stream()
-                    .map(ManagerEmployeeHierarchy::getEmployeeId)
-                    .collect(Collectors.toList());
-            
-            // Get all users with employee roles (excluding managers and senior counselors)
-            List<String> employeeRoles = List.of(
-                "JUNIOR_COUNSELLOR",
-                "VIDEO_EDITOR"
-            );
-            
-            return userRepository.findAll().stream()
-                    .filter(user -> user.getStatus() == com.lab.atlasmentor.enums.UserStatus.ACTIVE)
-                    .filter(user -> !assignedEmployeeIds.contains(user.getId()))
-                    .filter(user -> user.getRole() != null && employeeRoles.contains(user.getRole().getName()))
-                    // Apply branch-based filtering for non-admin users
-                    .filter(user -> currentUser.isAdmin() || 
-                        (user.getBranchId() != null && user.getBranchId().equals(currentUser.getBranchId())))
-                    .map(this::convertToUnassignedEmployeeResponse)
-                    .collect(Collectors.toList());
-        } catch (Exception e) {
-            log.error("Error getting current user for unassigned employees: {}", e.getMessage(), e);
-            // Fallback to original behavior without branch filtering
-            List<Long> assignedEmployeeIds = managerEmployeeHierarchyRepository.findAll().stream()
-                    .map(ManagerEmployeeHierarchy::getEmployeeId)
-                    .collect(Collectors.toList());
-            
-            List<String> employeeRoles = List.of(
-                "JUNIOR_COUNSELLOR",
-                "VIDEO_EDITOR"
-            );
-            
-            return userRepository.findAll().stream()
-                    .filter(user -> user.getStatus() == com.lab.atlasmentor.enums.UserStatus.ACTIVE)
-                    .filter(user -> !assignedEmployeeIds.contains(user.getId()))
-                    .filter(user -> user.getRole() != null && employeeRoles.contains(user.getRole().getName()))
-                    .map(this::convertToUnassignedEmployeeResponse)
-                    .collect(Collectors.toList());
+    public List<UnassignedEmployeeResponse> getUnassignedEmployees(Long managerId) {
+        List<Long> assignedEmployeeIds = managerEmployeeHierarchyRepository.findAll().stream()
+                .map(ManagerEmployeeHierarchy::getEmployeeId)
+                .collect(Collectors.toList());
+
+        List<String> employeeRoles = List.of("VIDEO_EDITOR");
+
+        // If managerId is provided, resolve the branch from that manager and filter by it
+        Long filterBranchId = null;
+        if (managerId != null) {
+            User manager = userRepository.findById(managerId)
+                    .orElseThrow(() -> new BusinessException("Manager not found with id: " + managerId));
+            filterBranchId = manager.getBranchId();
+            log.info("Filtering unassigned employees by managerId={} branchId={}", managerId, filterBranchId);
+        } else {
+            try {
+                var currentUser = SecurityUtils.getCurrentUser();
+                if (!currentUser.isAdmin()) {
+                    filterBranchId = currentUser.getBranchId();
+                }
+                log.info("Getting unassigned employees: userId={}, role={}, branchId={}, isAdmin={}",
+                    currentUser.getUserId(), currentUser.getRole(), currentUser.getBranchId(), currentUser.isAdmin());
+            } catch (Exception e) {
+                log.error("Error getting current user for unassigned employees: {}", e.getMessage(), e);
+            }
         }
+
+        final Long branchFilter = filterBranchId;
+        return userRepository.findAll().stream()
+                .filter(user -> user.getStatus() == com.lab.atlasmentor.enums.UserStatus.ACTIVE)
+                .filter(user -> !assignedEmployeeIds.contains(user.getId()))
+                .filter(user -> user.getRole() != null && employeeRoles.contains(user.getRole().getName()))
+                .filter(user -> branchFilter == null ||
+                    (user.getBranchId() != null && user.getBranchId().equals(branchFilter)))
+                .map(this::convertToUnassignedEmployeeResponse)
+                .collect(Collectors.toList());
     }
 
+    @Transactional
     public UserResponse updateUser(Long userId, CreateUserRequest request, String createdByRoleName) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
@@ -200,7 +208,7 @@ public class AdminService {
         // Check if email is being changed and if new email already exists
         if (!user.getEmail().equals(request.getEmail()) && 
             userRepository.existsByEmail(request.getEmail())) {
-            throw new RuntimeException("Email already exists");
+            throw new BusinessException("Email already exists");
         }
 
         user.setFirstName(request.getFirstName());
@@ -222,9 +230,10 @@ public class AdminService {
         return convertToUserResponse(updatedUser);
     }
 
+    @Transactional
     public void deleteUser(Long userId) {
         if (!userRepository.existsById(userId)) {
-            throw new RuntimeException("User not found");
+            throw new BusinessException("User not found");
         }
         userRepository.deleteById(userId);
     }
@@ -232,21 +241,21 @@ public class AdminService {
     private void validateRoleCreation(String roleToCreateName, String createdByRoleName) {
         // Admin can create all roles except another admin
         if ("ADMIN".equals(createdByRoleName) && "ADMIN".equals(roleToCreateName)) {
-            throw new RuntimeException("Admin cannot create another admin user");
+            throw new BusinessException("Admin cannot create another admin user");
         }
 
         if ("ADMIN".equals(createdByRoleName)) {
             // Admin can create: MANAGER
             if ("STUDENT".equals(roleToCreateName)) {
-                throw new RuntimeException("Students must register themselves");
+                throw new BusinessException("Students must register themselves");
             }
         } else if ("MANAGER".equals(createdByRoleName)) {
             // Manager can create: JUNIOR_COUNSELLOR, COUNSELLOR, VIDEO_EDITOR
             if (!List.of("JUNIOR_COUNSELLOR", "SENIOR_COUNSELLOR", "VIDEO_EDITOR").contains(roleToCreateName)) {
-                throw new RuntimeException("Manager can only create JUNIOR_COUNSELLOR, SENIOR_COUNSELLOR, or VIDEO_EDITOR users");
+                throw new BusinessException("Manager can only create JUNIOR_COUNSELLOR, SENIOR_COUNSELLOR, or VIDEO_EDITOR users");
             }
         } else {
-            throw new RuntimeException("Only ADMIN and MANAGER can create users");
+            throw new BusinessException("Only ADMIN and MANAGER can create users");
         }
     }
 
@@ -362,9 +371,10 @@ public class AdminService {
         return savedUser;
     }
 
+    @Transactional
     public User createCompany(CompanyRequest companyRequest, HttpServletRequest request) {
         if (userRepository.existsByEmail(companyRequest.getEmail())) {
-            throw new RuntimeException("Email already exists");
+            throw new BusinessException("Email already exists");
         }
 
         // Generate random password
@@ -644,7 +654,7 @@ public class AdminService {
                 .orElseThrow(() -> new RuntimeException("Company not found"));
         
         if (!company.hasRole("COMPANY")) {
-            throw new RuntimeException("User is not a company");
+            throw new BusinessException("User is not a company");
         }
         
         return company;
@@ -801,31 +811,57 @@ public class AdminService {
 
     @Transactional
     public void deleteReferral(Long referralId) {
-        // Check if user exists and has REFERRAL role
         User referral = userRepository.findById(referralId)
                 .orElseThrow(() -> new RuntimeException("Referral not found"));
-        
+
         if (!referral.hasRole("REFERRAL")) {
-            throw new RuntimeException("User is not a referral");
+            throw new BusinessException("User is not a referral");
         }
-        
-        // Delete referral details first (if exists)
+
+        // Nullify soft FKs in client_payouts that point to this user (non-owner columns)
+        clientPayoutRepository.nullifyDisputedByUserId(referralId);
+        clientPayoutRepository.nullifyRespondedByUserId(referralId);
+        clientPayoutRepository.nullifyAssignedByUserId(referralId);
+        clientPayoutRepository.nullifyLastPaidByUserId(referralId);
+
+        // Delete payout activities where this user acted (doneBy) or owns the payout
+        clientPayoutActivityRepository.deleteByDoneByUserId(referralId);
+        clientPayoutActivityRepository.deleteByClientPayoutUserId(referralId);
+
+        // Delete client payouts owned by this referral (user_id FK)
+        clientPayoutRepository.deleteByUserId(referralId);
+
+        // Remove user from referral_resource_owners join table
+        referralResourceRepository.deleteOwnerByUserId(referralId);
+
+        // Delete refresh tokens (FK on user_id)
+        refreshTokenRepository.deleteByUserId(referralId);
+
+        // Delete referral assignments
+        referralAssignmentRepository.deleteByReferralId(referralId);
+
+        // Delete manager-employee hierarchy entry if referral was assigned to a manager
+        managerEmployeeHierarchyRepository.deleteByEmployeeId(referralId);
+
+        // Delete referral details
         referralDetailsRepository.findByUserId(referralId)
-                .ifPresent(referralDetails -> referralDetailsRepository.delete(referralDetails));
-        
-        // No need to delete user roles since we're using enum approach
-        
+                .ifPresent(referralDetailsRepository::delete);
+
+        // Delete employee details
+        employeeDetailsRepository.deleteByUser_Id(referralId);
+
         // Delete user
         userRepository.delete(referral);
     }
 
+    @Transactional
     public User updateReferral(Long referralId, ReferralRequest request) {
         // Check if user exists and has REFERRAL role
         User referral = userRepository.findById(referralId)
                 .orElseThrow(() -> new RuntimeException("Referral not found"));
         
         if (!referral.hasRole("REFERRAL")) {
-            throw new RuntimeException("User is not a referral");
+            throw new BusinessException("User is not a referral");
         }
         
         // Update user details
@@ -874,7 +910,7 @@ public class AdminService {
                 .orElseThrow(() -> new RuntimeException("Referral not found"));
         
         if (!referral.hasRole("REFERRAL")) {
-            throw new RuntimeException("User is not a referral");
+            throw new BusinessException("User is not a referral");
         }
         
         // Set status to the provided status
@@ -894,13 +930,13 @@ public class AdminService {
                 .orElseThrow(() -> new RuntimeException("Company not found"));
         
         if (!company.hasRole("COMPANY")) {
-            throw new RuntimeException("User is not a company");
+            throw new BusinessException("User is not a company");
         }
         
         // Check if email is being changed and if new email already exists
         if (!company.getEmail().equals(editRequest.getEmail()) && 
             userRepository.existsByEmail(editRequest.getEmail())) {
-            throw new RuntimeException("Email already exists");
+            throw new BusinessException("Email already exists");
         }
         
         // Update company details
@@ -962,7 +998,7 @@ public class AdminService {
                 .orElseThrow(() -> new RuntimeException("Company not found"));
         
         if (!company.hasRole("COMPANY")) {
-            throw new RuntimeException("User is not a company");
+            throw new BusinessException("User is not a company");
         }
         
         // Toggle status between ACTIVE and INACTIVE
@@ -981,7 +1017,7 @@ public class AdminService {
                 .orElseThrow(() -> new RuntimeException("Company not found"));
         
         if (!company.hasRole("COMPANY")) {
-            throw new RuntimeException("User is not a company");
+            throw new BusinessException("User is not a company");
         }
         
         // Set status to INACTIVE
@@ -997,7 +1033,7 @@ public class AdminService {
                 .orElseThrow(() -> new RuntimeException("Company not found"));
         
         if (!company.hasRole("COMPANY")) {
-            throw new RuntimeException("User is not a company");
+            throw new BusinessException("User is not a company");
         }
         
         // Delete company details if exists

@@ -1,4 +1,5 @@
 package com.lab.atlasmentor.controller;
+import com.lab.atlasmentor.exception.BusinessException;
 
 import com.lab.atlasmentor.dto.ApiResponse;
 import com.lab.atlasmentor.model.University;
@@ -23,7 +24,7 @@ public class UniversityController {
             List<University> universities = universityService.getAllActiveUniversities();
             ApiResponse<List<University>> response = ApiResponse.success("Universities retrieved successfully", universities);
             return ResponseEntity.ok(response);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             ApiResponse<List<University>> response = ApiResponse.error("Failed to retrieve universities: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
@@ -35,7 +36,7 @@ public class UniversityController {
             List<University> universities = universityService.getAllUniversities();
             ApiResponse<List<University>> response = ApiResponse.success("All universities retrieved successfully", universities);
             return ResponseEntity.ok(response);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             ApiResponse<List<University>> response = ApiResponse.error("Failed to retrieve universities: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
@@ -53,7 +54,7 @@ public class UniversityController {
                     ApiResponse<University> response = ApiResponse.error("University not found with id: " + id);
                     return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
                 });
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             ApiResponse<University> response = ApiResponse.error("Failed to retrieve university: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
@@ -65,7 +66,7 @@ public class UniversityController {
             List<University> universities = universityService.getActiveUniversitiesByCountryId(countryId);
             ApiResponse<List<University>> response = ApiResponse.success("Universities retrieved successfully for country: " + countryId, universities);
             return ResponseEntity.ok(response);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             ApiResponse<List<University>> response = ApiResponse.error("Failed to retrieve universities for country: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
@@ -82,7 +83,7 @@ public class UniversityController {
             University createdUniversity = universityService.createUniversity(university);
             ApiResponse<University> response = ApiResponse.success("University created successfully", createdUniversity);
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             ApiResponse<University> response = ApiResponse.error("Failed to create university: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
@@ -104,7 +105,7 @@ public class UniversityController {
                 ApiResponse<University> response = ApiResponse.error("Country not found with id: " + request.getCountryId());
                 return ResponseEntity.badRequest().body(response);
             }
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             ApiResponse<University> response = ApiResponse.error("Failed to create university: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
@@ -121,7 +122,7 @@ public class UniversityController {
                 ApiResponse<University> response = ApiResponse.error("University not found with id: " + id);
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
             }
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             ApiResponse<University> response = ApiResponse.error("Failed to update university: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
@@ -138,7 +139,7 @@ public class UniversityController {
                 ApiResponse<String> response = ApiResponse.error("University not found with id: " + id);
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
             }
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             ApiResponse<String> response = ApiResponse.error("Failed to delete university: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }

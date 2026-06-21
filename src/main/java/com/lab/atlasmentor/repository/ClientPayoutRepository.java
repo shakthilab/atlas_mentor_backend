@@ -5,6 +5,7 @@ import com.lab.atlasmentor.enums.SourceType;
 import com.lab.atlasmentor.model.ClientPayout;
 import com.lab.atlasmentor.model.User;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -229,4 +230,180 @@ public interface ClientPayoutRepository extends JpaRepository<ClientPayout, Long
                                              @Param("paymentStatus") String paymentStatus,
                                              @Param("dateFrom") LocalDateTime dateFrom,
                                              @Param("dateTo") LocalDateTime dateTo);
+
+    @Modifying
+    @Query("DELETE FROM ClientPayout cp WHERE cp.student.id = :studentId")
+    void deleteByStudentId(@Param("studentId") Long studentId);
+
+    @Modifying
+    @Query("DELETE FROM ClientPayout cp WHERE cp.user.id = :userId")
+    void deleteByUserId(@Param("userId") Long userId);
+
+    @Modifying
+    @Query("UPDATE ClientPayout cp SET cp.disputedBy = null WHERE cp.disputedBy.id = :userId")
+    void nullifyDisputedByUserId(@Param("userId") Long userId);
+
+    @Modifying
+    @Query("UPDATE ClientPayout cp SET cp.respondedBy = null WHERE cp.respondedBy.id = :userId")
+    void nullifyRespondedByUserId(@Param("userId") Long userId);
+
+    @Modifying
+    @Query("UPDATE ClientPayout cp SET cp.assignedBy = null WHERE cp.assignedBy.id = :userId")
+    void nullifyAssignedByUserId(@Param("userId") Long userId);
+
+    @Modifying
+    @Query("UPDATE ClientPayout cp SET cp.lastPaidBy = null WHERE cp.lastPaidBy.id = :userId")
+    void nullifyLastPaidByUserId(@Param("userId") Long userId);
+
+    // ==================== DASHBOARD QUERIES ====================
+
+    @Query(value = "SELECT COALESCE(SUM(COALESCE(assigned_amount, 0) - COALESCE(paid_amount, 0)), 0) " +
+           "FROM client_payouts WHERE payout_status NOT IN ('PAID','ACCEPTED','REJECTED') AND assigned_amount IS NOT NULL AND created_at >= :from", nativeQuery = true)
+    java.math.BigDecimal getTotalPendingPayouts(@Param("from") LocalDateTime from);
+
+    @Query(value = "SELECT COUNT(*), COALESCE(SUM(COALESCE(dispute_amount, assigned_amount, 0)), 0) " +
+           "FROM client_payouts WHERE payout_status = 'DISPUTE' AND created_at >= :from", nativeQuery = true)
+    List<Object[]> getDisputeSummary(@Param("from") LocalDateTime from);
+
+    @Query(value = "SELECT CONCAT(u.first_name, ' ', COALESCE(u.last_name, '')) as entity_name, cp.source_type, " +
+           "COALESCE(SUM(cp.assigned_amount), 0) as total_amount, cp.payout_status, " +
+           "MAX(COALESCE(cp.last_paid_at, cp.assigned_at, cp.created_at)) as last_activity " +
+           "FROM client_payouts cp JOIN users u ON cp.user_id = u.id " +
+           "WHERE cp.payout_status NOT IN ('ACCEPTED','REJECTED') AND cp.created_at >= :from " +
+           "GROUP BY u.id, u.first_name, u.last_name, cp.source_type, cp.payout_status " +
+           "ORDER BY total_amount DESC LIMIT 10", nativeQuery = true)
+    List<Object[]> findTopReceivables(@Param("from") LocalDateTime from);
+
+    @Query(value = "SELECT cp.id, CONCAT(u.first_name, ' ', COALESCE(u.last_name, '')) as dispute_name, " +
+           "cp.dispute_reason, COALESCE(cp.dispute_amount, cp.assigned_amount, 0) as amount, cp.disputed_at " +
+           "FROM client_payouts cp JOIN users u ON cp.user_id = u.id " +
+           "WHERE cp.payout_status = 'DISPUTE' AND cp.created_at >= :from ORDER BY cp.disputed_at DESC LIMIT 5", nativeQuery = true)
+    List<Object[]> findOpenDisputes(@Param("from") LocalDateTime from);
+
+    @Query(value = "SELECT TO_CHAR(DATE_TRUNC('month', cp.created_at), 'Mon') as month, " +
+           "COALESCE(rd.referral_type, cp.source_type) as partner_type, " +
+           "COALESCE(SUM(cp.paid_amount), 0) as earnings " +
+           "FROM client_payouts cp " +
+           "LEFT JOIN referral_details rd ON rd.user_id = cp.user_id " +
+           "WHERE cp.created_at >= :from " +
+           "GROUP BY DATE_TRUNC('month', cp.created_at), COALESCE(rd.referral_type, cp.source_type) " +
+           "ORDER BY DATE_TRUNC('month', cp.created_at)", nativeQuery = true)
+    List<Object[]> getMonthlyEarningsByPartnerType(@Param("from") LocalDateTime from);
+
+    @Query(value = "SELECT " +
+           "COUNT(DISTINCT cp.user_id) as referred_count, " +
+           "COUNT(DISTINCT CASE WHEN s.status IN ('LEAD','PROSPECTIVE','REGISTERED','STUDENT') THEN s.id END) as lead_count, " +
+           "COUNT(DISTINCT CASE WHEN s.status IN ('REGISTERED','STUDENT') THEN s.id END) as registered_count, " +
+           "COUNT(DISTINCT CASE WHEN s.status = 'STUDENT' THEN s.id END) as active_student_count, " +
+           "COUNT(DISTINCT CASE WHEN sp.payment_status = 'PAID' THEN sp.id END) as paid_count " +
+           "FROM client_payouts cp " +
+           "JOIN students s ON cp.student_id = s.id " +
+           "LEFT JOIN student_payments sp ON sp.student_id = s.id AND sp.is_deleted = false " +
+           "WHERE cp.created_at >= :from", nativeQuery = true)
+    List<Object[]> getReferralFunnel(@Param("from") LocalDateTime from);
+
+    @Query(value = "SELECT CONCAT(u.first_name, ' ', COALESCE(u.last_name, '')) as referrer_name, " +
+           "COALESCE(rd.referral_type, cp.source_type) as partner_type, " +
+           "COUNT(DISTINCT cp.student_id) as students_count, " +
+           "COALESCE(SUM(cp.paid_amount), 0) as commission_amount " +
+           "FROM client_payouts cp " +
+           "JOIN users u ON cp.user_id = u.id " +
+           "LEFT JOIN referral_details rd ON rd.user_id = u.id " +
+           "WHERE cp.created_at >= :from " +
+           "GROUP BY u.id, u.first_name, u.last_name, rd.referral_type, cp.source_type " +
+           "ORDER BY commission_amount DESC LIMIT 5", nativeQuery = true)
+    List<Object[]> findTopReferrers(@Param("from") LocalDateTime from);
+
+    @Query(value = "SELECT COUNT(*) FROM client_payouts WHERE payout_status IN ('PENDING','AMOUNT_ASSIGNED')", nativeQuery = true)
+    Long countPayoutsAwaitingApproval();
+
+    // ==================== BRANCH-SCOPED DASHBOARD QUERIES ====================
+
+    @Query(value = "SELECT COALESCE(SUM(COALESCE(cp.assigned_amount, 0) - COALESCE(cp.paid_amount, 0)), 0) " +
+           "FROM client_payouts cp JOIN students s ON cp.student_id = s.id " +
+           "WHERE s.branch_id = :branchId AND cp.payout_status NOT IN ('PAID','ACCEPTED','REJECTED') AND cp.assigned_amount IS NOT NULL AND cp.created_at >= :from", nativeQuery = true)
+    java.math.BigDecimal getTotalPendingPayoutsForBranch(@Param("branchId") Long branchId, @Param("from") LocalDateTime from);
+
+    @Query(value = "SELECT COUNT(*), COALESCE(SUM(COALESCE(cp.dispute_amount, cp.assigned_amount, 0)), 0) " +
+           "FROM client_payouts cp JOIN students s ON cp.student_id = s.id " +
+           "WHERE s.branch_id = :branchId AND cp.payout_status = 'DISPUTE' AND cp.created_at >= :from", nativeQuery = true)
+    List<Object[]> getDisputeSummaryForBranch(@Param("branchId") Long branchId, @Param("from") LocalDateTime from);
+
+    @Query(value = "SELECT CONCAT(u.first_name, ' ', COALESCE(u.last_name, '')) as entity_name, cp.source_type, " +
+           "COALESCE(SUM(cp.assigned_amount), 0) as total_amount, cp.payout_status, " +
+           "MAX(COALESCE(cp.last_paid_at, cp.assigned_at, cp.created_at)) as last_activity " +
+           "FROM client_payouts cp JOIN users u ON cp.user_id = u.id JOIN students s ON cp.student_id = s.id " +
+           "WHERE s.branch_id = :branchId AND cp.payout_status NOT IN ('ACCEPTED','REJECTED') AND cp.created_at >= :from " +
+           "GROUP BY u.id, u.first_name, u.last_name, cp.source_type, cp.payout_status " +
+           "ORDER BY total_amount DESC LIMIT 10", nativeQuery = true)
+    List<Object[]> findTopReceivablesForBranch(@Param("branchId") Long branchId, @Param("from") LocalDateTime from);
+
+    @Query(value = "SELECT cp.id, CONCAT(u.first_name, ' ', COALESCE(u.last_name, '')) as dispute_name, " +
+           "cp.dispute_reason, COALESCE(cp.dispute_amount, cp.assigned_amount, 0) as amount, cp.disputed_at " +
+           "FROM client_payouts cp JOIN users u ON cp.user_id = u.id JOIN students s ON cp.student_id = s.id " +
+           "WHERE s.branch_id = :branchId AND cp.payout_status = 'DISPUTE' AND cp.created_at >= :from ORDER BY cp.disputed_at DESC LIMIT 5", nativeQuery = true)
+    List<Object[]> findOpenDisputesForBranch(@Param("branchId") Long branchId, @Param("from") LocalDateTime from);
+
+    @Query(value = "SELECT TO_CHAR(DATE_TRUNC('month', cp.created_at), 'Mon') as month, " +
+           "COALESCE(rd.referral_type, cp.source_type) as partner_type, " +
+           "COALESCE(SUM(cp.paid_amount), 0) as earnings " +
+           "FROM client_payouts cp " +
+           "LEFT JOIN referral_details rd ON rd.user_id = cp.user_id " +
+           "JOIN students s ON cp.student_id = s.id " +
+           "WHERE s.branch_id = :branchId AND cp.created_at >= :from " +
+           "GROUP BY DATE_TRUNC('month', cp.created_at), COALESCE(rd.referral_type, cp.source_type) " +
+           "ORDER BY DATE_TRUNC('month', cp.created_at)", nativeQuery = true)
+    List<Object[]> getMonthlyEarningsByPartnerTypeForBranch(@Param("branchId") Long branchId, @Param("from") LocalDateTime from);
+
+    @Query(value = "SELECT " +
+           "COUNT(DISTINCT cp.user_id) as referred_count, " +
+           "COUNT(DISTINCT CASE WHEN s.status IN ('LEAD','PROSPECTIVE','REGISTERED','STUDENT') THEN s.id END) as lead_count, " +
+           "COUNT(DISTINCT CASE WHEN s.status IN ('REGISTERED','STUDENT') THEN s.id END) as registered_count, " +
+           "COUNT(DISTINCT CASE WHEN s.status = 'STUDENT' THEN s.id END) as active_student_count, " +
+           "COUNT(DISTINCT CASE WHEN sp.payment_status = 'PAID' THEN sp.id END) as paid_count " +
+           "FROM client_payouts cp " +
+           "JOIN students s ON cp.student_id = s.id " +
+           "LEFT JOIN student_payments sp ON sp.student_id = s.id AND sp.is_deleted = false " +
+           "WHERE s.branch_id = :branchId AND cp.created_at >= :from", nativeQuery = true)
+    List<Object[]> getReferralFunnelForBranch(@Param("branchId") Long branchId, @Param("from") LocalDateTime from);
+
+    @Query(value = "SELECT CONCAT(u.first_name, ' ', COALESCE(u.last_name, '')) as referrer_name, " +
+           "COALESCE(rd.referral_type, cp.source_type) as partner_type, " +
+           "COUNT(DISTINCT cp.student_id) as students_count, " +
+           "COALESCE(SUM(cp.paid_amount), 0) as commission_amount " +
+           "FROM client_payouts cp " +
+           "JOIN users u ON cp.user_id = u.id " +
+           "JOIN students s ON cp.student_id = s.id " +
+           "LEFT JOIN referral_details rd ON rd.user_id = u.id " +
+           "WHERE s.branch_id = :branchId AND cp.created_at >= :from " +
+           "GROUP BY u.id, u.first_name, u.last_name, rd.referral_type, cp.source_type " +
+           "ORDER BY commission_amount DESC LIMIT 5", nativeQuery = true)
+    List<Object[]> findTopReferrersForBranch(@Param("branchId") Long branchId, @Param("from") LocalDateTime from);
+
+    @Query(value = "SELECT COUNT(*) FROM client_payouts cp JOIN students s ON cp.student_id = s.id " +
+           "WHERE s.branch_id = :branchId AND cp.payout_status IN ('PENDING','AMOUNT_ASSIGNED')", nativeQuery = true)
+    Long countPayoutsAwaitingApprovalForBranch(@Param("branchId") Long branchId);
+
+    // ==================== PARTNER (USER-SCOPED) DASHBOARD QUERIES ====================
+
+    @Query(value = "SELECT COUNT(DISTINCT cp.student_id) FROM client_payouts cp " +
+           "WHERE cp.user_id = :userId AND cp.created_at BETWEEN :from AND :to", nativeQuery = true)
+    Long countStudentsByUserIdBetween(@Param("userId") Long userId,
+                                      @Param("from") LocalDateTime from,
+                                      @Param("to") LocalDateTime to);
+
+    @Query(value = "SELECT COALESCE(SUM(cp.assigned_amount), 0), COALESCE(SUM(cp.paid_amount), 0) " +
+           "FROM client_payouts cp WHERE cp.user_id = :userId AND cp.created_at >= :from", nativeQuery = true)
+    List<Object[]> getAmountSummaryForUser(@Param("userId") Long userId,
+                                           @Param("from") LocalDateTime from);
+
+    @Query(value = "SELECT TO_CHAR(DATE_TRUNC('month', cp.created_at), 'Mon') as month, " +
+           "COALESCE(SUM(cp.assigned_amount), 0) as assigned, " +
+           "COALESCE(SUM(cp.paid_amount), 0) as paid " +
+           "FROM client_payouts cp " +
+           "WHERE cp.user_id = :userId AND cp.created_at >= :from " +
+           "GROUP BY DATE_TRUNC('month', cp.created_at) " +
+           "ORDER BY DATE_TRUNC('month', cp.created_at)", nativeQuery = true)
+    List<Object[]> getMonthlyEarningsForUser(@Param("userId") Long userId,
+                                              @Param("from") LocalDateTime from);
 }

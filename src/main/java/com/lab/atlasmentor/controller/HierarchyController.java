@@ -1,4 +1,5 @@
 package com.lab.atlasmentor.controller;
+import com.lab.atlasmentor.exception.BusinessException;
 
 import com.lab.atlasmentor.dto.ApiResponse;
 import com.lab.atlasmentor.dto.CounsellorAssignmentRequest;
@@ -56,7 +57,7 @@ public class HierarchyController {
             List<ManagerHierarchyResponse> managerHierarchy = hierarchyService.getManagerHierarchy();
             ApiResponse<List<ManagerHierarchyResponse>> response = ApiResponse.success("Manager hierarchy retrieved successfully", managerHierarchy);
             return ResponseEntity.ok(response);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             ApiResponse<List<ManagerHierarchyResponse>> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -68,7 +69,7 @@ public class HierarchyController {
             List<CounsellorHierarchyResponse> counsellorHierarchy = hierarchyService.getCounsellorHierarchy();
             ApiResponse<List<CounsellorHierarchyResponse>> response = ApiResponse.success("Counsellor hierarchy retrieved successfully", counsellorHierarchy);
             return ResponseEntity.ok(response);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             ApiResponse<List<CounsellorHierarchyResponse>> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -89,7 +90,7 @@ public class HierarchyController {
             managerEmployeeHierarchyRepository.save(assignment);
             
             return ResponseEntity.ok(ApiResponse.success("Employee assigned to manager successfully", null));
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
         }
     }
@@ -117,52 +118,21 @@ public class HierarchyController {
                     
                     // Check if user has the specified role
                     boolean userHasRole = user.getRole() != null && user.getRole().getId().equals(request.getRoleId());
-                    
+
                     if (!userHasRole) {
                         errorMessages.append("User ").append(userId).append(" does not have the specified role. ");
                         failureCount++;
                         continue;
                     }
-                    
-                    // Check if employee is already assigned to a manager
-                    if (managerEmployeeHierarchyRepository.existsByEmployeeId(userId)) {
-                        errorMessages.append("User ").append(userId).append(" is already assigned to a manager. ");
+
+                    // Junior counsellors cannot be assigned directly to a manager
+                    if (user.hasRole("JUNIOR_COUNSELLOR")) {
+                        errorMessages.append("User ").append(userId).append(" is a Junior Counsellor and cannot be assigned directly to a Manager. Junior Counsellors must be assigned through a Senior Counsellor. ");
                         failureCount++;
                         continue;
                     }
                     
-                    ManagerEmployeeHierarchy assignment = new ManagerEmployeeHierarchy(
-                        request.getManagerId(), 
-                        userId
-                    );
-                    managerEmployeeHierarchyRepository.save(assignment);
-                    
-                    // Also update CompanyDetails.assignedTo if the user is a company
-                    if (user.hasRole("COMPANY")) {
-                        companyDetailsRepository.findByUserId(userId).ifPresent(companyDetails -> {
-                            companyDetails.setAssignedTo(manager);
-                            companyDetailsRepository.save(companyDetails);
-                        });
-                    }
-                    
-                    // Also update ReferralAssignment if the user is a referral
-                    if (user.hasRole("REFERRAL")) {
-                        // Remove existing assignments for this referral
-                        referralAssignmentRepository.deleteByReferralId(userId);
-                        
-                        // Create new assignment to the manager
-                        ReferralAssignment referralAssignment = new ReferralAssignment(user, manager);
-                        referralAssignment.setCreatedBy(currentUser.getId());
-                        referralAssignment.setUpdatedBy(currentUser.getId());
-                        referralAssignmentRepository.save(referralAssignment);
-                    }
-                    
-                    // Also update EmployeeDetails.assignedTo if the user has employee details
-                    employeeDetailsRepository.findByUserId(userId).ifPresent(employeeDetails -> {
-                        employeeDetails.setAssignedTo(manager);
-                        employeeDetailsRepository.save(employeeDetails);
-                    });
-                    
+                    hierarchyService.assignEmployeeToManager(user, manager, currentUser);
                     successCount++;
                     
                 } catch (Exception e) {
@@ -170,16 +140,16 @@ public class HierarchyController {
                     failureCount++;
                 }
             }
-            
+
             String message = String.format("Assignment completed. Successfully assigned %d employees, %d failed.", successCount, failureCount);
             if (failureCount > 0) {
                 message += " Errors: " + errorMessages.toString();
-                return ResponseEntity.badRequest().body(ApiResponse.error(message));
+                return ResponseEntity.badRequest().body(ApiResponse.badRequest(message));
             }
-            
+
             return ResponseEntity.ok(ApiResponse.success(message, null));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+            return ResponseEntity.badRequest().body(ApiResponse.badRequest(e.getMessage()));
         }
     }
 
@@ -191,7 +161,7 @@ public class HierarchyController {
                 return ResponseEntity.ok(ApiResponse.success("Employee is not assigned to any manager", null));
             }
             return ResponseEntity.ok(ApiResponse.success("Manager retrieved successfully", managerId));
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
         }
     }
@@ -227,7 +197,7 @@ public class HierarchyController {
                     counsellorHierarchyRepository.save(assignment);
                     successCount++;
                     
-                } catch (Exception e) {
+                } catch (BusinessException e) {
                     errorMessages.append("Error assigning junior counsellor ").append(juniorCounsellorId).append(": ").append(e.getMessage()).append(". ");
                     failureCount++;
                 }
@@ -240,7 +210,7 @@ public class HierarchyController {
             }
             
             return ResponseEntity.ok(ApiResponse.success(message, null));
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
         }
     }
@@ -251,7 +221,7 @@ public class HierarchyController {
         try {
             counsellorHierarchyRepository.deleteByJuniorCounsellor_Id(juniorCounsellorId);
             return ResponseEntity.ok(ApiResponse.success("Junior counsellor unassigned from senior counsellor successfully", null));
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
         }
     }
@@ -283,7 +253,7 @@ public class HierarchyController {
             
             managerEmployeeHierarchyRepository.deleteByEmployeeId(employeeId);
             return ResponseEntity.ok(ApiResponse.success("Employee unassigned from manager successfully", null));
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
         }
     }
@@ -296,7 +266,7 @@ public class HierarchyController {
                 return ResponseEntity.ok(ApiResponse.success("Junior counsellor is not assigned to any senior counsellor", null));
             }
             return ResponseEntity.ok(ApiResponse.success("Senior counsellor retrieved successfully", seniorCounsellorId.get()));
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
         }
     }
@@ -351,7 +321,7 @@ public class HierarchyController {
             
             ApiResponse<List<SeniorCounsellorResponse>> response = ApiResponse.success(message, userResponses);
             return ResponseEntity.ok(response);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             ApiResponse<List<SeniorCounsellorResponse>> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -388,7 +358,7 @@ public class HierarchyController {
             
             ApiResponse<List<JuniorCounsellorResponse>> response = ApiResponse.success(message, juniorCounsellorResponses);
             return ResponseEntity.ok(response);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             ApiResponse<List<JuniorCounsellorResponse>> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -419,7 +389,7 @@ public class HierarchyController {
             
             ApiResponse<List<SeniorCounsellorResponse>> response = ApiResponse.success("Users retrieved successfully", userResponses);
             return ResponseEntity.ok(response);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             ApiResponse<List<SeniorCounsellorResponse>> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }

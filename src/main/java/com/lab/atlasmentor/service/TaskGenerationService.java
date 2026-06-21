@@ -1,5 +1,6 @@
 package com.lab.atlasmentor.service;
 
+import com.lab.atlasmentor.exception.BusinessException;
 import com.lab.atlasmentor.enums.TaskSource;
 import com.lab.atlasmentor.enums.TaskStatus;
 import com.lab.atlasmentor.enums.Priority;
@@ -127,10 +128,11 @@ public class TaskGenerationService {
         task.setExecutionDate(executionDate);
         task.setIsDeleted(false);
         
-        // Set due date based on bundle task configuration
+        // Set due date: use defaultDueDays if configured, otherwise fall back to execution date
         if (bundleTask.getDefaultDueDays() != null && bundleTask.getDefaultDueDays() > 0) {
-            LocalDate dueDate = executionDate.plusDays(bundleTask.getDefaultDueDays());
-            task.setDueDate(dueDate);
+            task.setDueDate(executionDate.plusDays(bundleTask.getDefaultDueDays()));
+        } else {
+            task.setDueDate(executionDate);
         }
         
         // Set branch from user
@@ -171,7 +173,7 @@ public class TaskGenerationService {
                 .orElseThrow(() -> new RuntimeException("Task bundle not found with ID: " + bundleId));
         
         if (!bundle.isActive()) {
-            throw new RuntimeException("Task bundle is not active or is deleted");
+            throw new BusinessException("Task bundle is not active or is deleted");
         }
         
         return generateTasksForBundle(bundle, executionDate);
@@ -186,7 +188,7 @@ public class TaskGenerationService {
                 .orElseThrow(() -> new RuntimeException("User not found with ID: " + userId));
         
         if (user.getRole() == null) {
-            throw new RuntimeException("User has no role assigned");
+            throw new BusinessException("User has no role assigned");
         }
         
         // Get all active bundles for user's role

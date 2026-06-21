@@ -1,5 +1,6 @@
 package com.lab.atlasmentor.service;
 
+import com.lab.atlasmentor.exception.BusinessException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
@@ -111,7 +112,7 @@ public class EmailService {
             helper.setText(htmlContent, true);
             mailSender.send(mimeMessage);
         } catch (Exception e) {
-            throw new RuntimeException("Failed to send verification email", e);
+            throw new BusinessException("Failed to send verification email", e);
         }
     }
 
@@ -207,7 +208,7 @@ public class EmailService {
             helper.setText(htmlContent, true);
             mailSender.send(mimeMessage);
         } catch (Exception e) {
-            throw new RuntimeException("Failed to send password reset email", e);
+            throw new BusinessException("Failed to send password reset email", e);
         }
     }
 
@@ -317,7 +318,7 @@ public class EmailService {
             helper.setText(htmlContent, true);
             mailSender.send(mimeMessage);
         } catch (Exception e) {
-            throw new RuntimeException("Failed to send login credentials email", e);
+            throw new BusinessException("Failed to send login credentials email", e);
         }
     }
 }

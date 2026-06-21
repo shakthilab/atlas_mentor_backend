@@ -1,5 +1,6 @@
 package com.lab.atlasmentor.service;
 
+import com.lab.atlasmentor.exception.BusinessException;
 import com.lab.atlasmentor.dto.PaymentDisputeActivityDto;
 import com.lab.atlasmentor.dto.PaymentTransactionDto;
 import com.lab.atlasmentor.dto.UserInfoDto;
@@ -8,6 +9,7 @@ import com.lab.atlasmentor.repository.*;
 import com.lab.atlasmentor.enums.*;
 import com.lab.atlasmentor.security.SecurityUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
@@ -20,6 +22,7 @@ import java.util.Optional;
 import java.util.Map;
 import java.util.UUID;
 
+@Slf4j
 @Service
 public class FinalPaymentService {
 
@@ -53,7 +56,10 @@ public class FinalPaymentService {
 
     @Autowired
     private ObjectMapper objectMapper;
-    
+
+    @Autowired
+    private FinancialAuditService financialAuditService;
+
     @Autowired
     private ClientPayoutService clientPayoutService;
 
@@ -71,7 +77,7 @@ public class FinalPaymentService {
         // Check if payment already exists
         Optional<StudentPayment> existingPayment = studentPaymentRepository.findActiveByStudentId(studentId);
         if (existingPayment.isPresent()) {
-            throw new RuntimeException("Student payment already exists for student: " + studentId);
+            throw new BusinessException("Student payment already exists for student: " + studentId);
         }
 
         // Create student payment
@@ -112,7 +118,7 @@ public class FinalPaymentService {
         
         // Only ADMIN and MANAGER/BRANCH_PARTNER can assign amounts
         if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole))) {
-            throw new RuntimeException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can assign amounts.");
+            throw new BusinessException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can assign amounts.");
         }
 
         StudentPayment studentPayment = studentPaymentRepository.findActiveByStudentId(studentId)
@@ -125,7 +131,7 @@ public class FinalPaymentService {
 
         // Check if amount is already locked
         if (Boolean.TRUE.equals(studentPayment.getIsAmountLocked())) {
-            throw new RuntimeException("Amount is locked. Cannot modify without approval.");
+            throw new BusinessException("Amount is locked. Cannot modify without approval.");
         }
 
         BigDecimal oldAmount = studentPayment.getAssignedAmount();
@@ -146,7 +152,7 @@ public class FinalPaymentService {
             
             return savedPayment;
         } catch (ObjectOptimisticLockingFailureException e) {
-            throw new RuntimeException("Concurrent modification detected. Please refresh and try again.", e);
+            throw new BusinessException("Concurrent modification detected. Please refresh and try again.", e);
         }
     }
 
@@ -161,7 +167,7 @@ public class FinalPaymentService {
         
         // Only ADMIN and MANAGER/BRANCH_PARTNER can add payment transactions
         if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole))) {
-            throw new RuntimeException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can add payment transactions.");
+            throw new BusinessException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can add payment transactions.");
         }
 
         StudentPayment studentPayment = studentPaymentRepository.findActiveByStudentId(studentId)
@@ -174,12 +180,12 @@ public class FinalPaymentService {
 
         // Prevent payments if already fully paid
         if (studentPayment.getPaymentStatus() == StudentPaymentStatus.PAID) {
-            throw new RuntimeException("Payment is already fully paid. No further payments can be made.");
+            throw new BusinessException("Payment is already fully paid. No further payments can be made.");
         }
 
         // Validate amount
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new RuntimeException("Payment amount must be positive.");
+            throw new BusinessException("Payment amount must be positive.");
         }
 
         // Overpayment protection for CREDIT transactions
@@ -188,7 +194,7 @@ public class FinalPaymentService {
             BigDecimal newTotal = currentTotal.add(amount);
             
             if (studentPayment.getAssignedAmount() != null && newTotal.compareTo(studentPayment.getAssignedAmount()) > 0) {
-                throw new RuntimeException("Transaction would exceed assigned amount. Current total: " + currentTotal + 
+                throw new BusinessException("Transaction would exceed assigned amount. Current total: " + currentTotal + 
                                          ", Transaction amount: " + amount + ", Assigned amount: " + studentPayment.getAssignedAmount());
             }
         }
@@ -222,7 +228,7 @@ public class FinalPaymentService {
             
             return savedTransaction;
         } catch (ObjectOptimisticLockingFailureException e) {
-            throw new RuntimeException("Concurrent modification detected. Please refresh and try again.", e);
+            throw new BusinessException("Concurrent modification detected. Please refresh and try again.", e);
         }
     }
 
@@ -236,7 +242,7 @@ public class FinalPaymentService {
         
         // Only ADMIN and MANAGER/BRANCH_PARTNER can request amount changes
         if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole))) {
-            throw new RuntimeException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can request amount changes.");
+            throw new BusinessException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can request amount changes.");
         }
 
         StudentPayment studentPayment = studentPaymentRepository.findActiveByStudentId(studentId)
@@ -250,7 +256,7 @@ public class FinalPaymentService {
         // Check if there's already a pending request
         Optional<PaymentAmountChange> existingRequest = paymentAmountChangeRepository.findPendingByStudentId(studentId);
         if (existingRequest.isPresent()) {
-            throw new RuntimeException("There is already a pending amount change request for this student.");
+            throw new BusinessException("There is already a pending amount change request for this student.");
         }
 
         // Create amount change request
@@ -282,7 +288,7 @@ public class FinalPaymentService {
         // Check approval configuration
         Optional<ApprovalConfig> config = approvalConfigRepository.findActiveByActionType(ApprovalActionType.AMOUNT_CHANGE);
         if (config.isEmpty()) {
-            throw new RuntimeException("Approval configuration not found for amount changes.");
+            throw new BusinessException("Approval configuration not found for amount changes.");
         }
 
         PaymentAmountChange amountChange = paymentAmountChangeRepository.findById(changeRequestId)
@@ -290,19 +296,19 @@ public class FinalPaymentService {
 
         // Self-approval prevention
         if (amountChange.getRequestedBy().equals(currentUserDetails.getUserId())) {
-            throw new RuntimeException("Self-approval is not allowed. You cannot approve your own requests.");
+            throw new BusinessException("Self-approval is not allowed. You cannot approve your own requests.");
         }
 
         // Validate access based on role and student
         validateAmountChangeAccess(amountChange, userRole, currentUserDetails.getUserId());
 
         if (!amountChange.isPending()) {
-            throw new RuntimeException("This request is already processed.");
+            throw new BusinessException("This request is already processed.");
         }
 
         // Check if user can approve based on configuration
         if (!canApproveRequest(amountChange, config.get(), currentUserDetails.getUserId(), userRole)) {
-            throw new RuntimeException("You don't have sufficient privileges to approve this request.");
+            throw new BusinessException("You don't have sufficient privileges to approve this request.");
         }
 
         try {
@@ -327,7 +333,7 @@ public class FinalPaymentService {
             
             return amountChange;
         } catch (ObjectOptimisticLockingFailureException e) {
-            throw new RuntimeException("Concurrent modification detected. Please refresh and try again.", e);
+            throw new BusinessException("Concurrent modification detected. Please refresh and try again.", e);
         }
     }
 
@@ -341,7 +347,7 @@ public class FinalPaymentService {
         
         // Only ADMIN and MANAGER/BRANCH_PARTNER can request status changes
         if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole))) {
-            throw new RuntimeException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can request status changes.");
+            throw new BusinessException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can request status changes.");
         }
 
         StudentPayment studentPayment = studentPaymentRepository.findActiveByStudentId(studentId)
@@ -354,7 +360,7 @@ public class FinalPaymentService {
 
         // Reason is mandatory for rejection requests
         if (StudentStatusEnhanced.REJECTED.equals(newStatus) && (reason == null || reason.trim().isEmpty())) {
-            throw new RuntimeException("Reason is mandatory for rejection requests.");
+            throw new BusinessException("Reason is mandatory for rejection requests.");
         }
 
         // For REJECTED status, create REJECTED_PENDING instead
@@ -366,7 +372,7 @@ public class FinalPaymentService {
         Optional<StudentStatusApproval> existingRequest = studentStatusApprovalRepository
                 .findPendingByStudentIdAndRequestedStatus(studentId, requestedStatus);
         if (existingRequest.isPresent()) {
-            throw new RuntimeException("There is already a pending status change request for this student.");
+            throw new BusinessException("There is already a pending status change request for this student.");
         }
 
         // Create status change request
@@ -398,7 +404,7 @@ public class FinalPaymentService {
         // Check approval configuration
         Optional<ApprovalConfig> config = approvalConfigRepository.findActiveByActionType(ApprovalActionType.REJECTION);
         if (config.isEmpty()) {
-            throw new RuntimeException("Approval configuration not found for status changes.");
+            throw new BusinessException("Approval configuration not found for status changes.");
         }
 
         StudentStatusApproval statusApproval = studentStatusApprovalRepository.findById(approvalRequestId)
@@ -406,19 +412,19 @@ public class FinalPaymentService {
 
         // Self-approval prevention
         if (statusApproval.getRequestedBy().equals(currentUserDetails.getUserId())) {
-            throw new RuntimeException("Self-approval is not allowed. You cannot approve your own requests.");
+            throw new BusinessException("Self-approval is not allowed. You cannot approve your own requests.");
         }
 
         // Validate access based on role and student source
         validateStatusApprovalAccess(statusApproval, userRole, currentUserDetails.getUserId());
 
         if (!statusApproval.isPending()) {
-            throw new RuntimeException("This request is already processed.");
+            throw new BusinessException("This request is already processed.");
         }
 
         // Check if user can approve based on configuration
         if (!canApproveRequest(statusApproval, config.get(), currentUserDetails.getUserId(), userRole)) {
-            throw new RuntimeException("You don't have sufficient privileges to approve this request.");
+            throw new BusinessException("You don't have sufficient privileges to approve this request.");
         }
 
         try {
@@ -443,7 +449,7 @@ public class FinalPaymentService {
             
             return statusApproval;
         } catch (ObjectOptimisticLockingFailureException e) {
-            throw new RuntimeException("Concurrent modification detected. Please refresh and try again.", e);
+            throw new BusinessException("Concurrent modification detected. Please refresh and try again.", e);
         }
     }
 
@@ -458,7 +464,7 @@ public class FinalPaymentService {
         if (!("ADMIN".equalsIgnoreCase(userRole) || 
               (sourceType == SourceType.REFERRAL && "REFERRAL".equalsIgnoreCase(userRole) && sourceId.equals(currentUserDetails.getUserId())) ||
               (sourceType == SourceType.COMPANY && "COMPANY".equalsIgnoreCase(userRole) && sourceId.equals(currentUserDetails.getUserId())))) {
-            throw new RuntimeException("Access denied");
+            throw new BusinessException("Access denied");
         }
 
         List<StudentPayment> payments = studentPaymentRepository.findBySourceIdAndSourceType(sourceId, sourceType);
@@ -508,11 +514,11 @@ public class FinalPaymentService {
         Long managerBranchId = currentUserDetails.getBranchId();
         
         if (managerBranchId == null) {
-            throw new RuntimeException("Manager must be assigned to a branch");
+            throw new BusinessException("Manager must be assigned to a branch");
         }
         
         if (!managerBranchId.equals(studentBranchId)) {
-            throw new RuntimeException("Access denied. You can only manage payments from your branch.");
+            throw new BusinessException("Access denied. You can only manage payments from your branch.");
         }
     }
 
@@ -527,12 +533,12 @@ public class FinalPaymentService {
         } else if ("REFERRAL".equalsIgnoreCase(userRole)) {
             if (!SourceType.REFERRAL.equals(studentPayment.getSourceType()) || 
                 !userId.equals(studentPayment.getSourceId())) {
-                throw new RuntimeException("Access denied. You can only approve your own student requests.");
+                throw new BusinessException("Access denied. You can only approve your own student requests.");
             }
         } else if ("COMPANY".equalsIgnoreCase(userRole)) {
             if (!SourceType.COMPANY.equals(studentPayment.getSourceType()) || 
                 !userId.equals(studentPayment.getSourceId())) {
-                throw new RuntimeException("Access denied. You can only approve your own student requests.");
+                throw new BusinessException("Access denied. You can only approve your own student requests.");
             }
         }
     }
@@ -546,7 +552,7 @@ public class FinalPaymentService {
         } else if ("MANAGER".equalsIgnoreCase(userRole)) {
             validateManagerBranchAccess(studentPayment.getBranchId());
         } else {
-            throw new RuntimeException("Access denied. Only ADMIN and MANAGER can approve amount changes.");
+            throw new BusinessException("Access denied. Only ADMIN and MANAGER can approve amount changes.");
         }
     }
 
@@ -573,23 +579,44 @@ public class FinalPaymentService {
         return UUID.randomUUID().toString().substring(0, 8);
     }
 
-    private void createAuditLog(Student student, PaymentAuditAction action, String oldValue, String newValue, 
+    private void createAuditLog(Student student, PaymentAuditAction action, String oldValue, String newValue,
                                String entityName, Long doneBy, String requestId, String remarks) {
+        // Tamper-evident audit — this MUST succeed; failure rolls back the enclosing transaction.
+        financialAuditService.record(
+                toFinancialAction(action),
+                entityName,
+                student.getId(),
+                doneBy,
+                oldValue,
+                newValue,
+                remarks);
+
+        // Legacy PaymentAudit — best-effort, kept for operational dashboards.
         try {
-            // Create structured audit data
             Map<String, Object> oldData = oldValue != null ? Map.of("value", oldValue) : null;
             Map<String, Object> newData = newValue != null ? Map.of("value", newValue) : null;
-            
             String oldJson = oldData != null ? objectMapper.writeValueAsString(oldData) : null;
             String newJson = newData != null ? objectMapper.writeValueAsString(newData) : null;
-            
-            PaymentAudit audit = new PaymentAudit(student, action, oldValue, newValue, 
-                                                oldJson, newJson, entityName, doneBy, requestId, remarks);
+            PaymentAudit audit = new PaymentAudit(student, action, oldValue, newValue,
+                                                  oldJson, newJson, entityName, doneBy, requestId, remarks);
             paymentAuditRepository.save(audit);
         } catch (Exception e) {
-            // Log error but don't fail the operation
-            System.err.println("Failed to create audit log: " + e.getMessage());
+            log.warn("Failed to write legacy PaymentAudit for action {}: {}", action, e.getMessage());
         }
+    }
+
+    private FinancialAuditAction toFinancialAction(PaymentAuditAction action) {
+        return switch (action) {
+            case STUDENT_CREATED          -> FinancialAuditAction.PAYMENT_RECORD_CREATED;
+            case AMOUNT_ASSIGNED          -> FinancialAuditAction.PAYMENT_AMOUNT_ASSIGNED;
+            case PAYMENT_UPDATED          -> FinancialAuditAction.PAYMENT_TRANSACTION_ADDED;
+            case AMOUNT_CHANGE_REQUESTED  -> FinancialAuditAction.PAYMENT_AMOUNT_CHANGE_REQUESTED;
+            case AMOUNT_CHANGE_APPROVED   -> FinancialAuditAction.PAYMENT_AMOUNT_CHANGE_APPROVED;
+            case REJECTION_REQUESTED      -> FinancialAuditAction.PAYMENT_STATUS_CHANGE_REQUESTED;
+            case REJECTION_APPROVED       -> FinancialAuditAction.PAYMENT_STATUS_CHANGE_APPROVED;
+            case REJECTION_REJECTED       -> FinancialAuditAction.PAYMENT_STATUS_CHANGE_REJECTED;
+            default                       -> FinancialAuditAction.PAYMENT_RECORD_CREATED;
+        };
     }
 
     // ==================== QUERY METHODS ====================
@@ -610,7 +637,7 @@ public class FinalPaymentService {
         } else if ("COMPANY".equalsIgnoreCase(userRole)) {
             return studentPaymentRepository.findBySourceIdAndSourceType(currentUserDetails.getUserId(), SourceType.COMPANY);
         } else {
-            throw new RuntimeException("Access denied");
+            throw new BusinessException("Access denied");
         }
     }
 
@@ -624,7 +651,7 @@ public class FinalPaymentService {
                 .orElseThrow(() -> new RuntimeException("Student payment not found"));
 
         if (!canAccessStudent(studentPayment, userRole, currentUserDetails.getUserId())) {
-            throw new RuntimeException("Access denied");
+            throw new BusinessException("Access denied");
         }
 
         List<PaymentTransaction> transactions = paymentTransactionRepository.findActiveByStudentIdOrderByCreatedAtDesc(studentId);

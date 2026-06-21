@@ -1,4 +1,5 @@
 package com.lab.atlasmentor.controller;
+import com.lab.atlasmentor.exception.BusinessException;
 
 import com.lab.atlasmentor.dto.ApiResponse;
 import com.lab.atlasmentor.dto.ClientPayoutDto;
@@ -42,7 +43,7 @@ public class ClientPayoutController {
                 .collect(Collectors.toList());
             
             return ResponseEntity.ok(ApiResponse.success("Client payouts retrieved successfully", payoutDtos));
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.badRequest().body(ApiResponse.badRequest(e.getMessage()));
         }
     }
@@ -55,7 +56,7 @@ public class ClientPayoutController {
             ClientPayoutDto payoutDto = convertToDto(payout);
             
             return ResponseEntity.ok(ApiResponse.success("Client payout retrieved successfully", payoutDto));
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.badRequest().body(ApiResponse.badRequest(e.getMessage()));
         }
     }
@@ -70,7 +71,7 @@ public class ClientPayoutController {
                 .collect(Collectors.toList());
             
             return ResponseEntity.ok(ApiResponse.success("Payout activities retrieved successfully", activityDtos));
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.badRequest().body(ApiResponse.badRequest(e.getMessage()));
         }
     }
@@ -84,7 +85,7 @@ public class ClientPayoutController {
             ClientPayout updatedPayout = clientPayoutService.initiateDispute(payoutId, request.getDisputeReason());
             ClientPayoutDto payoutDto = convertToDto(updatedPayout);
             return ResponseEntity.ok(ApiResponse.success("Dispute initiated successfully", payoutDto));
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.badRequest().body(ApiResponse.badRequest(e.getMessage()));
         }
     }
@@ -101,7 +102,7 @@ public class ClientPayoutController {
             ClientPayoutDto payoutDto = convertToDto(payout);
             
             return ResponseEntity.ok(ApiResponse.success("Amount assigned successfully", payoutDto));
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.badRequest().body(ApiResponse.badRequest(e.getMessage()));
         }
     }
@@ -124,7 +125,7 @@ public class ClientPayoutController {
             ClientPayoutDto payoutDto = convertToDto(payout);
             
             return ResponseEntity.ok(ApiResponse.success("Payment added successfully", payoutDto));
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.badRequest().body(ApiResponse.badRequest(e.getMessage()));
         }
     }
@@ -141,7 +142,7 @@ public class ClientPayoutController {
             ClientPayoutDto payoutDto = convertToDto(payout);
             
             return ResponseEntity.ok(ApiResponse.success("Dispute initiated successfully", payoutDto));
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.badRequest().body(ApiResponse.badRequest(e.getMessage()));
         }
     }
@@ -156,7 +157,7 @@ public class ClientPayoutController {
             ClientPayoutDto payoutDto = convertToDto(payout);
             
             return ResponseEntity.ok(ApiResponse.success("Dispute accepted successfully", payoutDto));
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.badRequest().body(ApiResponse.badRequest(e.getMessage()));
         }
     }
@@ -171,7 +172,7 @@ public class ClientPayoutController {
             ClientPayoutDto payoutDto = convertToDto(payout);
             
             return ResponseEntity.ok(ApiResponse.success("Dispute rejected successfully", payoutDto));
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.badRequest().body(ApiResponse.badRequest(e.getMessage()));
         }
     }
@@ -187,7 +188,7 @@ public class ClientPayoutController {
         try {
             // Implementation for summary report
             return ResponseEntity.ok(ApiResponse.success("Summary report retrieved successfully", null));
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.badRequest().body(ApiResponse.badRequest(e.getMessage()));
         }
     }

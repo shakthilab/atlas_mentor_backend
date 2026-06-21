@@ -23,11 +23,11 @@ public class ReferralResourceController {
 
     @PostMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
-    public ResponseEntity<List<ReferralResourceResponse>> createResource(
+    public ResponseEntity<ReferralResourceResponse> createResource(
             @Valid @RequestBody ReferralResourceRequest request) {
-        
-        List<ReferralResourceResponse> responses = referralResourceService.createResource(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(responses);
+
+        ReferralResourceResponse response = referralResourceService.createResource(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @PutMapping("/{id}")
@@ -67,7 +67,7 @@ public class ReferralResourceController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'REFERRAL', 'COMPANY')")
     public ResponseEntity<PageResponse<ReferralResourceResponse>> getAllResources(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,

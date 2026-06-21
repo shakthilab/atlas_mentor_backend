@@ -3,6 +3,7 @@ package com.lab.atlasmentor.repository;
 import com.lab.atlasmentor.model.TaskActivity;
 import com.lab.atlasmentor.enums.TaskAction;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -23,4 +24,8 @@ public interface TaskActivityRepository extends JpaRepository<TaskActivity, Long
 
     @Query("SELECT ta FROM TaskActivity ta WHERE ta.action = :action ORDER BY ta.createdAt DESC")
     List<TaskActivity> findByActionOrderByCreatedAtDesc(@Param("action") TaskAction action);
+
+    @Modifying
+    @Query("DELETE FROM TaskActivity ta WHERE ta.doneBy.id = :userId")
+    void deleteByDoneByUserId(@Param("userId") Long userId);
 }

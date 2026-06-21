@@ -22,11 +22,12 @@ public class EmployeeResponse {
     private Long updatedBy;
     private MobileCountryCodeDto mobileCountryCode;
     private TaskCount taskCount;
+    private ManagerDto manager;
 
     public EmployeeResponse() {}
 
     public EmployeeResponse(Long id, String firstName, String lastName, String email, String phone, Long branchId, BranchDto branch,
-                         String status, Boolean isVerified, RoleDto role, 
+                         String status, Boolean isVerified, RoleDto role,
                          LocalDateTime createdAt, LocalDateTime updatedAt, Long createdBy, Long updatedBy,
                          MobileCountryCodeDto mobileCountryCode, TaskCount taskCount) {
         this.id = id;
@@ -95,6 +96,28 @@ public class EmployeeResponse {
 
     public TaskCount getTaskCount() { return taskCount; }
     public void setTaskCount(TaskCount taskCount) { this.taskCount = taskCount; }
+
+    public ManagerDto getManager() { return manager; }
+    public void setManager(ManagerDto manager) { this.manager = manager; }
+
+    // ManagerDto nested class
+    public static class ManagerDto {
+        private Long id;
+        private String name;
+
+        public ManagerDto() {}
+
+        public ManagerDto(Long id, String name) {
+            this.id = id;
+            this.name = name;
+        }
+
+        public Long getId() { return id; }
+        public void setId(Long id) { this.id = id; }
+
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+    }
 
     // TaskCount nested class
     public static class TaskCount {

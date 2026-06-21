@@ -58,4 +58,36 @@ public interface StudentPaymentRepository extends JpaRepository<StudentPayment, 
     @Modifying
     @Query("DELETE FROM StudentPayment sp WHERE sp.student.id = :studentId")
     void deleteByStudentId(@Param("studentId") Long studentId);
+
+    // ==================== DASHBOARD QUERIES ====================
+
+    @Query(value = "SELECT COALESCE(SUM(assigned_amount), 0) as total_billed, COALESCE(SUM(paid_amount), 0) as total_paid " +
+           "FROM student_payments WHERE is_deleted = false AND assigned_amount IS NOT NULL AND created_at >= :from", nativeQuery = true)
+    List<Object[]> getFinancialSummary(@Param("from") java.time.LocalDateTime from);
+
+    @Query(value = "SELECT TO_CHAR(DATE_TRUNC('month', created_at), 'Mon') as month, " +
+           "payment_status, " +
+           "COALESCE(SUM(CASE WHEN payment_status IN ('PAID','PARTIAL') THEN paid_amount " +
+           "ELSE assigned_amount END), 0) as amount " +
+           "FROM student_payments WHERE is_deleted = false AND assigned_amount IS NOT NULL " +
+           "AND created_at >= :from " +
+           "GROUP BY DATE_TRUNC('month', created_at), payment_status " +
+           "ORDER BY DATE_TRUNC('month', created_at)", nativeQuery = true)
+    List<Object[]> getMonthlyPaymentBreakdown(@Param("from") java.time.LocalDateTime from);
+
+    // ==================== BRANCH-SCOPED DASHBOARD QUERIES ====================
+
+    @Query(value = "SELECT COALESCE(SUM(assigned_amount), 0) as total_billed, COALESCE(SUM(paid_amount), 0) as total_paid " +
+           "FROM student_payments WHERE is_deleted = false AND assigned_amount IS NOT NULL AND branch_id = :branchId AND created_at >= :from", nativeQuery = true)
+    List<Object[]> getFinancialSummaryForBranch(@Param("branchId") Long branchId, @Param("from") java.time.LocalDateTime from);
+
+    @Query(value = "SELECT TO_CHAR(DATE_TRUNC('month', created_at), 'Mon') as month, " +
+           "payment_status, " +
+           "COALESCE(SUM(CASE WHEN payment_status IN ('PAID','PARTIAL') THEN paid_amount " +
+           "ELSE assigned_amount END), 0) as amount " +
+           "FROM student_payments WHERE is_deleted = false AND assigned_amount IS NOT NULL AND branch_id = :branchId " +
+           "AND created_at >= :from " +
+           "GROUP BY DATE_TRUNC('month', created_at), payment_status " +
+           "ORDER BY DATE_TRUNC('month', created_at)", nativeQuery = true)
+    List<Object[]> getMonthlyPaymentBreakdownForBranch(@Param("branchId") Long branchId, @Param("from") java.time.LocalDateTime from);
 }

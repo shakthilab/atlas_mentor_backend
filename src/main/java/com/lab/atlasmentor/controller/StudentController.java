@@ -1,4 +1,5 @@
 package com.lab.atlasmentor.controller;
+import com.lab.atlasmentor.exception.BusinessException;
 
 import com.lab.atlasmentor.dto.*;
 import com.lab.atlasmentor.model.ClientPayout;
@@ -32,7 +33,7 @@ public class StudentController {
                 student
             );
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<Student> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -44,7 +45,7 @@ public class StudentController {
             StudentResponse student = studentService.getStudentByIdAsResponse(id);
             ApiResponse<StudentResponse> response = ApiResponse.success("Student retrieved successfully", student);
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<StudentResponse> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -56,7 +57,7 @@ public class StudentController {
             studentService.deleteStudent(id);
             ApiResponse<String> response = ApiResponse.success("Student and all related data deleted successfully", null);
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<String> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -128,7 +129,7 @@ public class StudentController {
                 ApiResponse<StudentResponse> response = ApiResponse.success("No student found with this email", null);
                 return ResponseEntity.ok(response);
             }
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<StudentResponse> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -141,7 +142,7 @@ public class StudentController {
             String message = student.getUser() != null ? "Student updated successfully" : "Student onboarded successfully";
             ApiResponse<String> response = ApiResponse.success(message, null);
             return ResponseEntity.status(student.getUser() != null ? HttpStatus.OK : HttpStatus.CREATED).body(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             String errorMessage = e.getMessage();
             // Provide specific error messages for common scenarios
             if (errorMessage.contains("Email already exists")) {
@@ -171,7 +172,7 @@ public class StudentController {
             StudentResponse studentResponse = StudentResponse.fromEntity(student);
             ApiResponse<StudentResponse> response = ApiResponse.success("Student updated successfully", studentResponse);
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<StudentResponse> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -184,9 +185,39 @@ public class StudentController {
             StudentResponse studentResponse = StudentResponse.fromEntity(student);
             ApiResponse<StudentResponse> response = ApiResponse.success("Student status updated successfully", studentResponse);
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<StudentResponse> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
+        }
+    }
+
+    @PutMapping("/{id}/active-status")
+    public ResponseEntity<ApiResponse<String>> updateStudentActiveStatus(
+            @PathVariable Long id,
+            @RequestParam String status) {
+        try {
+            if (!status.equalsIgnoreCase("ACTIVE") && !status.equalsIgnoreCase("INACTIVE")) {
+                return ResponseEntity.badRequest().body(ApiResponse.error("Status must be ACTIVE or INACTIVE"));
+            }
+            String action = studentService.updateStudentActiveStatus(id, status);
+            String message;
+            String successMessage;
+            if (action.equals("already_active")) {
+                message = "Student with ID " + id + " is already active";
+                successMessage = "Student already active";
+            } else if (action.equals("already_inactive")) {
+                message = "Student with ID " + id + " is already inactive";
+                successMessage = "Student already inactive";
+            } else if (action.equals("active")) {
+                message = "Student with ID " + id + " has been activated";
+                successMessage = "Student activated successfully";
+            } else {
+                message = "Student with ID " + id + " has been deactivated";
+                successMessage = "Student deactivated successfully";
+            }
+            return ResponseEntity.ok(ApiResponse.success(successMessage, message));
+        } catch (BusinessException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
         }
     }
 
@@ -196,7 +227,7 @@ public class StudentController {
             java.util.List<com.lab.atlasmentor.model.StudentActivity> activities = studentService.getStudentActivities(id);
             ApiResponse<java.util.List<com.lab.atlasmentor.model.StudentActivity>> response = ApiResponse.success("Student activities retrieved successfully", activities);
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<java.util.List<com.lab.atlasmentor.model.StudentActivity>> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -208,7 +239,7 @@ public class StudentController {
             java.util.Map<String, java.util.List<String>> requiredDocuments = studentService.getRequiredDocuments();
             ApiResponse<java.util.Map<String, java.util.List<String>>> response = ApiResponse.success("Required documents retrieved successfully", requiredDocuments);
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<java.util.Map<String, java.util.List<String>>> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -229,7 +260,7 @@ public class StudentController {
                 search, source, branch, paymentStatus, dateFrom, dateTo, page, size);
             ApiResponse<ClientPayoutWithSummaryDto> response = ApiResponse.success("Client payouts with referral and company details retrieved successfully", result);
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<ClientPayoutWithSummaryDto> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -242,7 +273,7 @@ public class StudentController {
             StudentPayment updatedPayment = studentService.updateStudentPaymentAmount(request);
             ApiResponse<StudentPayment> response = ApiResponse.success("Payment amount updated successfully", updatedPayment);
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<StudentPayment> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -256,7 +287,7 @@ public class StudentController {
             ClientPayoutDto payoutDto = studentService.convertToClientPayoutDto(updatedPayout);
             ApiResponse<ClientPayoutDto> response = ApiResponse.success("Client payout amount updated successfully", payoutDto);
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<ClientPayoutDto> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -269,7 +300,7 @@ public class StudentController {
             StudentPayment updatedPayment = studentService.updateStudentPaymentStatus(request);
             ApiResponse<StudentPayment> response = ApiResponse.success("Payment status updated successfully", updatedPayment);
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<StudentPayment> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -281,7 +312,7 @@ public class StudentController {
             StudentPaymentAmountDto paymentAmount = studentService.getStudentPaymentAmount(studentId);
             ApiResponse<StudentPaymentAmountDto> response = ApiResponse.success("Payment amount retrieved successfully", paymentAmount);
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<StudentPaymentAmountDto> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }

@@ -106,7 +106,12 @@ public interface TaskBundleRepository extends JpaRepository<TaskBundle, Long> {
                                     @Param("keyword") String keyword);
 
     /**
-     * Count bundles by status
+     * Count non-deleted bundles by status
      */
-    long countByStatus(BundleStatus status);
+    long countByStatusAndIsDeletedFalse(BundleStatus status);
+
+    /**
+     * Count all non-deleted bundles
+     */
+    long countByIsDeletedFalse();
 }

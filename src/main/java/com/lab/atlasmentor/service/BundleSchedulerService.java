@@ -1,5 +1,6 @@
 package com.lab.atlasmentor.service;
 
+import com.lab.atlasmentor.exception.BusinessException;
 import com.lab.atlasmentor.dto.*;
 import com.lab.atlasmentor.model.*;
 import com.lab.atlasmentor.repository.*;
@@ -157,7 +158,7 @@ public class BundleSchedulerService {
                 .orElseThrow(() -> new RuntimeException("Task bundle not found with ID: " + bundleId));
         
         if (!bundle.isActive()) {
-            throw new RuntimeException("Task bundle is not active");
+            throw new BusinessException("Task bundle is not active");
         }
         
         LocalDateTime executionTime = LocalDateTime.now();
@@ -178,15 +179,8 @@ public class BundleSchedulerService {
         LocalDateTime executionTime = LocalDateTime.now();
 
         if (!bundle.isActive()) {
-            BundleExecutionResponse skipped = new BundleExecutionResponse();
-            skipped.setExecutionDate(executionTime);
-            skipped.setExecutionStatus("SKIPPED");
-            skipped.setErrorMessage("Task bundle is not active");
-            skipped.setUsersCount(0);
-            skipped.setTasksGenerated(0);
-            skipped.setExecutionDurationMs(0L);
-            skipped.setNextExecutionDate(bundle.getNextExecutionAt());
-            return new BundleExecutionResult(skipped, null);
+            throw new com.lab.atlasmentor.exception.BusinessException(
+                    "Cannot execute task bundle '" + bundle.getName() + "': bundle is INACTIVE. Activate it first before executing.");
         }
 
         try {

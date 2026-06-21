@@ -1,4 +1,5 @@
 package com.lab.atlasmentor.controller;
+import com.lab.atlasmentor.exception.BusinessException;
 
 import com.lab.atlasmentor.dto.ApiResponse;
 import com.lab.atlasmentor.dto.ClientPayoutDto;
@@ -58,7 +59,7 @@ public class PaymentDisputeActivityController {
                 .collect(Collectors.toList());
             
             return ResponseEntity.ok(ApiResponse.success("Activities retrieved successfully", activityDtos));
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.badRequest().body(ApiResponse.badRequest(e.getMessage()));
         }
     }
@@ -92,7 +93,7 @@ public class PaymentDisputeActivityController {
 
             ClientPayoutDto payoutDto = convertToDto(updatedPayout);
             return ResponseEntity.ok(ApiResponse.success("Dispute raised successfully", payoutDto));
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.badRequest().body(ApiResponse.badRequest(e.getMessage()));
         }
     }
@@ -106,7 +107,7 @@ public class PaymentDisputeActivityController {
             ClientPayout updatedPayout = clientPayoutService.acceptDispute(payoutId, request.getResponse());
             ClientPayoutDto payoutDto = convertToDto(updatedPayout);
             return ResponseEntity.ok(ApiResponse.success("Dispute accepted successfully", payoutDto));
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.badRequest().body(ApiResponse.badRequest(e.getMessage()));
         }
     }
@@ -120,7 +121,7 @@ public class PaymentDisputeActivityController {
             ClientPayout updatedPayout = clientPayoutService.rejectDispute(payoutId, request.getResponse());
             ClientPayoutDto payoutDto = convertToDto(updatedPayout);
             return ResponseEntity.ok(ApiResponse.success("Dispute rejected successfully", payoutDto));
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ResponseEntity.badRequest().body(ApiResponse.badRequest(e.getMessage()));
         }
     }

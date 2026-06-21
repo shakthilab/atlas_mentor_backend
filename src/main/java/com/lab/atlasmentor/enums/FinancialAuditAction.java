@@ -1,0 +1,31 @@
+package com.lab.atlasmentor.enums;
+
+public enum FinancialAuditAction {
+    // Student payment lifecycle
+    PAYMENT_RECORD_CREATED,
+    PAYMENT_AMOUNT_ASSIGNED,
+    PAYMENT_TRANSACTION_ADDED,
+    PAYMENT_TRANSACTION_REVERSED,
+
+    // Amount change approval workflow
+    PAYMENT_AMOUNT_CHANGE_REQUESTED,
+    PAYMENT_AMOUNT_CHANGE_APPROVED,
+    PAYMENT_AMOUNT_CHANGE_REJECTED,
+
+    // Status change approval workflow
+    PAYMENT_STATUS_CHANGE_REQUESTED,
+    PAYMENT_STATUS_CHANGE_APPROVED,
+    PAYMENT_STATUS_CHANGE_REJECTED,
+
+    // Client payout lifecycle
+    PAYOUT_CREATED,
+    PAYOUT_AMOUNT_ASSIGNED,
+    PAYOUT_PAYMENT_ADDED,
+
+    // Dispute lifecycle
+    PAYOUT_DISPUTE_INITIATED,
+    PAYOUT_DISPUTE_ACCEPTED,
+    PAYOUT_DISPUTE_REJECTED,
+
+    PAYOUT_STATUS_CHANGED
+}

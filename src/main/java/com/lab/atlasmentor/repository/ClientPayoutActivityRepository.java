@@ -5,6 +5,7 @@ import com.lab.atlasmentor.enums.DisputeStage;
 import com.lab.atlasmentor.model.ClientPayout;
 import com.lab.atlasmentor.model.ClientPayoutActivity;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -86,4 +87,16 @@ public interface ClientPayoutActivityRepository extends JpaRepository<ClientPayo
     // Find amount change activities
     @Query("SELECT cpa FROM ClientPayoutActivity cpa WHERE cpa.action = :action AND cpa.oldAmount IS NOT NULL AND cpa.newAmount IS NOT NULL ORDER BY cpa.doneAt DESC")
     List<ClientPayoutActivity> findAmountChangeActivities(@Param("action") ClientPayoutAction action);
+
+    @Modifying
+    @Query("DELETE FROM ClientPayoutActivity cpa WHERE cpa.doneBy.id = :userId")
+    void deleteByDoneByUserId(@Param("userId") Long userId);
+
+    @Modifying
+    @Query("DELETE FROM ClientPayoutActivity cpa WHERE cpa.clientPayout.user.id = :userId")
+    void deleteByClientPayoutUserId(@Param("userId") Long userId);
+
+    @Modifying
+    @Query("DELETE FROM ClientPayoutActivity cpa WHERE cpa.clientPayout.student.id = :studentId")
+    void deleteByStudentId(@Param("studentId") Long studentId);
 }

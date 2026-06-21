@@ -1,4 +1,5 @@
 package com.lab.atlasmentor.controller;
+import com.lab.atlasmentor.exception.BusinessException;
 
 import com.lab.atlasmentor.dto.ApiResponse;
 import com.lab.atlasmentor.model.Country;
@@ -23,7 +24,7 @@ public class CountryController {
             List<Country> countries = countryService.getAllActiveCountries();
             ApiResponse<List<Country>> response = ApiResponse.success("Countries retrieved successfully", countries);
             return ResponseEntity.ok(response);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             ApiResponse<List<Country>> response = ApiResponse.error("Failed to retrieve countries: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
@@ -35,7 +36,7 @@ public class CountryController {
             List<Country> countries = countryService.getAllCountries();
             ApiResponse<List<Country>> response = ApiResponse.success("All countries retrieved successfully", countries);
             return ResponseEntity.ok(response);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             ApiResponse<List<Country>> response = ApiResponse.error("Failed to retrieve countries: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
@@ -53,7 +54,7 @@ public class CountryController {
                     ApiResponse<Country> response = ApiResponse.error("Country not found with id: " + id);
                     return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
                 });
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             ApiResponse<Country> response = ApiResponse.error("Failed to retrieve country: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
@@ -71,7 +72,7 @@ public class CountryController {
                     ApiResponse<Country> response = ApiResponse.error("Country not found with code: " + code);
                     return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
                 });
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             ApiResponse<Country> response = ApiResponse.error("Failed to retrieve country: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
@@ -92,7 +93,7 @@ public class CountryController {
             Country createdCountry = countryService.createCountry(country);
             ApiResponse<Country> response = ApiResponse.success("Country created successfully", createdCountry);
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             ApiResponse<Country> response = ApiResponse.error("Failed to create country: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
@@ -109,7 +110,7 @@ public class CountryController {
                 ApiResponse<Country> response = ApiResponse.error("Country not found with id: " + id);
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
             }
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             ApiResponse<Country> response = ApiResponse.error("Failed to update country: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
@@ -126,7 +127,7 @@ public class CountryController {
                 ApiResponse<String> response = ApiResponse.error("Country not found with id: " + id);
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
             }
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             ApiResponse<String> response = ApiResponse.error("Failed to delete country: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }

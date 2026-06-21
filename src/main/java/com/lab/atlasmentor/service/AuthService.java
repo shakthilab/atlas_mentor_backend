@@ -1,5 +1,6 @@
 package com.lab.atlasmentor.service;
 
+import com.lab.atlasmentor.exception.BusinessException;
 import com.lab.atlasmentor.dto.AuthResponse;
 import com.lab.atlasmentor.dto.EmployeeEditRequest;
 import com.lab.atlasmentor.dto.EmployeeRequest;
@@ -7,6 +8,7 @@ import com.lab.atlasmentor.dto.EmployeeResponse;
 import com.lab.atlasmentor.dto.LoginRequest;
 import com.lab.atlasmentor.dto.PageResponse;
 import com.lab.atlasmentor.dto.RegisterRequest;
+import com.lab.atlasmentor.exception.TooManyRequestsException;
 import com.lab.atlasmentor.enums.EmployeeType;
 import com.lab.atlasmentor.enums.TaskStatus;
 import com.lab.atlasmentor.enums.UserStatus;
@@ -15,9 +17,18 @@ import com.lab.atlasmentor.model.EmployeeDetails;
 import com.lab.atlasmentor.model.MobileCountryCode;
 import com.lab.atlasmentor.model.Role;
 import com.lab.atlasmentor.model.User;
+import com.lab.atlasmentor.repository.BranchRepository;
+import com.lab.atlasmentor.repository.ClientPayoutActivityRepository;
+import com.lab.atlasmentor.repository.ClientPayoutRepository;
 import com.lab.atlasmentor.repository.CounsellorHierarchyRepository;
+import com.lab.atlasmentor.repository.DocumentRepository;
 import com.lab.atlasmentor.repository.EmployeeDetailsRepository;
 import com.lab.atlasmentor.repository.MobileCountryCodeRepository;
+import com.lab.atlasmentor.repository.RefreshTokenRepository;
+import com.lab.atlasmentor.repository.StudentActivityRepository;
+import com.lab.atlasmentor.repository.StudentRepository;
+import com.lab.atlasmentor.repository.TaskActivityRepository;
+import com.lab.atlasmentor.repository.TaskCommentRepository;
 import com.lab.atlasmentor.repository.TaskRepository;
 import com.lab.atlasmentor.repository.UserRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -36,6 +47,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -79,14 +91,45 @@ public class AuthService {
     private MobileCountryCodeRepository mobileCountryCodeRepository;
 
     @Autowired
+    private RefreshTokenService refreshTokenService;
+
+    @Autowired
+    private RefreshTokenRepository refreshTokenRepository;
+
+    @Autowired
     private TaskRepository taskRepository;
 
     @Autowired
     private CounsellorHierarchyRepository counsellorHierarchyRepository;
 
+    @Autowired
+    private TaskActivityRepository taskActivityRepository;
+
+    @Autowired
+    private TaskCommentRepository taskCommentRepository;
+
+    @Autowired
+    private StudentActivityRepository studentActivityRepository;
+
+    @Autowired
+    private ClientPayoutActivityRepository clientPayoutActivityRepository;
+
+    @Autowired
+    private ClientPayoutRepository clientPayoutRepository;
+
+    @Autowired
+    private BranchRepository branchRepository;
+
+    @Autowired
+    private StudentRepository studentRepository;
+
+    @Autowired
+    private DocumentRepository documentRepository;
+
+    @Transactional
     public User register(RegisterRequest registerRequest) {
         if (userRepository.existsByEmail(registerRequest.getEmail())) {
-            throw new RuntimeException("Email already exists");
+            throw new BusinessException("Email already exists");
         }
 
         User user = new User();
@@ -112,9 +155,10 @@ public class AuthService {
         return savedUser;
     }
 
+    @Transactional
     public EmployeeResponse createEmployee(EmployeeRequest employeeRequest, HttpServletRequest request) {
         if (userRepository.existsByEmail(employeeRequest.getEmail())) {
-            throw new RuntimeException("Email already exists");
+            throw new BusinessException("Email already exists");
         }
 
         // Generate random password
@@ -188,6 +232,10 @@ public class AuthService {
                 case "WEB_DEV":
                     employeeType = EmployeeType.WEB_DEV;
                     break;
+                case "REFERRAL":
+                case "STUDENT":
+                    // Non-employee roles — skip employee_details creation
+                    return convertToEmployeeResponse(savedUser);
                 default:
                     employeeType = EmployeeType.JUNIOR_COUNSELLOR;
                     break;
@@ -231,30 +279,87 @@ public class AuthService {
         return convertToEmployeeResponse(savedUser);
     }
 
+    private static final int MAX_LOGIN_FAILURES = 5;
+    private static final long LOCKOUT_MINUTES = 30;
+
+    @Transactional
     public AuthResponse login(LoginRequest loginRequest) {
         User user = userRepository.findByEmail(loginRequest.getEmail())
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new RuntimeException("Invalid credentials"));
+
+        // Check if account is temporarily locked
+        if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(LocalDateTime.now())) {
+            long minutesLeft = ChronoUnit.MINUTES.between(LocalDateTime.now(), user.getLockedUntil()) + 1;
+            long secondsLeft = ChronoUnit.SECONDS.between(LocalDateTime.now(), user.getLockedUntil());
+            throw new TooManyRequestsException(
+                "Account locked due to too many failed attempts. Try again in " + minutesLeft + " minute(s).",
+                secondsLeft
+            );
+        }
 
         if (!passwordEncoder.matches(loginRequest.getPassword(), user.getPassword())) {
-            throw new RuntimeException("Invalid password");
+            int attempts = user.getFailedLoginAttempts() + 1;
+            if (attempts >= MAX_LOGIN_FAILURES) {
+                LocalDateTime lockUntil = LocalDateTime.now().plusMinutes(LOCKOUT_MINUTES);
+                userRepository.updateFailedAttempts(user.getId(), attempts, lockUntil);
+                throw new TooManyRequestsException(
+                    "Too many failed attempts. Account locked for " + LOCKOUT_MINUTES + " minutes.",
+                    LOCKOUT_MINUTES * 60
+                );
+            }
+            userRepository.updateFailedAttempts(user.getId(), attempts, null);
+            int remaining = MAX_LOGIN_FAILURES - attempts;
+            throw new BusinessException("Invalid credentials. " + remaining + " attempt(s) remaining before lockout.");
         }
 
         if (!user.getIsVerified()) {
-            throw new RuntimeException("Please verify your email before logging in");
+            throw new BusinessException("Please verify your email before logging in");
         }
 
         if (user.getStatus() != UserStatus.ACTIVE) {
-            throw new RuntimeException("Your account is not active. Please contact administrator.");
+            throw new BusinessException("Your account is not active. Please contact administrator.");
+        }
+
+        // Successful login — reset failure counter
+        if (user.getFailedLoginAttempts() > 0 || user.getLockedUntil() != null) {
+            userRepository.resetFailedAttempts(user.getId());
         }
 
         String primaryRole = user.getRole() != null ? user.getRole().getName() : "USER";
-        
-        // Check if the role is marked as employee
         boolean isEmployee = user.getRole() != null && user.getRole().getIsEmployee();
-        
-        String token = jwtService.generateToken(user.getEmail(), user.getId(), primaryRole, user.getBranchId());
+        String accessToken = jwtService.generateToken(user.getEmail(), user.getId(), primaryRole, user.getBranchId());
+        String rawRefreshToken = refreshTokenService.createRefreshToken(user);
 
-        return new AuthResponse(token, user.getId(), user.getFullName(), user.getEmail(), primaryRole, isEmployee);
+        return new AuthResponse(accessToken, rawRefreshToken, user.getId(), user.getFullName(), user.getEmail(), primaryRole, isEmployee);
+    }
+
+    public AuthResponse refresh(String rawRefreshToken) {
+        String hash = hashToken(rawRefreshToken);
+        com.lab.atlasmentor.model.RefreshToken record = refreshTokenRepository.findByTokenHash(hash)
+                .orElseThrow(() -> new BusinessException("Invalid refresh token"));
+
+        User user = record.getUser();
+        RefreshTokenService.TokenPair pair = refreshTokenService.rotate(rawRefreshToken, user);
+
+        String primaryRole = user.getRole() != null ? user.getRole().getName() : "USER";
+        boolean isEmployee = user.getRole() != null && user.getRole().getIsEmployee();
+
+        return new AuthResponse(pair.accessToken(), pair.refreshToken(),
+                user.getId(), user.getFullName(), user.getEmail(), primaryRole, isEmployee);
+    }
+
+    public void logout(String rawRefreshToken) {
+        refreshTokenService.revoke(rawRefreshToken);
+    }
+
+    private String hashToken(String raw) {
+        try {
+            java.security.MessageDigest d = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] b = d.digest(raw.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.Base64.getEncoder().encodeToString(b);
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new BusinessException("SHA-256 unavailable", e);
+        }
     }
 
     @Transactional
@@ -263,7 +368,7 @@ public class AuthService {
                 .orElseThrow(() -> new RuntimeException("Invalid verification token"));
 
         if (user.getVerificationTokenExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new RuntimeException("Verification token has expired");
+            throw new BusinessException("Verification token has expired");
         }
 
         userRepository.verifyUser(user.getId());
@@ -274,7 +379,7 @@ public class AuthService {
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         if (user.getIsVerified()) {
-            throw new RuntimeException("Email is already verified");
+            throw new BusinessException("Email is already verified");
         }
 
         String verificationToken = UUID.randomUUID().toString();
@@ -305,7 +410,7 @@ public class AuthService {
                 .orElseThrow(() -> new RuntimeException("Invalid reset token"));
 
         if (user.getPasswordResetTokenExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new RuntimeException("Reset token has expired");
+            throw new BusinessException("Reset token has expired");
         }
 
         String encodedPassword = passwordEncoder.encode(newPassword);
@@ -326,7 +431,7 @@ public class AuthService {
             }
             
             // Define all roles
-            List<String> employeeRoleNames = List.of("ADMIN", "MANAGER", "VIDEO_EDITOR", "JUNIOR_COUNSELLOR", "SENIOR_COUNSELLOR", "COUNSELLOR");
+            List<String> employeeRoleNames = List.of("ADMIN", "MANAGER", "VIDEO_EDITOR", "JUNIOR_COUNSELLOR", "SENIOR_COUNSELLOR", "COUNSELLOR", "BRANCH_PARTNER");
             
             // Convert search to lowercase for case-insensitive search
             String searchLower = search != null ? search.toLowerCase() : null;
@@ -375,8 +480,18 @@ public class AuthService {
             EmployeeResponse.TaskCount taskCount = new EmployeeResponse.TaskCount(
                 pendingTaskCount, inProgressTaskCount, completedTaskCount
             );
-            
-            return new EmployeeResponse(
+
+            EmployeeResponse.ManagerDto managerDto = employeeDetailsRepository.findByUserId(user.getId())
+                .map(EmployeeDetails::getManager)
+                .filter(m -> m != null)
+                .map(m -> new EmployeeResponse.ManagerDto(
+                    m.getId(),
+                    (m.getFirstName() != null ? m.getFirstName() : "") +
+                    (m.getLastName() != null ? " " + m.getLastName() : "")
+                ))
+                .orElse(null);
+
+            EmployeeResponse resp = new EmployeeResponse(
                 user.getId(),
                 user.getFirstName(),
                 user.getLastName(),
@@ -394,6 +509,8 @@ public class AuthService {
                 mccDto,
                 taskCount
             );
+            resp.setManager(managerDto);
+            return resp;
         }).collect(Collectors.toList());
         
         // Create and return PageResponse
@@ -456,7 +573,7 @@ public class AuthService {
         
         // Verify user is not a student (students cannot be edited via employee endpoint)
         if (employee.getRole() != null && "STUDENT".equals(employee.getRole().getName())) {
-            throw new RuntimeException("Students cannot be edited via employee endpoint");
+            throw new BusinessException("Students cannot be edited via employee endpoint");
         }
         
         // Update editable fields (email is excluded)
@@ -515,17 +632,27 @@ public class AuthService {
                 user.getMobileCountryCode().getMobileNumberLength()
             )
             : null;
-        
+
         // Get task counts for the employee
         Long pendingTaskCount = taskRepository.countByAssignedToIdAndStatus(user.getId(), TaskStatus.PENDING);
         Long inProgressTaskCount = taskRepository.countByAssignedToIdAndStatus(user.getId(), TaskStatus.IN_PROGRESS);
         Long completedTaskCount = taskRepository.countByAssignedToIdAndStatus(user.getId(), TaskStatus.COMPLETED);
-        
+
         EmployeeResponse.TaskCount taskCount = new EmployeeResponse.TaskCount(
             pendingTaskCount, inProgressTaskCount, completedTaskCount
         );
-        
-        return new EmployeeResponse(
+
+        EmployeeResponse.ManagerDto managerDto = employeeDetailsRepository.findByUserId(user.getId())
+            .map(EmployeeDetails::getManager)
+            .filter(m -> m != null)
+            .map(m -> new EmployeeResponse.ManagerDto(
+                m.getId(),
+                (m.getFirstName() != null ? m.getFirstName() : "") +
+                (m.getLastName() != null ? " " + m.getLastName() : "")
+            ))
+            .orElse(null);
+
+        EmployeeResponse response = new EmployeeResponse(
             user.getId(),
             user.getFirstName(),
             user.getLastName(),
@@ -543,6 +670,8 @@ public class AuthService {
             mccDto,
             taskCount
         );
+        response.setManager(managerDto);
+        return response;
     }
     
     @Transactional
@@ -552,7 +681,7 @@ public class AuthService {
         
         // Verify user is not a student (student status cannot be updated via employee endpoint)
         if (employee.getRole() != null && "STUDENT".equals(employee.getRole().getName())) {
-            throw new RuntimeException("Students cannot be updated via employee endpoint");
+            throw new BusinessException("Students cannot be updated via employee endpoint");
         }
         
         UserStatus newStatus = UserStatus.valueOf(status.toUpperCase());
@@ -571,21 +700,41 @@ public class AuthService {
     public void deleteEmployee(Long employeeId) {
         User employee = userRepository.findById(employeeId)
             .orElseThrow(() -> new RuntimeException("Employee not found with id: " + employeeId));
-        
-        // Verify user is not a student (students cannot be deleted via employee endpoint)
+
         if (employee.getRole() != null && "STUDENT".equals(employee.getRole().getName())) {
-            throw new RuntimeException("Students cannot be deleted via employee endpoint");
+            throw new BusinessException("Students cannot be deleted via employee endpoint");
         }
-        
-        // Delete counsellor hierarchy entries where employee is senior or junior
+
+        // Delete activity logs referencing this user (non-nullable FKs)
+        taskActivityRepository.deleteByDoneByUserId(employeeId);
+        taskCommentRepository.deleteByCommentedByUserId(employeeId);
+        studentActivityRepository.deleteByPerformedByUserId(employeeId);
+        clientPayoutActivityRepository.deleteByDoneByUserId(employeeId);
+
+        // Delete refresh tokens
+        refreshTokenRepository.deleteByUserId(employeeId);
+
+        // Nullify nullable FK references on other tables
+        userRepository.nullifyReportingManagerByUserId(employeeId);
+        taskRepository.nullifyAssignedToByUserId(employeeId);
+        taskRepository.nullifyAssignedByByUserId(employeeId);
+        studentRepository.nullifyAssignedByByUserId(employeeId);
+        branchRepository.nullifyManagerByUserId(employeeId);
+        documentRepository.nullifyUploadedByUserId(employeeId);
+        clientPayoutRepository.nullifyDisputedByUserId(employeeId);
+        clientPayoutRepository.nullifyRespondedByUserId(employeeId);
+        clientPayoutRepository.nullifyAssignedByUserId(employeeId);
+        clientPayoutRepository.nullifyLastPaidByUserId(employeeId);
+
+        // Delete counsellor hierarchy entries
         counsellorHierarchyRepository.deleteBySeniorCounsellor_Id(employeeId);
         counsellorHierarchyRepository.deleteByJuniorCounsellor_Id(employeeId);
-        
-        // Delete employee_details entries where employee is user, manager, or assignedTo
+
+        // Delete employee_details entries
         employeeDetailsRepository.deleteByUser_Id(employeeId);
         employeeDetailsRepository.deleteByManager_Id(employeeId);
         employeeDetailsRepository.deleteByAssignedTo_Id(employeeId);
-        
+
         userRepository.delete(employee);
     }
 }

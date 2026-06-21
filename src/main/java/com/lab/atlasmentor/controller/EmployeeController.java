@@ -1,4 +1,5 @@
 package com.lab.atlasmentor.controller;
+import com.lab.atlasmentor.exception.BusinessException;
 
 import com.lab.atlasmentor.dto.ApiResponse;
 import com.lab.atlasmentor.dto.EmployeeEditRequest;
@@ -37,7 +38,7 @@ public class EmployeeController {
             PageResponse<EmployeeResponse> employees = authService.getAllEmployees(page, size, roleStr, branch, search);
             ApiResponse<PageResponse<EmployeeResponse>> response = ApiResponse.success("Employees retrieved successfully", employees);
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<PageResponse<EmployeeResponse>> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -50,7 +51,7 @@ public class EmployeeController {
             EmployeeResponse employee = authService.createEmployee(employeeRequest, request);
             ApiResponse<EmployeeResponse> response = ApiResponse.success("Employee created successfully", employee);
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<EmployeeResponse> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -63,7 +64,7 @@ public class EmployeeController {
             EmployeeResponse updatedEmployee = authService.editEmployee(id, editRequest);
             ApiResponse<EmployeeResponse> response = ApiResponse.success("Employee updated successfully", updatedEmployee);
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<EmployeeResponse> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -96,7 +97,7 @@ public class EmployeeController {
             
             ApiResponse<String> response = ApiResponse.success(successMessage, message);
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<String> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -108,7 +109,7 @@ public class EmployeeController {
             authService.deleteEmployee(id);
             ApiResponse<String> response = ApiResponse.success("Employee deleted successfully", "Employee with ID " + id + " has been permanently deleted");
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<String> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }

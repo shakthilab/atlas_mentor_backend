@@ -19,6 +19,7 @@ public class CreateTaskRequest {
 
     private Priority priority;
 
+    @NotNull(message = "Due date is required")
     @Future(message = "Due date must be in future")
     private LocalDate dueDate;
 

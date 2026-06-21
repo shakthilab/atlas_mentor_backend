@@ -1,5 +1,6 @@
 package com.lab.atlasmentor.service;
 
+import com.lab.atlasmentor.exception.BusinessException;
 import com.lab.atlasmentor.dto.PaymentCreateRequest;
 import com.lab.atlasmentor.dto.PaymentUpdateRequest;
 import com.lab.atlasmentor.model.ClientPayment;
@@ -38,7 +39,7 @@ public class PaymentService {
         
         // Only ADMIN and MANAGER/BRANCH_PARTNER can create payments
         if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole))) {
-            throw new RuntimeException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can create payments.");
+            throw new BusinessException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can create payments.");
         }
 
         // Validate student exists
@@ -48,7 +49,7 @@ public class PaymentService {
         // Check if payment already exists for this student
         Optional<ClientPayment> existingPayment = paymentRepository.findByStudentId(request.getStudentId());
         if (existingPayment.isPresent()) {
-            throw new RuntimeException("Payment already exists for student: " + request.getStudentId());
+            throw new BusinessException("Payment already exists for student: " + request.getStudentId());
         }
 
         // Validate manager branch access if user is MANAGER or BRANCH_PARTNER
@@ -75,7 +76,7 @@ public class PaymentService {
         
         // Only ADMIN and MANAGER/BRANCH_PARTNER can update payments
         if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole))) {
-            throw new RuntimeException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can update payments.");
+            throw new BusinessException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can update payments.");
         }
 
         ClientPayment payment = paymentRepository.findById(paymentId)
@@ -114,7 +115,7 @@ public class PaymentService {
         
         // Only ADMIN and MANAGER/BRANCH_PARTNER can reject payments
         if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole))) {
-            throw new RuntimeException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can reject payments.");
+            throw new BusinessException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can reject payments.");
         }
 
         ClientPayment payment = paymentRepository.findById(paymentId)
@@ -129,7 +130,7 @@ public class PaymentService {
 
         // Only pending payments can be rejected
         if (!PaymentStatus.PENDING.equals(payment.getStatus())) {
-            throw new RuntimeException("Only pending payments can be rejected");
+            throw new BusinessException("Only pending payments can be rejected");
         }
 
         payment.setStatus(PaymentStatus.REJECTED);
@@ -156,7 +157,7 @@ public class PaymentService {
             // Admin can see all payments
             return paymentRepository.findByStudentIdOrderByCreatedAtDesc(studentId);
         } else {
-            throw new RuntimeException("Access denied");
+            throw new BusinessException("Access denied");
         }
     }
 
@@ -165,7 +166,7 @@ public class PaymentService {
         String userRole = currentUserDetails.getRole();
         
         if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole))) {
-            throw new RuntimeException("Access denied. Only ADMIN and MANAGER can view payments by status.");
+            throw new BusinessException("Access denied. Only ADMIN and MANAGER can view payments by status.");
         }
 
         if ("MANAGER".equalsIgnoreCase(userRole)) {
@@ -185,11 +186,11 @@ public class PaymentService {
         // Validate access based on role
         if ("REFERRAL".equalsIgnoreCase(userRole)) {
             if (!currentUserDetails.getUserId().equals(payment.getReferralId())) {
-                throw new RuntimeException("Access denied. You can only view your own payments.");
+                throw new BusinessException("Access denied. You can only view your own payments.");
             }
         } else if ("COMPANY".equalsIgnoreCase(userRole)) {
             if (!currentUserDetails.getUserId().equals(payment.getCompanyId())) {
-                throw new RuntimeException("Access denied. You can only view your own payments.");
+                throw new BusinessException("Access denied. You can only view your own payments.");
             }
         } else if ("MANAGER".equalsIgnoreCase(userRole)) {
             Student student = studentRepository.findById(payment.getStudentId())
@@ -206,11 +207,11 @@ public class PaymentService {
         Long managerBranchId = currentUserDetails.getBranchId();
         
         if (managerBranchId == null) {
-            throw new RuntimeException("Manager must be assigned to a branch");
+            throw new BusinessException("Manager must be assigned to a branch");
         }
         
         if (!managerBranchId.equals(studentBranchId)) {
-            throw new RuntimeException("Access denied. You can only manage payments from your branch.");
+            throw new BusinessException("Access denied. You can only manage payments from your branch.");
         }
     }
 }

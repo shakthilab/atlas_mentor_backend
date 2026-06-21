@@ -68,7 +68,7 @@ public class Task extends BaseEntity {
     @Column(name = "reference_id")
     private Long referenceId;
 
-    @Column(name = "due_date")
+    @Column(name = "due_date", nullable = false)
     private LocalDate dueDate;
 
     @ManyToOne(fetch = FetchType.LAZY)

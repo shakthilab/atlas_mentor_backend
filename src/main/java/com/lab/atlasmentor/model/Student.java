@@ -98,6 +98,9 @@ public class Student extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "enhanced_status")
     private StudentStatusEnhanced enhancedStatus = StudentStatusEnhanced.IN_REVIEW;
+
+    @Column(name = "lost_reason", columnDefinition = "TEXT")
+    private String lostReason;
     
     public Student() {}
 
@@ -114,6 +117,9 @@ public class Student extends BaseEntity {
     public String getName() {
         return user != null ? user.getFullName() : null;
     }
+
+    public String getLostReason() { return lostReason; }
+    public void setLostReason(String lostReason) { this.lostReason = lostReason; }
     
         
     

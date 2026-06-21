@@ -5,6 +5,9 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Entity
 @Table(name = "referral_resources",
        indexes = {
@@ -22,11 +25,15 @@ public class ReferralResource extends BaseEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "owner_id", nullable = false, referencedColumnName = "id")
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+        name = "referral_resource_owners",
+        joinColumns = @JoinColumn(name = "resource_id"),
+        inverseJoinColumns = @JoinColumn(name = "owner_id")
+    )
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
-    private User owner;
+    private List<User> owners = new ArrayList<>();
     
     @Enumerated(EnumType.STRING)
     @Column(name = "owner_type", nullable = false, length = 20)
@@ -72,38 +79,10 @@ public class ReferralResource extends BaseEntity {
     
     public ReferralResource() {}
     
-    public ReferralResource(User owner, OwnerType ownerType, User uploadedBy, StorageType storageType, ResourceType resourceType) {
-        this.owner = owner;
-        this.ownerType = ownerType;
-        this.uploadedBy = uploadedBy;
-        this.storageType = storageType;
-        this.resourceType = resourceType;
-    }
-    
-    // Convenience methods
-    public Long getOwnerId() {
-        return owner != null ? owner.getId() : null;
-    }
-    
-    public void setOwnerId(Long ownerId) {
-        if (ownerId != null) {
-            this.owner = new User();
-            this.owner.setId(ownerId);
-        }
-    }
-    
     public Long getUploadedById() {
         return uploadedBy != null ? uploadedBy.getId() : null;
     }
     
-    public void setUploadedById(Long uploadedById) {
-        if (uploadedById != null) {
-            this.uploadedBy = new User();
-            this.uploadedBy.setId(uploadedById);
-        }
-    }
-    
-    // Enums
     public enum StorageType {
         GOOGLE_DRIVE,
         ONEDRIVE,
@@ -111,7 +90,7 @@ public class ReferralResource extends BaseEntity {
         S3_UPLOAD,
         OTHER
     }
-    
+
     public enum ResourceType {
         DOCUMENT,
         IMAGE,
@@ -122,7 +101,7 @@ public class ReferralResource extends BaseEntity {
         LINK,
         OTHER
     }
-    
+
     public enum OwnerType {
         REFERRAL,
         COMPANY

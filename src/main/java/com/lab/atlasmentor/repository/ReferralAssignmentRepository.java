@@ -3,6 +3,7 @@ package com.lab.atlasmentor.repository;
 import com.lab.atlasmentor.model.ReferralAssignment;
 import com.lab.atlasmentor.model.User;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -25,7 +26,11 @@ public interface ReferralAssignmentRepository extends JpaRepository<ReferralAssi
     @Query("SELECT ra.referral FROM ReferralAssignment ra WHERE ra.assignedTo.id = :assignedToId")
     List<User> findReferralsByAssignedToId(@Param("assignedToId") Long assignedToId);
     
-    void deleteByReferralIdAndAssignedToId(Long referralId, Long assignedToId);
-    
-    void deleteByReferralId(Long referralId);
+    @Modifying
+    @Query("DELETE FROM ReferralAssignment ra WHERE ra.referral.id = :referralId AND ra.assignedTo.id = :assignedToId")
+    void deleteByReferralIdAndAssignedToId(@Param("referralId") Long referralId, @Param("assignedToId") Long assignedToId);
+
+    @Modifying
+    @Query("DELETE FROM ReferralAssignment ra WHERE ra.referral.id = :referralId")
+    void deleteByReferralId(@Param("referralId") Long referralId);
 }

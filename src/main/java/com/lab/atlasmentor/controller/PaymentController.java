@@ -1,4 +1,5 @@
 package com.lab.atlasmentor.controller;
+import com.lab.atlasmentor.exception.BusinessException;
 
 import com.lab.atlasmentor.dto.ApiResponse;
 import com.lab.atlasmentor.dto.PaymentCreateRequest;
@@ -29,7 +30,7 @@ public class PaymentController {
             ClientPayment payment = paymentService.createPayment(request);
             ApiResponse<ClientPayment> response = ApiResponse.success("Payment created successfully", payment);
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<ClientPayment> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -42,7 +43,7 @@ public class PaymentController {
             ClientPayment payment = paymentService.updatePaymentStatus(paymentId, request);
             ApiResponse<ClientPayment> response = ApiResponse.success("Payment updated successfully", payment);
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<ClientPayment> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -56,7 +57,7 @@ public class PaymentController {
             ClientPayment payment = paymentService.updatePaymentStatus(paymentId, request);
             ApiResponse<ClientPayment> response = ApiResponse.success("Payment approved successfully", payment);
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<ClientPayment> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -70,7 +71,7 @@ public class PaymentController {
             ClientPayment payment = paymentService.rejectPayment(paymentId, rejectionReason);
             ApiResponse<ClientPayment> response = ApiResponse.success("Payment rejected successfully", payment);
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<ClientPayment> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -82,7 +83,7 @@ public class PaymentController {
             ClientPayment payment = paymentService.getPaymentById(paymentId);
             ApiResponse<ClientPayment> response = ApiResponse.success("Payment retrieved successfully", payment);
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<ClientPayment> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -94,7 +95,7 @@ public class PaymentController {
             List<ClientPayment> payments = paymentService.getPaymentsByStudent(studentId);
             ApiResponse<List<ClientPayment>> response = ApiResponse.success("Payments retrieved successfully", payments);
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<List<ClientPayment>> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -106,7 +107,7 @@ public class PaymentController {
             List<ClientPayment> payments = paymentService.getPaymentsByStatus(status);
             ApiResponse<List<ClientPayment>> response = ApiResponse.success("Payments retrieved successfully", payments);
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<List<ClientPayment>> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -118,7 +119,7 @@ public class PaymentController {
             List<ClientPayment> payments = paymentService.getPaymentsByStatus(PaymentStatus.PENDING);
             ApiResponse<List<ClientPayment>> response = ApiResponse.success("Pending payments retrieved successfully", payments);
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<List<ClientPayment>> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -130,7 +131,7 @@ public class PaymentController {
             List<ClientPayment> payments = paymentService.getPaymentsByStatus(PaymentStatus.PAID);
             ApiResponse<List<ClientPayment>> response = ApiResponse.success("Paid payments retrieved successfully", payments);
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<List<ClientPayment>> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -142,7 +143,7 @@ public class PaymentController {
             List<ClientPayment> payments = paymentService.getPaymentsByStatus(PaymentStatus.REJECTED);
             ApiResponse<List<ClientPayment>> response = ApiResponse.success("Rejected payments retrieved successfully", payments);
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<List<ClientPayment>> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }

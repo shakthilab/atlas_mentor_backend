@@ -41,6 +41,27 @@ public class UserService {
         }).collect(Collectors.toList());
     }
 
+    public List<CounsellorResponse> getCounsellorsByBranch(Long branchId) {
+        List<User> counsellors = userRepository.findSeniorAndJuniorCounsellorsByBranchId(branchId);
+
+        return counsellors.stream().map(user -> {
+            CounsellorResponse response = new CounsellorResponse();
+            response.setId(user.getId());
+            response.setFirstName(user.getFirstName());
+            response.setLastName(user.getLastName());
+            response.setFullName(user.getFullName());
+            response.setEmail(user.getEmail());
+            response.setPhone(user.getPhone());
+            response.setRole(user.getRole() != null ? user.getRole().getName() : null);
+            response.setBranchId(user.getBranch() != null ? user.getBranch().getId() : null);
+            response.setBranchName(user.getBranch() != null ? user.getBranch().getName() : null);
+            response.setStatus(user.getStatus() != null ? user.getStatus().name() : null);
+            Long studentCount = userRepository.countStudentsByCounsellorId(user.getId());
+            response.setStudentCount(studentCount != null ? studentCount : 0L);
+            return response;
+        }).collect(Collectors.toList());
+    }
+
     public List<ReferralCompanyUserResponse> getActiveReferralsAndCompaniesByBranch(List<Long> roleIds, Long branchId) {
         List<User> users = userRepository.findActiveUsersByRoleIdsAndBranchId(roleIds, branchId);
 

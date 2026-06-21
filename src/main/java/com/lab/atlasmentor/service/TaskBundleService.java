@@ -119,9 +119,9 @@ public class TaskBundleService {
         long totalElements = filteredBundles.size();
         int totalPages = pageable.getPageSize() > 0 ? (int) Math.ceil((double) totalElements / pageable.getPageSize()) : 1;
 
-        long activeCount = taskBundleRepository.countByStatus(BundleStatus.ACTIVE);
-        long inactiveCount = taskBundleRepository.countByStatus(BundleStatus.INACTIVE);
-        long totalCount = taskBundleRepository.count();
+        long activeCount = taskBundleRepository.countByStatusAndIsDeletedFalse(BundleStatus.ACTIVE);
+        long inactiveCount = taskBundleRepository.countByStatusAndIsDeletedFalse(BundleStatus.INACTIVE);
+        long totalCount = taskBundleRepository.countByIsDeletedFalse();
 
         return new TaskBundlePageResponse(
                 pageContent,

@@ -2,6 +2,7 @@ package com.lab.atlasmentor.repository;
 
 import com.lab.atlasmentor.model.TaskComment;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -22,4 +23,8 @@ public interface TaskCommentRepository extends JpaRepository<TaskComment, Long> 
 
     @Query("SELECT tc FROM TaskComment tc WHERE tc.task.id = :taskId")
     List<TaskComment> findByTaskId(@Param("taskId") Long taskId);
+
+    @Modifying
+    @Query("DELETE FROM TaskComment tc WHERE tc.commentedBy.id = :userId")
+    void deleteByCommentedByUserId(@Param("userId") Long userId);
 }

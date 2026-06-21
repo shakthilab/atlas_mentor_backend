@@ -1,5 +1,6 @@
 package com.lab.atlasmentor.service;
 
+import com.lab.atlasmentor.exception.BusinessException;
 import com.lab.atlasmentor.dto.*;
 import com.lab.atlasmentor.enums.TaskAction;
 import com.lab.atlasmentor.enums.TaskStatus;
@@ -13,7 +14,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
@@ -44,7 +47,7 @@ public class TaskService {
             // Use the first available admin user as fallback
             createdBy = userRepository.findFirstByRoleName("ADMIN").orElseThrow(() -> 
                 new RuntimeException("No admin users found in the system to use as fallback"));
-            log.info("Using fallback admin user: {} (ID: {})", createdBy.getEmail(), createdBy.getId());
+            log.info("Using fallback admin user ID: {}", createdBy.getId());
         }
 
         // Validate task creation permissions based on roles
@@ -56,11 +59,11 @@ public class TaskService {
         // If admin is assigning to another admin, keep branch null (admin sees all tasks)
         if (branch == null && !createdBy.hasRole("ADMIN")) {
             // For non-admin assigners, ensure task has a branch
-            log.warn("Task assigned to user {} who has no branch assignment", assignedTo.getEmail());
+            log.warn("Task assigned to user ID {} who has no branch assignment", assignedTo.getId());
         }
         
-        log.info("Task creation: assigned_to={}, branch_id={}, created_by={}", 
-            assignedTo.getEmail(), branch != null ? branch.getId() : "null", createdBy.getEmail());
+        log.info("Task creation: assigned_to_id={}, branch_id={}, created_by_id={}",
+            assignedTo.getId(), branch != null ? branch.getId() : "null", createdBy.getId());
 
         Task task = new Task(
                 request.getTitle(),
@@ -629,86 +632,47 @@ public class TaskService {
         return new org.springframework.data.domain.PageImpl<>(filteredContent, pageable, taskPage.getTotalElements());
     }
 
+    private List<Task> filterTasks(List<Task> tasks, TaskStatus status, Long assigneeId, Long branchId,
+                                    Priority priority, Long createdBy, String keyword, Boolean overdue,
+                                    String search, LocalDate dueDateFromParsed, LocalDate dueDateToParsed,
+                                    LocalDate assignedDateFromParsed, LocalDate assignedDateToParsed) {
+        return tasks.stream()
+                .filter(task -> {
+                    if (status != null && task.getStatus() != status) return false;
+                    if (assigneeId != null && (task.getAssignedTo() == null || !task.getAssignedTo().getId().equals(assigneeId))) return false;
+                    if (branchId != null && (task.getBranch() == null || !task.getBranch().getId().equals(branchId))) return false;
+                    if (priority != null && task.getPriority() != priority) return false;
+                    if (createdBy != null && (task.getCreatedBy() == null || !task.getCreatedBy().equals(createdBy))) return false;
+                    if (overdue != null && overdue) {
+                        if (task.getDueDate() == null || task.getDueDate().isAfter(LocalDate.now()) || task.getStatus() == TaskStatus.COMPLETED) return false;
+                    }
+                    if (keyword != null && !keyword.isEmpty()) {
+                        String lk = keyword.toLowerCase();
+                        if (!((task.getTitle() != null && task.getTitle().toLowerCase().contains(lk)) ||
+                              (task.getDescription() != null && task.getDescription().toLowerCase().contains(lk)))) return false;
+                    }
+                    if (search != null && !search.isEmpty()) {
+                        String ls = search.toLowerCase();
+                        if (!((task.getTitle() != null && task.getTitle().toLowerCase().contains(ls)) ||
+                              (task.getDescription() != null && task.getDescription().toLowerCase().contains(ls)))) return false;
+                    }
+                    if (dueDateFromParsed != null && (task.getDueDate() == null || task.getDueDate().isBefore(dueDateFromParsed))) return false;
+                    if (dueDateToParsed != null && (task.getDueDate() == null || task.getDueDate().isAfter(dueDateToParsed))) return false;
+                    LocalDate taskCreatedDate = task.getCreatedAt().toLocalDate();
+                    if (assignedDateFromParsed != null && taskCreatedDate.isBefore(assignedDateFromParsed)) return false;
+                    if (assignedDateToParsed != null && taskCreatedDate.isAfter(assignedDateToParsed)) return false;
+                    return true;
+                })
+                .collect(Collectors.toList());
+    }
+
     private List<TaskResponse> applyFiltersAndConvert(List<Task> tasks, TaskStatus status, Long assigneeId, Long branchId,
                                                        Priority priority, Long createdBy, String keyword, Boolean overdue,
                                                        String search, LocalDate dueDateFromParsed, LocalDate dueDateToParsed,
                                                        LocalDate assignedDateFromParsed, LocalDate assignedDateToParsed) {
-        return tasks.stream()
-                .filter(task -> {
-                    // Status filtering
-                    if (status != null && task.getStatus() != status) {
-                        return false;
-                    }
-
-                    // Assignee filtering
-                    if (assigneeId != null && (task.getAssignedTo() == null || !task.getAssignedTo().getId().equals(assigneeId))) {
-                        return false;
-                    }
-
-                    // Branch filtering (for ADMIN who can see all branches)
-                    if (branchId != null && (task.getBranch() == null || !task.getBranch().getId().equals(branchId))) {
-                        return false;
-                    }
-
-                    // Priority filtering
-                    if (priority != null && task.getPriority() != priority) {
-                        return false;
-                    }
-
-                    // CreatedBy filtering
-                    if (createdBy != null && (task.getCreatedBy() == null || !task.getCreatedBy().equals(createdBy))) {
-                        return false;
-                    }
-
-                    // Overdue filtering
-                    if (overdue != null && overdue) {
-                        if (task.getDueDate() == null || task.getDueDate().isAfter(LocalDate.now()) || task.getStatus() == TaskStatus.COMPLETED) {
-                            return false;
-                        }
-                    }
-
-                    // Keyword/Search filtering (case-insensitive)
-                    if (keyword != null && !keyword.isEmpty()) {
-                        String lowerKeyword = keyword.toLowerCase();
-                        boolean matchesKeyword = (task.getTitle() != null && task.getTitle().toLowerCase().contains(lowerKeyword)) ||
-                                (task.getDescription() != null && task.getDescription().toLowerCase().contains(lowerKeyword));
-                        if (!matchesKeyword) {
-                            return false;
-                        }
-                    }
-
-                    if (search != null && !search.isEmpty()) {
-                        String lowerSearch = search.toLowerCase();
-                        boolean matchesSearch = (task.getTitle() != null && task.getTitle().toLowerCase().contains(lowerSearch)) ||
-                                (task.getDescription() != null && task.getDescription().toLowerCase().contains(lowerSearch));
-                        if (!matchesSearch) {
-                            return false;
-                        }
-                    }
-
-                    // Due date filtering
-                    if (dueDateFromParsed != null) {
-                        if (task.getDueDate() == null || task.getDueDate().isBefore(dueDateFromParsed)) {
-                            return false;
-                        }
-                    }
-                    if (dueDateToParsed != null) {
-                        if (task.getDueDate() == null || task.getDueDate().isAfter(dueDateToParsed)) {
-                            return false;
-                        }
-                    }
-
-                    // Assigned date filtering (createdAt)
-                    LocalDate taskCreatedDate = task.getCreatedAt().toLocalDate();
-                    if (assignedDateFromParsed != null && taskCreatedDate.isBefore(assignedDateFromParsed)) {
-                        return false;
-                    }
-                    if (assignedDateToParsed != null && taskCreatedDate.isAfter(assignedDateToParsed)) {
-                        return false;
-                    }
-
-                    return true;
-                })
+        return filterTasks(tasks, status, assigneeId, branchId, priority, createdBy, keyword, overdue,
+                search, dueDateFromParsed, dueDateToParsed, assignedDateFromParsed, assignedDateToParsed)
+                .stream()
                 .map(this::convertToTaskResponse)
                 .collect(Collectors.toList());
     }
@@ -729,6 +693,118 @@ public class TaskService {
     private LocalDate parseDate(String dateStr) {
         if (dateStr == null || dateStr.isEmpty()) return null;
         return LocalDate.parse(dateStr);
+    }
+
+    @Transactional(readOnly = true)
+    public TaskStatsResponse getTaskStats(TaskStatus status, Long assigneeId, Long branchId,
+                                          Priority priority, Long createdBy, String keyword, Boolean overdue,
+                                          String search, String dueDateFrom, String dueDateTo,
+                                          String assignedDateFrom, String assignedDateTo) {
+        var currentUser = SecurityUtils.getCurrentUser();
+        List<Task> rawTasks = fetchAllAccessibleTasks(
+                currentUser.getRole(), currentUser.getUserId(), currentUser.getBranchId());
+
+        LocalDate dueDateFromParsed = parseDate(dueDateFrom);
+        LocalDate dueDateToParsed = parseDate(dueDateTo);
+        LocalDate assignedDateFromParsed = parseDate(assignedDateFrom);
+        LocalDate assignedDateToParsed = parseDate(assignedDateTo);
+
+        // Stats are filtered only by date ranges — not by status/search/priority/etc.
+        List<Task> allTasks = filterTasks(rawTasks, null, null, null, null, null,
+                null, null, null, dueDateFromParsed, dueDateToParsed,
+                assignedDateFromParsed, assignedDateToParsed);
+
+        LocalDate today = LocalDate.now();
+        LocalDateTime thisWeekStart = today.with(DayOfWeek.MONDAY).atStartOfDay();
+        LocalDateTime lastWeekStart = thisWeekStart.minusWeeks(1);
+        LocalDateTime lastWeekEnd = thisWeekStart.minusSeconds(1);
+
+        long openTasks = allTasks.stream().filter(t -> t.getStatus() == TaskStatus.PENDING).count();
+        long inProgress = allTasks.stream().filter(t -> t.getStatus() == TaskStatus.IN_PROGRESS).count();
+        long overdueCount = allTasks.stream().filter(t -> t.getStatus() == TaskStatus.OVERDUE).count();
+
+        long completedThisWeek = allTasks.stream()
+                .filter(t -> t.getStatus() == TaskStatus.COMPLETED
+                        && t.getUpdatedAt() != null
+                        && !t.getUpdatedAt().isBefore(thisWeekStart))
+                .count();
+        long completedLastWeek = allTasks.stream()
+                .filter(t -> t.getStatus() == TaskStatus.COMPLETED
+                        && t.getUpdatedAt() != null
+                        && !t.getUpdatedAt().isBefore(lastWeekStart)
+                        && !t.getUpdatedAt().isAfter(lastWeekEnd))
+                .count();
+
+        long thisWeekOpen = allTasks.stream()
+                .filter(t -> t.getStatus() == TaskStatus.PENDING
+                        && t.getCreatedAt() != null
+                        && !t.getCreatedAt().isBefore(thisWeekStart))
+                .count();
+        long lastWeekOpen = allTasks.stream()
+                .filter(t -> t.getStatus() == TaskStatus.PENDING
+                        && t.getCreatedAt() != null
+                        && !t.getCreatedAt().isBefore(lastWeekStart)
+                        && !t.getCreatedAt().isAfter(lastWeekEnd))
+                .count();
+
+        long thisWeekInProgress = allTasks.stream()
+                .filter(t -> t.getStatus() == TaskStatus.IN_PROGRESS
+                        && t.getCreatedAt() != null
+                        && !t.getCreatedAt().isBefore(thisWeekStart))
+                .count();
+        long lastWeekInProgress = allTasks.stream()
+                .filter(t -> t.getStatus() == TaskStatus.IN_PROGRESS
+                        && t.getCreatedAt() != null
+                        && !t.getCreatedAt().isBefore(lastWeekStart)
+                        && !t.getCreatedAt().isAfter(lastWeekEnd))
+                .count();
+
+        long thisWeekOverdue = allTasks.stream()
+                .filter(t -> t.getStatus() == TaskStatus.OVERDUE
+                        && t.getUpdatedAt() != null
+                        && !t.getUpdatedAt().isBefore(thisWeekStart))
+                .count();
+        long lastWeekOverdue = allTasks.stream()
+                .filter(t -> t.getStatus() == TaskStatus.OVERDUE
+                        && t.getUpdatedAt() != null
+                        && !t.getUpdatedAt().isBefore(lastWeekStart)
+                        && !t.getUpdatedAt().isAfter(lastWeekEnd))
+                .count();
+
+        return new TaskStatsResponse(
+                openTasks, computePercentChange(thisWeekOpen, lastWeekOpen),
+                inProgress, computeAbsoluteChange(thisWeekInProgress - lastWeekInProgress),
+                overdueCount, computeAbsoluteChange(thisWeekOverdue - lastWeekOverdue),
+                completedThisWeek, computePercentChange(completedThisWeek, completedLastWeek));
+    }
+
+    private List<Task> fetchAllAccessibleTasks(String role, Long userId, Long branchId) {
+        switch (role.toUpperCase()) {
+            case "ADMIN":
+                return taskRepository.findAllTasksForAdminList();
+            case "MANAGER":
+            case "BRANCH_PARTNER":
+                return taskRepository.findTasksByBranchForManagerList(branchId);
+            case "SENIOR_COUNSELLOR":
+                List<Long> juniorIds = getJuniorCounsellorIds(userId, branchId);
+                return taskRepository.findTasksForSeniorCounsellorList(branchId, userId, juniorIds);
+            case "JUNIOR_COUNSELLOR":
+                return taskRepository.findTasksForJuniorCounsellorList(branchId, userId);
+            default:
+                return List.of();
+        }
+    }
+
+    private String computePercentChange(long current, long previous) {
+        if (previous == 0) {
+            return current > 0 ? "+100%" : "0%";
+        }
+        long pct = Math.round(((double) (current - previous) / previous) * 100);
+        return (pct >= 0 ? "+" : "") + pct + "%";
+    }
+
+    private String computeAbsoluteChange(long delta) {
+        return (delta >= 0 ? "+" : "") + delta;
     }
 
     @Transactional(readOnly = true)
@@ -776,13 +852,14 @@ public class TaskService {
         
         List<TaskComment> comments = taskCommentRepository.findByTaskIdOrderByCreatedAtDesc(taskId);
         List<TaskActivity> activities = taskActivityRepository.findByTaskIdOrderByCreatedAtDesc(taskId);
-        
+
         CombinedTaskDetailsResponse response = new CombinedTaskDetailsResponse();
         response.setTask(convertToTaskResponse(task));
         response.setComments(comments.stream()
                 .map(this::convertToTaskCommentResponse)
                 .collect(Collectors.toList()));
         response.setActivities(activities.stream()
+                .filter(a -> a.getAction() != TaskAction.COMMENT_ADDED)
                 .map(this::convertToActivityResponse)
                 .collect(Collectors.toList()));
         
@@ -906,12 +983,12 @@ public class TaskService {
         switch (userRole.toUpperCase()) {
             case "ADMIN":
                 // Admin can update any task (branch restriction doesn't apply)
-                log.info("ADMIN {} updating task {}", updatedBy.getFullName(), task.getId());
+                log.info("ADMIN user ID {} updating task {}", updatedBy.getId(), task.getId());
                 break;
                 
             case "MANAGER":
                 // Manager can update tasks WHERE branchId = user.branchId (already validated above)
-                log.info("MANAGER {} updating task {} in branch {}", updatedBy.getFullName(), task.getId(), userBranchId);
+                log.info("MANAGER user ID {} updating task {} in branch {}", updatedBy.getId(), task.getId(), userBranchId);
                 break;
                 
             case "SENIOR_COUNSELLOR":
@@ -922,7 +999,7 @@ public class TaskService {
                         throw new UnauthorizedAccessException("SENIOR_COUNSELLOR can only update their own tasks or tasks assigned to their junior counsellors");
                     }
                 }
-                log.info("SENIOR_COUNSELLOR {} updating task {} in branch {}", updatedBy.getFullName(), task.getId(), userBranchId);
+                log.info("SENIOR_COUNSELLOR user ID {} updating task {} in branch {}", updatedBy.getId(), task.getId(), userBranchId);
                 break;
                 
             case "JUNIOR_COUNSELLOR":
@@ -930,7 +1007,7 @@ public class TaskService {
                 if (!userId.equals(assignedToId)) {
                     throw new UnauthorizedAccessException("JUNIOR_COUNSELLOR can only update their own tasks");
                 }
-                log.info("JUNIOR_COUNSELLOR {} updating their own task {}", updatedBy.getFullName(), task.getId());
+                log.info("JUNIOR_COUNSELLOR user ID {} updating their own task {}", updatedBy.getId(), task.getId());
                 break;
                 
             default:
@@ -944,9 +1021,7 @@ public class TaskService {
      * 
      * Valid Status Flow:
      * PENDING → IN_PROGRESS → COMPLETED
-     *                 ↓
-     *              REJECTED
-     * 
+     *
      * Rules:
      * - Cannot move COMPLETED → IN_PROGRESS (except ADMIN)
      * - Cannot skip flow randomly
@@ -954,45 +1029,36 @@ public class TaskService {
      */
     private void validateStatusTransition(TaskStatus oldStatus, TaskStatus newStatus, String userRole) {
         log.info("Validating status transition: {} → {} by user role: {}", oldStatus, newStatus, userRole);
-        
+
         // Admin can override any transition
         if ("ADMIN".equals(userRole.toUpperCase())) {
             log.info("ADMIN overriding status transition: {} → {}", oldStatus, newStatus);
             return;
         }
-        
+
         // Allow same status (no change)
         if (oldStatus == newStatus) {
             return;
         }
-        
+
         // Define valid transitions
         switch (oldStatus) {
             case PENDING:
-                // PENDING can go to IN_PROGRESS or REJECTED
-                if (newStatus != TaskStatus.IN_PROGRESS && newStatus != TaskStatus.REJECTED) {
-                    throw new InvalidStatusTransitionException("PENDING tasks can only transition to IN_PROGRESS or REJECTED");
+                if (newStatus != TaskStatus.IN_PROGRESS) {
+                    throw new InvalidStatusTransitionException("PENDING tasks can only transition to IN_PROGRESS");
                 }
                 break;
-                
+
             case IN_PROGRESS:
-                // IN_PROGRESS can go to COMPLETED or REJECTED
-                if (newStatus != TaskStatus.COMPLETED && newStatus != TaskStatus.REJECTED) {
-                    throw new InvalidStatusTransitionException("IN_PROGRESS tasks can only transition to COMPLETED or REJECTED");
+                if (newStatus != TaskStatus.COMPLETED) {
+                    throw new InvalidStatusTransitionException("IN_PROGRESS tasks can only transition to COMPLETED");
                 }
                 break;
-                
+
             case COMPLETED:
                 // COMPLETED should not transition back (except ADMIN which is handled above)
                 throw new InvalidStatusTransitionException("COMPLETED tasks cannot be modified (only ADMIN can override)");
-                
-            case REJECTED:
-                // REJECTED can go back to PENDING or IN_PROGRESS
-                if (newStatus != TaskStatus.PENDING && newStatus != TaskStatus.IN_PROGRESS) {
-                    throw new InvalidStatusTransitionException("REJECTED tasks can only transition to PENDING or IN_PROGRESS");
-                }
-                break;
-                
+
             default:
                 throw new InvalidStatusTransitionException("Unknown status: " + oldStatus);
         }
@@ -1013,48 +1079,48 @@ public class TaskService {
         String creatorRole = createdBy.getRole() != null ? createdBy.getRole().getName() : null;
         String assigneeRole = assignedTo.getRole() != null ? assignedTo.getRole().getName() : null;
         
-        log.info("Validating task creation: {} ({}) -> {} ({})", 
-            createdBy.getFullName(), creatorRole, assignedTo.getFullName(), assigneeRole);
+        log.info("Validating task creation: creatorId={} ({}) -> assigneeId={} ({})",
+            createdBy.getId(), creatorRole, assignedTo.getId(), assigneeRole);
         
         if (creatorRole == null || assigneeRole == null) {
-            throw new RuntimeException("User roles not properly configured");
+            throw new BusinessException("User roles not properly configured");
         }
         
         switch (creatorRole.toUpperCase()) {
             case "ADMIN":
                 // Admin can create task for anyone
-                log.info("ADMIN {} creating task for {} ({})", createdBy.getFullName(), assignedTo.getFullName(), assigneeRole);
+                log.info("ADMIN user ID {} creating task for assignee ID {} ({})", createdBy.getId(), assignedTo.getId(), assigneeRole);
                 break;
                 
             case "MANAGER":
                 // Manager can create task ONLY for users in their branch
                 if (createdBy.getBranch() == null || assignedTo.getBranch() == null) {
-                    throw new RuntimeException("MANAGER must have a branch assignment to create tasks");
+                    throw new BusinessException("MANAGER must have a branch assignment to create tasks");
                 }
                 if (!createdBy.getBranch().getId().equals(assignedTo.getBranch().getId())) {
-                    throw new RuntimeException("MANAGER can only create tasks for users in the same branch");
+                    throw new BusinessException("MANAGER can only create tasks for users in the same branch");
                 }
                 if ("ADMIN".equals(assigneeRole)) {
-                    throw new RuntimeException("MANAGER cannot create tasks for ADMIN users");
+                    throw new BusinessException("MANAGER cannot create tasks for ADMIN users");
                 }
-                log.info("MANAGER {} creating task for {} ({}) in branch {}", 
-                    createdBy.getFullName(), assignedTo.getFullName(), assigneeRole, createdBy.getBranch().getId());
+                log.info("MANAGER user ID {} creating task for assignee ID {} ({}) in branch {}",
+                    createdBy.getId(), assignedTo.getId(), assigneeRole, createdBy.getBranch().getId());
                 break;
                 
             case "SENIOR_COUNSELLOR":
                 // Senior Counsellor can create task ONLY for assignedTo IN (juniorIds under this senior) AND branchId = user.branchId
                 if (!"JUNIOR_COUNSELLOR".equals(assigneeRole)) {
-                    throw new RuntimeException("SENIOR_COUNSELLOR can only create tasks for JUNIOR_COUNSELLOR");
+                    throw new BusinessException("SENIOR_COUNSELLOR can only create tasks for JUNIOR_COUNSELLOR");
                 }
                 if (createdBy.getBranch() == null || assignedTo.getBranch() == null) {
-                    throw new RuntimeException("SENIOR_COUNSELLOR must have a branch assignment to create tasks");
+                    throw new BusinessException("SENIOR_COUNSELLOR must have a branch assignment to create tasks");
                 }
                 if (!createdBy.getBranch().getId().equals(assignedTo.getBranch().getId())) {
-                    throw new RuntimeException("SENIOR_COUNSELLOR can only create tasks for JUNIOR_COUNSELLOR in the same branch");
+                    throw new BusinessException("SENIOR_COUNSELLOR can only create tasks for JUNIOR_COUNSELLOR in the same branch");
                 }
                 // TODO: Add validation to ensure assignedTo is actually assigned under this senior
-                log.info("SENIOR_COUNSELLOR {} creating task for {} ({}) in branch {}", 
-                    createdBy.getFullName(), assignedTo.getFullName(), assigneeRole, createdBy.getBranch().getId());
+                log.info("SENIOR_COUNSELLOR user ID {} creating task for assignee ID {} ({}) in branch {}",
+                    createdBy.getId(), assignedTo.getId(), assigneeRole, createdBy.getBranch().getId());
                 break;
                 
             case "JUNIOR_COUNSELLOR":
@@ -1064,10 +1130,10 @@ public class TaskService {
             case "REFERRAL":
             case "COMPANY":
                 // These roles cannot create tasks
-                throw new RuntimeException(creatorRole + " cannot create tasks");
+                throw new BusinessException(creatorRole + " cannot create tasks");
                 
             default:
-                throw new RuntimeException("Unknown role: " + creatorRole);
+                throw new BusinessException("Unknown role: " + creatorRole);
         }
     }
 
@@ -1084,8 +1150,8 @@ public class TaskService {
         String assignerRole = assignedBy.getRole() != null ? assignedBy.getRole().getName() : null;
         String assigneeRole = assignedTo.getRole() != null ? assignedTo.getRole().getName() : null;
         
-        log.info("Validating task assignment: {} ({}) -> {} ({})", 
-            assignedBy.getFullName(), assignerRole, assignedTo.getFullName(), assigneeRole);
+        log.info("Validating task assignment: assignerID={} ({}) -> assigneeId={} ({})",
+            assignedBy.getId(), assignerRole, assignedTo.getId(), assigneeRole);
         
         if (assignerRole == null || assigneeRole == null) {
             throw new UnauthorizedAccessException("User roles not properly configured");
@@ -1103,7 +1169,7 @@ public class TaskService {
         switch (assignerRole.toUpperCase()) {
             case "ADMIN":
                 // Admin can assign to anyone
-                log.info("ADMIN {} assigning task to {} ({})", assignedBy.getFullName(), assignedTo.getFullName(), assigneeRole);
+                log.info("ADMIN user ID {} assigning task to assignee ID {} ({})", assignedBy.getId(), assignedTo.getId(), assigneeRole);
                 break;
                 
             case "MANAGER":
@@ -1120,7 +1186,7 @@ public class TaskService {
                     !"WEB_DEVELOPER".equals(assigneeRole)) {
                     throw new InvalidAssignmentException(roleDisplay + " can only assign tasks to SENIOR_COUNSELLOR, JUNIOR_COUNSELLOR, Video Editor, or Web Developer");
                 }
-                log.info("{} {} assigning task to {} ({})", assignerRole, assignedBy.getFullName(), assignedTo.getFullName(), assigneeRole);
+                log.info("{} user ID {} assigning task to assignee ID {} ({})", assignerRole, assignedBy.getId(), assignedTo.getId(), assigneeRole);
                 break;
                 
             case "SENIOR_COUNSELLOR":
@@ -1140,8 +1206,8 @@ public class TaskService {
                     throw new InvalidAssignmentException("SENIOR_COUNSELLOR can only assign tasks to their own junior counsellors");
                 }
                 
-                log.info("SENIOR_COUNSELLOR {} assigning task to their junior counsellor: {}", 
-                    assignedBy.getFullName(), assignedTo.getFullName());
+                log.info("SENIOR_COUNSELLOR user ID {} assigning task to junior counsellor ID {}",
+                    assignedBy.getId(), assignedTo.getId());
                 break;
                 
             case "JUNIOR_COUNSELLOR":

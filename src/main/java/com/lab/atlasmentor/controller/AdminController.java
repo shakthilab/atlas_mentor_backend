@@ -1,4 +1,5 @@
 package com.lab.atlasmentor.controller;
+import com.lab.atlasmentor.exception.BusinessException;
 
 import com.lab.atlasmentor.dto.ApiResponse;
 import com.lab.atlasmentor.dto.CreateUserRequest;
@@ -19,6 +20,7 @@ import java.util.List;
 @RequestMapping("/api/admin")
 @PreAuthorize("hasRole('ADMIN')")
 public class AdminController {
+
 
     @Autowired
     private AdminService adminService;
@@ -45,7 +47,7 @@ public class AdminController {
             
             ApiResponse<UserResponse> response = ApiResponse.success("User created successfully", createdUser);
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<UserResponse> response = ApiResponse.badRequest(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -57,7 +59,7 @@ public class AdminController {
             List<UserResponse> users = adminService.getAllUsers();
             ApiResponse<List<UserResponse>> response = ApiResponse.success("Users retrieved successfully", users);
             return ResponseEntity.ok(response);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             ApiResponse<List<UserResponse>> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -72,7 +74,7 @@ public class AdminController {
         } catch (IllegalArgumentException e) {
             ApiResponse<List<UserResponse>> response = ApiResponse.badRequest("Invalid role: " + role);
             return ResponseEntity.badRequest().body(response);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             ApiResponse<List<UserResponse>> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -87,7 +89,7 @@ public class AdminController {
             List<UserResponse> users = adminService.getUsersExcludingAdminAndStudent(roleIds, branchId);
             ApiResponse<List<UserResponse>> response = ApiResponse.success("Users retrieved successfully", users);
             return ResponseEntity.ok(response);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             ApiResponse<List<UserResponse>> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -111,7 +113,7 @@ public class AdminController {
             UserResponse updatedUser = adminService.updateUser(userId, request, roleStr.toUpperCase());
             ApiResponse<UserResponse> response = ApiResponse.success("User updated successfully", updatedUser);
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<UserResponse> response = ApiResponse.badRequest(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -123,7 +125,7 @@ public class AdminController {
             adminService.deleteUser(userId);
             ApiResponse<Void> response = ApiResponse.success("User deleted successfully", null);
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<Void> response = ApiResponse.badRequest(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }

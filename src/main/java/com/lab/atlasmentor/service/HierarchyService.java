@@ -5,16 +5,22 @@ import com.lab.atlasmentor.dto.ManagerHierarchyResponse;
 import com.lab.atlasmentor.model.Branch;
 import com.lab.atlasmentor.model.CounsellorHierarchy;
 import com.lab.atlasmentor.model.ManagerEmployeeHierarchy;
+import com.lab.atlasmentor.model.ReferralAssignment;
 import com.lab.atlasmentor.model.User;
 import com.lab.atlasmentor.repository.BranchRepository;
+import com.lab.atlasmentor.repository.CompanyDetailsRepository;
 import com.lab.atlasmentor.repository.CounsellorHierarchyRepository;
+import com.lab.atlasmentor.repository.EmployeeDetailsRepository;
 import com.lab.atlasmentor.repository.ManagerEmployeeHierarchyRepository;
+import com.lab.atlasmentor.repository.ReferralAssignmentRepository;
 import com.lab.atlasmentor.repository.StudentRepository;
 import com.lab.atlasmentor.repository.UserRepository;
 import com.lab.atlasmentor.security.SecurityUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
@@ -38,6 +44,47 @@ public class HierarchyService {
 
     @Autowired
     private ManagerEmployeeHierarchyRepository managerEmployeeHierarchyRepository;
+
+    @Autowired
+    private CompanyDetailsRepository companyDetailsRepository;
+
+    @Autowired
+    private ReferralAssignmentRepository referralAssignmentRepository;
+
+    @Autowired
+    private EmployeeDetailsRepository employeeDetailsRepository;
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void assignEmployeeToManager(User user, User manager, User currentUser) {
+        // Remove existing assignment if any
+        ManagerEmployeeHierarchy existing = managerEmployeeHierarchyRepository.findByEmployeeId(user.getId());
+        if (existing != null) {
+            managerEmployeeHierarchyRepository.delete(existing);
+            managerEmployeeHierarchyRepository.flush();
+        }
+
+        managerEmployeeHierarchyRepository.save(new ManagerEmployeeHierarchy(manager.getId(), user.getId()));
+
+        if (user.hasRole("COMPANY")) {
+            companyDetailsRepository.findByUserId(user.getId()).ifPresent(cd -> {
+                cd.setAssignedTo(manager);
+                companyDetailsRepository.save(cd);
+            });
+        }
+
+        if (user.hasRole("REFERRAL")) {
+            referralAssignmentRepository.deleteByReferralId(user.getId());
+            ReferralAssignment ra = new ReferralAssignment(user, manager);
+            ra.setCreatedBy(currentUser.getId());
+            ra.setUpdatedBy(currentUser.getId());
+            referralAssignmentRepository.save(ra);
+        }
+
+        employeeDetailsRepository.findByUserId(user.getId()).ifPresent(ed -> {
+            ed.setAssignedTo(manager);
+            employeeDetailsRepository.save(ed);
+        });
+    }
 
     public List<ManagerHierarchyResponse> getManagerHierarchy() {
         try {

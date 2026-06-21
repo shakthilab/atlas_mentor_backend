@@ -1,10 +1,12 @@
 package com.lab.atlasmentor.service;
 
+import com.lab.atlasmentor.exception.BusinessException;
 import com.lab.atlasmentor.model.*;
 import com.lab.atlasmentor.repository.*;
 import com.lab.atlasmentor.enums.*;
 import com.lab.atlasmentor.security.SecurityUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
@@ -16,6 +18,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Map;
 
+@Slf4j
 @Service
 public class EnhancedPaymentServiceV2 {
 
@@ -33,16 +36,18 @@ public class EnhancedPaymentServiceV2 {
     
     @Autowired
     private PaymentAuditRepository paymentAuditRepository;
-    
+
     @Autowired
     private ApprovalConfigRepository approvalConfigRepository;
-    
-        
+
     @Autowired
     private StudentRepository studentRepository;
-    
+
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private FinancialAuditService financialAuditService;
     
     @Autowired
     private ObjectMapper objectMapper;
@@ -58,7 +63,7 @@ public class EnhancedPaymentServiceV2 {
         // Check if payment already exists
         Optional<StudentPayment> existingPayment = studentPaymentRepository.findActiveByStudentId(studentId);
         if (existingPayment.isPresent()) {
-            throw new RuntimeException("Student payment already exists for student: " + studentId);
+            throw new BusinessException("Student payment already exists for student: " + studentId);
         }
 
         // Create student payment
@@ -88,7 +93,7 @@ public class EnhancedPaymentServiceV2 {
         
         // Only ADMIN and MANAGER/BRANCH_PARTNER can assign amounts
         if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole))) {
-            throw new RuntimeException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can assign amounts.");
+            throw new BusinessException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can assign amounts.");
         }
 
         StudentPayment studentPayment = studentPaymentRepository.findActiveByStudentId(studentId)
@@ -101,7 +106,7 @@ public class EnhancedPaymentServiceV2 {
 
         // Check if amount is already locked
         if (Boolean.TRUE.equals(studentPayment.getIsAmountLocked())) {
-            throw new RuntimeException("Amount is locked. Cannot modify without approval.");
+            throw new BusinessException("Amount is locked. Cannot modify without approval.");
         }
 
         BigDecimal oldAmount = studentPayment.getAssignedAmount();
@@ -122,7 +127,7 @@ public class EnhancedPaymentServiceV2 {
             
             return savedPayment;
         } catch (ObjectOptimisticLockingFailureException e) {
-            throw new RuntimeException("Concurrent modification detected. Please refresh and try again.", e);
+            throw new BusinessException("Concurrent modification detected. Please refresh and try again.", e);
         }
     }
 
@@ -134,7 +139,7 @@ public class EnhancedPaymentServiceV2 {
         
         // Only ADMIN and MANAGER/BRANCH_PARTNER can add payment transactions
         if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole))) {
-            throw new RuntimeException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can add payment transactions.");
+            throw new BusinessException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can add payment transactions.");
         }
 
         StudentPayment studentPayment = studentPaymentRepository.findActiveByStudentId(studentId)
@@ -147,7 +152,7 @@ public class EnhancedPaymentServiceV2 {
 
         // Validate amount
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new RuntimeException("Payment amount must be positive.");
+            throw new BusinessException("Payment amount must be positive.");
         }
 
         // Create payment transaction
@@ -178,7 +183,7 @@ public class EnhancedPaymentServiceV2 {
             
             return savedTransaction;
         } catch (ObjectOptimisticLockingFailureException e) {
-            throw new RuntimeException("Concurrent modification detected. Please refresh and try again.", e);
+            throw new BusinessException("Concurrent modification detected. Please refresh and try again.", e);
         }
     }
 
@@ -189,7 +194,7 @@ public class EnhancedPaymentServiceV2 {
         
         // Only ADMIN and MANAGER/BRANCH_PARTNER can request amount changes
         if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole))) {
-            throw new RuntimeException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can request amount changes.");
+            throw new BusinessException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can request amount changes.");
         }
 
         StudentPayment studentPayment = studentPaymentRepository.findActiveByStudentId(studentId)
@@ -203,7 +208,7 @@ public class EnhancedPaymentServiceV2 {
         // Check if there's already a pending request
         Optional<PaymentAmountChange> existingRequest = paymentAmountChangeRepository.findPendingByStudentId(studentId);
         if (existingRequest.isPresent()) {
-            throw new RuntimeException("There is already a pending amount change request for this student.");
+            throw new BusinessException("There is already a pending amount change request for this student.");
         }
 
         // Create amount change request
@@ -234,7 +239,7 @@ public class EnhancedPaymentServiceV2 {
         // Check approval configuration
         Optional<ApprovalConfig> config = approvalConfigRepository.findActiveByActionType(ApprovalActionType.AMOUNT_CHANGE);
         if (config.isEmpty()) {
-            throw new RuntimeException("Approval configuration not found for amount changes.");
+            throw new BusinessException("Approval configuration not found for amount changes.");
         }
 
         PaymentAmountChange amountChange = paymentAmountChangeRepository.findById(changeRequestId)
@@ -244,12 +249,12 @@ public class EnhancedPaymentServiceV2 {
         validateAmountChangeAccess(amountChange, userRole, currentUserDetails.getUserId());
 
         if (!amountChange.isPending()) {
-            throw new RuntimeException("This request is already processed.");
+            throw new BusinessException("This request is already processed.");
         }
 
         // Check if user can approve based on configuration
         if (!canApproveRequest(amountChange, config.get(), currentUserDetails.getUserId(), userRole)) {
-            throw new RuntimeException("You don't have sufficient privileges to approve this request.");
+            throw new BusinessException("You don't have sufficient privileges to approve this request.");
         }
 
         try {
@@ -274,7 +279,7 @@ public class EnhancedPaymentServiceV2 {
             
             return amountChange;
         } catch (ObjectOptimisticLockingFailureException e) {
-            throw new RuntimeException("Concurrent modification detected. Please refresh and try again.", e);
+            throw new BusinessException("Concurrent modification detected. Please refresh and try again.", e);
         }
     }
 
@@ -285,7 +290,7 @@ public class EnhancedPaymentServiceV2 {
         
         // Only ADMIN and MANAGER/BRANCH_PARTNER can request status changes
         if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole))) {
-            throw new RuntimeException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can request status changes.");
+            throw new BusinessException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can request status changes.");
         }
 
         StudentPayment studentPayment = studentPaymentRepository.findActiveByStudentId(studentId)
@@ -298,7 +303,7 @@ public class EnhancedPaymentServiceV2 {
 
         // Reason is mandatory for rejection requests
         if (StudentStatusEnhanced.REJECTED.equals(newStatus) && (reason == null || reason.trim().isEmpty())) {
-            throw new RuntimeException("Reason is mandatory for rejection requests.");
+            throw new BusinessException("Reason is mandatory for rejection requests.");
         }
 
         // For REJECTED status, create REJECTED_PENDING instead
@@ -310,7 +315,7 @@ public class EnhancedPaymentServiceV2 {
         Optional<StudentStatusApproval> existingRequest = studentStatusApprovalRepository
                 .findPendingByStudentIdAndRequestedStatus(studentId, requestedStatus);
         if (existingRequest.isPresent()) {
-            throw new RuntimeException("There is already a pending status change request for this student.");
+            throw new BusinessException("There is already a pending status change request for this student.");
         }
 
         // Create status change request
@@ -341,7 +346,7 @@ public class EnhancedPaymentServiceV2 {
         // Check approval configuration
         Optional<ApprovalConfig> config = approvalConfigRepository.findActiveByActionType(ApprovalActionType.REJECTION);
         if (config.isEmpty()) {
-            throw new RuntimeException("Approval configuration not found for status changes.");
+            throw new BusinessException("Approval configuration not found for status changes.");
         }
 
         StudentStatusApproval statusApproval = studentStatusApprovalRepository.findById(approvalRequestId)
@@ -351,12 +356,12 @@ public class EnhancedPaymentServiceV2 {
         validateStatusApprovalAccess(statusApproval, userRole, currentUserDetails.getUserId());
 
         if (!statusApproval.isPending()) {
-            throw new RuntimeException("This request is already processed.");
+            throw new BusinessException("This request is already processed.");
         }
 
         // Check if user can approve based on configuration
         if (!canApproveRequest(statusApproval, config.get(), currentUserDetails.getUserId(), userRole)) {
-            throw new RuntimeException("You don't have sufficient privileges to approve this request.");
+            throw new BusinessException("You don't have sufficient privileges to approve this request.");
         }
 
         try {
@@ -381,7 +386,7 @@ public class EnhancedPaymentServiceV2 {
             
             return statusApproval;
         } catch (ObjectOptimisticLockingFailureException e) {
-            throw new RuntimeException("Concurrent modification detected. Please refresh and try again.", e);
+            throw new BusinessException("Concurrent modification detected. Please refresh and try again.", e);
         }
     }
 
@@ -392,11 +397,11 @@ public class EnhancedPaymentServiceV2 {
         Long managerBranchId = currentUserDetails.getBranchId();
         
         if (managerBranchId == null) {
-            throw new RuntimeException("Manager must be assigned to a branch");
+            throw new BusinessException("Manager must be assigned to a branch");
         }
         
         if (!managerBranchId.equals(studentBranchId)) {
-            throw new RuntimeException("Access denied. You can only manage payments from your branch.");
+            throw new BusinessException("Access denied. You can only manage payments from your branch.");
         }
     }
 
@@ -411,12 +416,12 @@ public class EnhancedPaymentServiceV2 {
         } else if ("REFERRAL".equalsIgnoreCase(userRole)) {
             if (!SourceType.REFERRAL.equals(studentPayment.getSourceType()) || 
                 !userId.equals(studentPayment.getSourceId())) {
-                throw new RuntimeException("Access denied. You can only approve your own student requests.");
+                throw new BusinessException("Access denied. You can only approve your own student requests.");
             }
         } else if ("COMPANY".equalsIgnoreCase(userRole)) {
             if (!SourceType.COMPANY.equals(studentPayment.getSourceType()) || 
                 !userId.equals(studentPayment.getSourceId())) {
-                throw new RuntimeException("Access denied. You can only approve your own student requests.");
+                throw new BusinessException("Access denied. You can only approve your own student requests.");
             }
         }
     }
@@ -430,7 +435,7 @@ public class EnhancedPaymentServiceV2 {
         } else if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole)) {
             validateManagerBranchAccess(studentPayment.getBranchId());
         } else {
-            throw new RuntimeException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can approve amount changes.");
+            throw new BusinessException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can approve amount changes.");
         }
     }
 
@@ -453,23 +458,44 @@ public class EnhancedPaymentServiceV2 {
         return true; // Simplified for now
     }
 
-    private void createAuditLog(Student student, PaymentAuditAction action, String oldValue, String newValue, 
+    private void createAuditLog(Student student, PaymentAuditAction action, String oldValue, String newValue,
                                String entityName, Long doneBy, String remarks) {
+        // Tamper-evident audit — must succeed; failure rolls back the enclosing transaction.
+        financialAuditService.record(
+                toFinancialAction(action),
+                entityName,
+                student.getId(),
+                doneBy,
+                oldValue,
+                newValue,
+                remarks);
+
+        // Legacy PaymentAudit — best-effort.
         try {
-            // Create structured audit data
             Map<String, Object> oldData = oldValue != null ? Map.of("value", oldValue) : null;
             Map<String, Object> newData = newValue != null ? Map.of("value", newValue) : null;
-            
             String oldJson = oldData != null ? objectMapper.writeValueAsString(oldData) : null;
             String newJson = newData != null ? objectMapper.writeValueAsString(newData) : null;
-            
-            PaymentAudit audit = new PaymentAudit(student, action, oldValue, newValue, 
-                                                oldJson, newJson, entityName, doneBy, null, remarks);
+            PaymentAudit audit = new PaymentAudit(student, action, oldValue, newValue,
+                                                  oldJson, newJson, entityName, doneBy, null, remarks);
             paymentAuditRepository.save(audit);
         } catch (Exception e) {
-            // Log error but don't fail the operation
-            System.err.println("Failed to create audit log: " + e.getMessage());
+            log.warn("Failed to write legacy PaymentAudit for action {}: {}", action, e.getMessage());
         }
+    }
+
+    private FinancialAuditAction toFinancialAction(PaymentAuditAction action) {
+        return switch (action) {
+            case STUDENT_CREATED         -> FinancialAuditAction.PAYMENT_RECORD_CREATED;
+            case AMOUNT_ASSIGNED         -> FinancialAuditAction.PAYMENT_AMOUNT_ASSIGNED;
+            case PAYMENT_UPDATED         -> FinancialAuditAction.PAYMENT_TRANSACTION_ADDED;
+            case AMOUNT_CHANGE_REQUESTED -> FinancialAuditAction.PAYMENT_AMOUNT_CHANGE_REQUESTED;
+            case AMOUNT_CHANGE_APPROVED  -> FinancialAuditAction.PAYMENT_AMOUNT_CHANGE_APPROVED;
+            case REJECTION_REQUESTED     -> FinancialAuditAction.PAYMENT_STATUS_CHANGE_REQUESTED;
+            case REJECTION_APPROVED      -> FinancialAuditAction.PAYMENT_STATUS_CHANGE_APPROVED;
+            case REJECTION_REJECTED      -> FinancialAuditAction.PAYMENT_STATUS_CHANGE_REJECTED;
+            default                      -> FinancialAuditAction.PAYMENT_RECORD_CREATED;
+        };
     }
 
     // Query methods
@@ -489,7 +515,7 @@ public class EnhancedPaymentServiceV2 {
         } else if ("COMPANY".equalsIgnoreCase(userRole)) {
             return studentPaymentRepository.findBySourceIdAndSourceType(currentUserDetails.getUserId(), SourceType.COMPANY);
         } else {
-            throw new RuntimeException("Access denied");
+            throw new BusinessException("Access denied");
         }
     }
 
@@ -502,7 +528,7 @@ public class EnhancedPaymentServiceV2 {
                 .orElseThrow(() -> new RuntimeException("Student payment not found"));
 
         if (!canAccessStudent(studentPayment, userRole, currentUserDetails.getUserId())) {
-            throw new RuntimeException("Access denied");
+            throw new BusinessException("Access denied");
         }
         
         return paymentTransactionRepository.findActiveByStudentIdOrderByCreatedAtDesc(studentId);

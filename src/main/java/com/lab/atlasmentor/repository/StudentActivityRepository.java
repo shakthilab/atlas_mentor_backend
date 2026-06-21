@@ -4,6 +4,7 @@ import com.lab.atlasmentor.enums.StudentStatus;
 import com.lab.atlasmentor.model.Student;
 import com.lab.atlasmentor.model.StudentActivity;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -29,4 +30,8 @@ public interface StudentActivityRepository extends JpaRepository<StudentActivity
     List<StudentActivity> findByPerformedByOrderByPerformedAtDesc(@Param("userId") Long userId);
     
     void deleteByStudent(Student student);
+
+    @Modifying
+    @Query("DELETE FROM StudentActivity sa WHERE sa.performedBy.id = :userId")
+    void deleteByPerformedByUserId(@Param("userId") Long userId);
 }

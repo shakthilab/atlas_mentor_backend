@@ -41,6 +41,7 @@ public class StudentResponse {
     
     // User information
     private Long userId;
+    private Boolean isActive;
     
     // Tracking fields
     private LocalDateTime createdAt;
@@ -73,6 +74,9 @@ public class StudentResponse {
             response.setFullName(student.getUser().getFullName());
             response.setEmail(student.getUser().getEmail());
             response.setPhone(student.getUser().getPhone());
+            response.setIsActive(student.getUser().getStatus() == com.lab.atlasmentor.enums.UserStatus.ACTIVE);
+        } else {
+            response.setIsActive(false);
         }
         
         // Branch information

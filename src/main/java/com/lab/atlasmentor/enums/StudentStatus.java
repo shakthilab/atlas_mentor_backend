@@ -1,9 +1,9 @@
 package com.lab.atlasmentor.enums;
 
 public enum StudentStatus {
-    LEAD,
-    REGISTERED,
-    LOST,
-    STUDENT,
-    PROSPECTIVE
+        LEAD,
+        REGISTERED,
+        LOST,
+        STUDENT,
+        PROSPECTIVE
 }

@@ -1,5 +1,6 @@
 package com.lab.atlasmentor.service;
 
+import com.lab.atlasmentor.exception.BusinessException;
 import com.lab.atlasmentor.enums.UserStatus;
 import com.lab.atlasmentor.model.Branch;
 import com.lab.atlasmentor.model.User;
@@ -22,23 +23,23 @@ public class BranchService {
 
     public Branch createBranch(Branch branch, Long managerId) {
         if (branch.getName() == null || branch.getName().trim().isEmpty()) {
-            throw new RuntimeException("Branch name is required");
+            throw new BusinessException("Branch name is required");
         }
         
         if (branch.getName().trim().length() < 2) {
-            throw new RuntimeException("Branch name must be at least 2 characters long");
+            throw new BusinessException("Branch name must be at least 2 characters long");
         }
         
         if (branch.getName().length() > 150) {
-            throw new RuntimeException("Branch name must not exceed 150 characters");
+            throw new BusinessException("Branch name must not exceed 150 characters");
         }
         
         if (branch.getLocation() != null && branch.getLocation().length() > 255) {
-            throw new RuntimeException("Location must not exceed 255 characters");
+            throw new BusinessException("Location must not exceed 255 characters");
         }
         
         if (branchRepository.existsByName(branch.getName().trim())) {
-            throw new RuntimeException("Branch with name '" + branch.getName() + "' already exists");
+            throw new BusinessException("Branch with name '" + branch.getName() + "' already exists");
         }
         
         branch.setName(branch.getName().trim());
@@ -50,7 +51,7 @@ public class BranchService {
         if (managerId != null) {
             Optional<User> optionalManager = userRepository.findById(managerId);
             if (optionalManager.isEmpty()) {
-                throw new RuntimeException("Manager not found with id: " + managerId);
+                throw new BusinessException("Manager not found with id: " + managerId);
             }
             branch.setManager(optionalManager.get());
         }
@@ -73,30 +74,30 @@ public class BranchService {
     public Branch updateBranch(Long id, Branch branchDetails, Long managerId) {
         Optional<Branch> optionalBranch = branchRepository.findById(id);
         if (optionalBranch.isEmpty()) {
-            throw new RuntimeException("Branch not found with id: " + id);
+            throw new BusinessException("Branch not found with id: " + id);
         }
 
         Branch branch = optionalBranch.get();
         
         if (branchDetails.getName() == null || branchDetails.getName().trim().isEmpty()) {
-            throw new RuntimeException("Branch name is required");
+            throw new BusinessException("Branch name is required");
         }
         
         if (branchDetails.getName().trim().length() < 2) {
-            throw new RuntimeException("Branch name must be at least 2 characters long");
+            throw new BusinessException("Branch name must be at least 2 characters long");
         }
         
         if (branchDetails.getName().length() > 150) {
-            throw new RuntimeException("Branch name must not exceed 150 characters");
+            throw new BusinessException("Branch name must not exceed 150 characters");
         }
         
         if (branchDetails.getLocation() != null && branchDetails.getLocation().length() > 255) {
-            throw new RuntimeException("Location must not exceed 255 characters");
+            throw new BusinessException("Location must not exceed 255 characters");
         }
         
         if (!branch.getName().equals(branchDetails.getName().trim()) && 
             branchRepository.existsByName(branchDetails.getName().trim())) {
-            throw new RuntimeException("Branch with name '" + branchDetails.getName() + "' already exists");
+            throw new BusinessException("Branch with name '" + branchDetails.getName() + "' already exists");
         }
 
         branch.setName(branchDetails.getName().trim());
@@ -111,7 +112,7 @@ public class BranchService {
         if (managerId != null) {
             Optional<User> optionalManager = userRepository.findById(managerId);
             if (optionalManager.isEmpty()) {
-                throw new RuntimeException("Manager not found with id: " + managerId);
+                throw new BusinessException("Manager not found with id: " + managerId);
             }
             branch.setManager(optionalManager.get());
         } else {
@@ -124,7 +125,7 @@ public class BranchService {
     public Branch changeBranchStatus(Long id, UserStatus status, User updatedBy) {
         Optional<Branch> optionalBranch = branchRepository.findById(id);
         if (optionalBranch.isEmpty()) {
-            throw new RuntimeException("Branch not found with id: " + id);
+            throw new BusinessException("Branch not found with id: " + id);
         }
 
         Branch branch = optionalBranch.get();
@@ -136,7 +137,7 @@ public class BranchService {
 
     public void deleteBranch(Long id) {
         if (!branchRepository.existsById(id)) {
-            throw new RuntimeException("Branch not found with id: " + id);
+            throw new BusinessException("Branch not found with id: " + id);
         }
         branchRepository.deleteById(id);
     }

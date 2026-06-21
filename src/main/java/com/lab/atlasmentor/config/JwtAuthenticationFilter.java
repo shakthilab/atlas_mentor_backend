@@ -36,8 +36,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
             String token = authorizationHeader.substring(7);
             
-            logger.info("JWT token extracted: " + token.substring(0, Math.min(50, token.length())) + "...");
-            
             // Check if token is empty or null after stripping "Bearer "
             if (token == null || token.trim().isEmpty()) {
                 logger.warn("JWT token is empty after Bearer prefix - proceeding without authentication");
@@ -51,13 +49,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 Long userId = jwtService.extractUserId(token);
                 Long branchId = jwtService.extractBranchId(token);
                 
-                logger.info("JWT claims extracted: email=" + email + ", role=" + role + ", userId=" + userId + ", branchId=" + branchId);
-                
                 if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                     // Create CustomUserDetails with all claims
                     CustomUserDetails userDetails = new CustomUserDetails(userId, email, role, branchId);
-                    
-                    logger.info("Created CustomUserDetails: userId=" + userDetails.getUserId() + ", role=" + userDetails.getRole() + ", branchId=" + userDetails.getBranchId() + ", isAdmin=" + userDetails.isAdmin());
                     
                     // Create authentication token with CustomUserDetails as principal
                     UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
@@ -67,11 +61,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     );
                     
                     SecurityContextHolder.getContext().setAuthentication(authToken);
-                    logger.info("Authentication set in SecurityContext for user: " + email);
                 }
             } catch (io.jsonwebtoken.ExpiredJwtException e) {
-                // JWT expired - return 401 error (session timeout)
                 logger.error("JWT token expired: " + e.getMessage());
+                // Allow public auth endpoints (e.g. /api/auth/refresh) through even with an expired token
+                // so the client can exchange their refresh token for a new access token.
+                if (requestURI.startsWith("/api/auth/")) {
+                    filterChain.doFilter(request, response);
+                    return;
+                }
                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                 response.setContentType("application/json");
                 response.getWriter().write("{\"error\": \"Session timeout\", \"message\": \"Token has expired. Please login again.\"}");

@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <!-- ===== DEVELOPMENT profile: human-readable console output ===== -->
+    <springProfile name="dev">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            </encoder>
+        </appender>
+
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+
+        <logger name="com.lab.atlasmentor" level="DEBUG"/>
+        <logger name="org.springframework.security" level="DEBUG"/>
+        <logger name="com.lab.atlasmentor.config.JwtAuthenticationFilter" level="DEBUG"/>
+        <logger name="com.lab.atlasmentor.service.JwtService" level="DEBUG"/>
+    </springProfile>
+
+    <!-- ===== PRODUCTION profile: structured JSON via logstash-logback-encoder ===== -->
+    <springProfile name="prod">
+        <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <!-- Add application name to every log line for multi-service log aggregation -->
+                <customFields>{"app":"atlasmentor","env":"prod"}</customFields>
+                <!-- Emit timestamp in ISO-8601 so log shippers (Logstash, Fluentd) parse it correctly -->
+                <timestampPattern>yyyy-MM-dd'T'HH:mm:ss.SSS'Z'</timestampPattern>
+                <timeZone>UTC</timeZone>
+                <!-- Avoid logging the Logback version banner -->
+                <includeCallerData>false</includeCallerData>
+            </encoder>
+        </appender>
+
+        <!-- Rolling file appender for persistent log storage in prod -->
+        <appender name="JSON_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+            <file>logs/atlasmentor.log</file>
+            <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+                <!-- Roll over daily, keep 30 days, max 512 MB per file -->
+                <fileNamePattern>logs/atlasmentor.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+                <maxFileSize>512MB</maxFileSize>
+                <maxHistory>30</maxHistory>
+                <totalSizeCap>5GB</totalSizeCap>
+            </rollingPolicy>
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <customFields>{"app":"atlasmentor","env":"prod"}</customFields>
+                <timestampPattern>yyyy-MM-dd'T'HH:mm:ss.SSS'Z'</timestampPattern>
+                <timeZone>UTC</timeZone>
+                <includeCallerData>false</includeCallerData>
+            </encoder>
+        </appender>
+
+        <root level="WARN">
+            <appender-ref ref="JSON_CONSOLE"/>
+            <appender-ref ref="JSON_FILE"/>
+        </root>
+
+        <logger name="com.lab.atlasmentor" level="WARN"/>
+        <logger name="org.springframework.security" level="WARN"/>
+        <logger name="com.lab.atlasmentor.config.JwtAuthenticationFilter" level="WARN"/>
+        <logger name="com.lab.atlasmentor.service.JwtService" level="WARN"/>
+
+        <!-- Hibernate SQL suppression — third independent lock after show-sql=false
+             and the logging.level.* settings in application-prod.properties.
+             org.hibernate.SQL    : the generated SQL statement
+             org.hibernate.orm.jdbc.bind / BasicBinder : the actual parameter values
+             Any of these at DEBUG/TRACE would expose schema shape and row data. -->
+        <logger name="org.hibernate.SQL" level="WARN"/>
+        <logger name="org.hibernate.orm.jdbc.bind" level="WARN"/>
+        <logger name="org.hibernate.type.descriptor.sql.BasicBinder" level="WARN"/>
+        <logger name="org.hibernate.type" level="WARN"/>
+    </springProfile>
+
+    <!-- ===== Default (no active profile): fall back to simple console, SQL off ===== -->
+    <springProfile name="!dev &amp; !prod">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>%d{HH:mm:ss.SSS} %-5level %logger{36} - %msg%n</pattern>
+            </encoder>
+        </appender>
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+        <!-- Default profile inherits no-SQL posture from application.properties safe defaults -->
+        <logger name="org.hibernate.SQL" level="WARN"/>
+        <logger name="org.hibernate.orm.jdbc.bind" level="WARN"/>
+        <logger name="org.hibernate.type.descriptor.sql.BasicBinder" level="WARN"/>
+    </springProfile>
+
+</configuration>

@@ -1,4 +1,5 @@
 package com.lab.atlasmentor.controller;
+import com.lab.atlasmentor.exception.BusinessException;
 
 import com.lab.atlasmentor.dto.ApiResponse;
 import com.lab.atlasmentor.dto.BranchRequest;
@@ -67,7 +68,7 @@ public class BranchController {
             
             ApiResponse<BranchResponse> apiResponse = ApiResponse.success("Branch created successfully", response);
             return ResponseEntity.status(HttpStatus.CREATED).body(apiResponse);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<BranchResponse> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -84,7 +85,7 @@ public class BranchController {
             } else {
                 return ResponseEntity.notFound().build();
             }
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<BranchResponse> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -105,7 +106,7 @@ public class BranchController {
                     .collect(Collectors.toList());
             ApiResponse<List<BranchResponse>> response = ApiResponse.success("Branches retrieved successfully", branchResponses);
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<List<BranchResponse>> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -135,7 +136,7 @@ public class BranchController {
             
             ApiResponse<BranchResponse> apiResponse = ApiResponse.success("Branch updated successfully", response);
             return ResponseEntity.ok(apiResponse);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<BranchResponse> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -153,7 +154,7 @@ public class BranchController {
             branchService.deleteBranch(id);
             ApiResponse<Void> response = ApiResponse.success("Branch deleted successfully", null);
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<Void> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -177,7 +178,7 @@ public class BranchController {
             BranchResponse response = convertToBranchResponse(updatedBranch);
             ApiResponse<BranchResponse> apiResponse = ApiResponse.success("Branch status updated successfully", response);
             return ResponseEntity.ok(apiResponse);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<BranchResponse> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -220,7 +221,7 @@ public class BranchController {
             List<ManagerResponse> managers = adminService.getAllManagers();
             ApiResponse<List<ManagerResponse>> response = ApiResponse.success("Managers retrieved successfully", managers);
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<List<ManagerResponse>> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -232,19 +233,20 @@ public class BranchController {
             List<SeniorCounsellorResponse> seniorCounsellors = adminService.getAllActiveSeniorCounsellors();
             ApiResponse<List<SeniorCounsellorResponse>> response = ApiResponse.success("Senior counsellors retrieved successfully", seniorCounsellors);
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<List<SeniorCounsellorResponse>> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
     }
 
     @GetMapping("/unassigned-employees")
-    public ResponseEntity<ApiResponse<List<UnassignedEmployeeResponse>>> getUnassignedEmployees() {
+    public ResponseEntity<ApiResponse<List<UnassignedEmployeeResponse>>> getUnassignedEmployees(
+            @RequestParam(required = false) Long managerId) {
         try {
-            List<UnassignedEmployeeResponse> unassignedEmployees = adminService.getUnassignedEmployees();
+            List<UnassignedEmployeeResponse> unassignedEmployees = adminService.getUnassignedEmployees(managerId);
             ApiResponse<List<UnassignedEmployeeResponse>> response = ApiResponse.success("Unassigned employees retrieved successfully", unassignedEmployees);
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<List<UnassignedEmployeeResponse>> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }

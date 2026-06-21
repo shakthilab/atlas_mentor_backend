@@ -1,5 +1,6 @@
 package com.lab.atlasmentor.service;
 
+import com.lab.atlasmentor.exception.BusinessException;
 import com.lab.atlasmentor.dto.*;
 import com.lab.atlasmentor.model.*;
 import com.lab.atlasmentor.repository.*;
@@ -79,6 +80,9 @@ public class StudentService {
     private StudentPaymentRepository studentPaymentRepository;
 
     @Autowired
+    private PaymentTransactionRepository paymentTransactionRepository;
+
+    @Autowired
     private FinalPaymentService finalPaymentService;
 
     @Autowired
@@ -89,6 +93,9 @@ public class StudentService {
     
     @Autowired
     private ClientPayoutRepository clientPayoutRepository;
+
+    @Autowired
+    private ClientPayoutActivityRepository clientPayoutActivityRepository;
 
     @Autowired
     private ClientPayoutService clientPayoutService;
@@ -166,14 +173,21 @@ public class StudentService {
     public void deleteStudent(Long id) {
         Student student = getStudentById(id);
 
-        // Delete related student payments first (foreign key constraint)
+        // Delete payment_transactions before student_payments (FK: payment_transactions.payment_id → student_payments.id)
+        paymentTransactionRepository.deleteByStudentId(student.getId());
         studentPaymentRepository.deleteByStudentId(student.getId());
 
-        // Delete related payment audit records first (foreign key constraint)
+        // Delete legacy PaymentAudit records (foreign key constraint).
+        // NOTE: FinancialAuditLog records are intentionally NOT deleted here — they have
+        // no FK to Student and are tamper-evident; they must be retained permanently.
         paymentAuditRepository.deleteByStudent(student);
 
-        // Delete related student activities first (foreign key constraint)
+        // Delete related student activities (foreign key constraint)
         studentActivityRepository.deleteByStudent(student);
+
+        // Delete client_payout_activities before client_payouts (FK: client_payout_activities.client_payout_id → client_payouts.id)
+        clientPayoutActivityRepository.deleteByStudentId(student.getId());
+        clientPayoutRepository.deleteByStudentId(student.getId());
 
         // The cascade operations will automatically delete:
         // - StudentAcademicHistory records (cascade = CascadeType.ALL)
@@ -662,25 +676,8 @@ public class StudentService {
         }
         
         // Save academic history
-        if (request.getAcademicHistory() != null && !request.getAcademicHistory().isEmpty()) {
-            for (StudentOnboardingRequest.AcademicHistory history : request.getAcademicHistory()) {
-                StudentAcademicHistory academicHistory = new StudentAcademicHistory();
-                academicHistory.setStudent(student);
-                academicHistory.setQualification(history.getLevel());
-                academicHistory.setInstitutionName(history.getInstitutionName());
-                if (history.getPassingYear() != null && !history.getPassingYear().trim().isEmpty()) {
-                    try {
-                        academicHistory.setPassingYear(Integer.parseInt(history.getPassingYear()));
-                    } catch (NumberFormatException e) {
-                        throw new IllegalArgumentException("Invalid passing year format: " + history.getPassingYear());
-                    }
-                }
-                academicHistory.setScore(history.getScoreCgpa());
-                academicHistory.setCreatedBy(currentUser.getId());
-                studentAcademicHistoryRepository.save(academicHistory);
-            }
-        }
-        
+        saveAcademicHistory(student, request.getAcademicHistory(), currentUser.getId());
+
         // Save documents
         if (request.getDocuments() != null && !request.getDocuments().isEmpty()) {
             for (Map.Entry<String, String> entry : request.getDocuments().entrySet()) {
@@ -723,10 +720,10 @@ public class StudentService {
             String errorMessage = e.getMessage();
             if (errorMessage != null) {
                 if (errorMessage.contains("email")) {
-                    throw new RuntimeException("Email already exists");
+                    throw new BusinessException("Email already exists");
                 }
                 if (errorMessage.contains("phone") || errorMessage.contains("uk_users_phone")) {
-                    throw new RuntimeException("Phone number already exists");
+                    throw new BusinessException("Phone number already exists");
                 }
             }
             throw new RuntimeException("Database constraint violation: " + e.getMessage());
@@ -743,7 +740,7 @@ public class StudentService {
             // Check if phone number is being changed and if new phone already exists (exclude current user)
             if (request.getPhone() != null && !request.getPhone().equals(user.getPhone())) {
                 if (userRepository.existsByPhoneExcludingUser(request.getPhone(), user.getId())) {
-                    throw new RuntimeException("Phone number already exists");
+                    throw new BusinessException("Phone number already exists");
                 }
             }
             
@@ -797,24 +794,7 @@ public class StudentService {
         
         // Update academic history - remove existing and add new
         studentAcademicHistoryRepository.deleteByStudentId(student.getId());
-        if (request.getAcademicHistory() != null && !request.getAcademicHistory().isEmpty()) {
-            for (StudentOnboardingRequest.AcademicHistory history : request.getAcademicHistory()) {
-                StudentAcademicHistory academicHistory = new StudentAcademicHistory();
-                academicHistory.setStudent(student);
-                academicHistory.setQualification(history.getLevel());
-                academicHistory.setInstitutionName(history.getInstitutionName());
-                if (history.getPassingYear() != null && !history.getPassingYear().trim().isEmpty()) {
-                    try {
-                        academicHistory.setPassingYear(Integer.parseInt(history.getPassingYear()));
-                    } catch (NumberFormatException e) {
-                        throw new IllegalArgumentException("Invalid passing year format: " + history.getPassingYear());
-                    }
-                }
-                academicHistory.setScore(history.getScoreCgpa());
-                academicHistory.setCreatedBy(currentUser.getId());
-                studentAcademicHistoryRepository.save(academicHistory);
-            }
-        }
+        saveAcademicHistory(student, request.getAcademicHistory(), currentUser.getId());
         
         // Update documents - remove existing and add new
         documentRepository.deleteByStudentId(student.getId());
@@ -865,8 +845,32 @@ public class StudentService {
         
         requiredDocuments.put("required", coreDocuments);
         requiredDocuments.put("additional", additionalDocuments);
-        
+
         return requiredDocuments;
+    }
+
+    private void saveAcademicHistory(Student student,
+                                     StudentOnboardingRequest.AcademicHistoryWrapper wrapper,
+                                     Long createdBy) {
+        if (wrapper == null) return;
+        if (wrapper.getTenth() != null) {
+            saveAcademicEntry(student, "10th", wrapper.getTenth(), createdBy);
+        }
+        if (wrapper.getTwelfth() != null) {
+            saveAcademicEntry(student, "12th", wrapper.getTwelfth(), createdBy);
+        }
+    }
+
+    private void saveAcademicEntry(Student student, String qualification,
+                                   StudentOnboardingRequest.AcademicEntry entry, Long createdBy) {
+        StudentAcademicHistory record = new StudentAcademicHistory();
+        record.setStudent(student);
+        record.setQualification(qualification);
+        record.setInstitutionName(entry.getInstitution());
+        record.setPassingYear(entry.getYear());
+        record.setScore(entry.getScore() != null ? String.valueOf(entry.getScore()) : null);
+        record.setCreatedBy(createdBy);
+        studentAcademicHistoryRepository.save(record);
     }
     
     @Transactional
@@ -883,10 +887,18 @@ public class StudentService {
         
         // Only update if status is actually changing
         if (!oldStatus.equals(newStatus)) {
+            // Reason is required when marking as LOST
+            if (newStatus == StudentStatus.LOST) {
+                if (request.getReason() == null || request.getReason().trim().isEmpty()) {
+                    throw new BusinessException("Reason is required when marking student as LOST");
+                }
+                student.setLostReason(request.getReason());
+            }
+
             // Check if email is mandatory for REGISTERED status
             if (newStatus == StudentStatus.REGISTERED) {
                 if (student.getEmail() == null || student.getEmail().trim().isEmpty()) {
-                    throw new RuntimeException("Email is mandatory to convert student to registered");
+                    throw new BusinessException("Email is mandatory to convert student to registered");
                 }
                 
                 // Handle user account creation and email sending for REGISTERED status
@@ -958,6 +970,26 @@ public class StudentService {
         return studentRepository.save(student);
     }
     
+    @Transactional
+    public String updateStudentActiveStatus(Long studentId, String status) {
+        Student student = studentRepository.findById(studentId)
+            .orElseThrow(() -> new BusinessException("Student not found with id: " + studentId));
+
+        if (student.getUser() == null) {
+            throw new BusinessException("Student does not have an associated user account");
+        }
+
+        com.lab.atlasmentor.enums.UserStatus newStatus = com.lab.atlasmentor.enums.UserStatus.valueOf(status.toUpperCase());
+        com.lab.atlasmentor.enums.UserStatus currentStatus = student.getUser().getStatus();
+
+        userRepository.updateUserStatus(student.getUser().getId(), newStatus);
+
+        if (currentStatus == newStatus) {
+            return "already_" + status.toLowerCase();
+        }
+        return status.toLowerCase();
+    }
+
     public java.util.List<StudentActivity> getStudentActivities(Long studentId) {
         Student student = studentRepository.findById(studentId)
             .orElseThrow(() -> new RuntimeException("Student not found with id: " + studentId));
@@ -972,7 +1004,7 @@ public class StudentService {
         
         // Check if amount is locked
         if (payment.getIsAmountLocked()) {
-            throw new RuntimeException("Payment amount is locked and cannot be modified");
+            throw new BusinessException("Payment amount is locked and cannot be modified");
         }
         
         payment.setAssignedAmount(request.getAssignedAmount());
@@ -995,11 +1027,11 @@ public class StudentService {
         
         // Validate that the payout can be updated
         if (payout.getPayoutStatus() == com.lab.atlasmentor.enums.ClientPayoutStatus.ACCEPTED) {
-            throw new RuntimeException("Cannot update amount for an accepted payout");
+            throw new BusinessException("Cannot update amount for an accepted payout");
         }
         
         if (payout.getPayoutStatus() == com.lab.atlasmentor.enums.ClientPayoutStatus.DISPUTE) {
-            throw new RuntimeException("Cannot update amount for a disputed payout");
+            throw new BusinessException("Cannot update amount for a disputed payout");
         }
         
         BigDecimal oldAmount = payout.getAssignedAmount();
@@ -1049,7 +1081,7 @@ public class StudentService {
             
             return studentPaymentRepository.save(payment);
         } catch (ObjectOptimisticLockingFailureException e) {
-            throw new RuntimeException("Payment was modified by another user. Please refresh and try again.", e);
+            throw new BusinessException("Payment was modified by another user. Please refresh and try again.", e);
         } catch (Exception e) {
             throw new RuntimeException("Failed to update payment status: " + e.getMessage(), e);
         }
@@ -1069,7 +1101,7 @@ public class StudentService {
             // Manager/Branch Partner: Return client payouts from their branch with referral and company source types
             Long branchId = currentUserDetails.getBranchId();
             if (branchId == null) {
-                throw new RuntimeException("Manager must be assigned to a branch");
+                throw new BusinessException("Manager must be assigned to a branch");
             }
             clientPayouts = clientPayoutRepository.findByBranchIdAndSourceTypeIn(branchId, sourceTypes);
         } else if ("REFERRAL".equalsIgnoreCase(userRole)) {
@@ -1080,7 +1112,7 @@ public class StudentService {
             clientPayouts = clientPayoutRepository.findByUserIdAndSourceType(currentUserDetails.getUserId(), SourceType.COMPANY);
         } else {
             // Other roles: Return empty list or throw exception
-            throw new RuntimeException("Access denied. This API is only available for ADMIN, MANAGER, REFERRAL, and COMPANY roles.");
+            throw new BusinessException("Access denied. This API is only available for ADMIN, MANAGER, REFERRAL, and COMPANY roles.");
         }
         
         // Convert to DTOs
@@ -1102,7 +1134,7 @@ public class StudentService {
             try {
                 sourceParam = SourceType.valueOf(source.trim().toUpperCase());
             } catch (IllegalArgumentException e) {
-                throw new RuntimeException("Invalid source type. Valid values: REFERRAL, COMPANY");
+                throw new BusinessException("Invalid source type. Valid values: REFERRAL, COMPANY");
             }
         }
         
@@ -1111,7 +1143,7 @@ public class StudentService {
             try {
                 paymentStatusParam = ClientPayoutStatus.valueOf(paymentStatus.trim().toUpperCase());
             } catch (IllegalArgumentException e) {
-                throw new RuntimeException("Invalid payment status. Valid values: " + java.util.Arrays.toString(ClientPayoutStatus.values()));
+                throw new BusinessException("Invalid payment status. Valid values: " + java.util.Arrays.toString(ClientPayoutStatus.values()));
             }
         }
         
@@ -1120,7 +1152,7 @@ public class StudentService {
             try {
                 dateFromParam = LocalDateTime.parse(dateFrom.trim());
             } catch (Exception e) {
-                throw new RuntimeException("Invalid dateFrom format. Use ISO format: yyyy-MM-ddTHH:mm:ss");
+                throw new BusinessException("Invalid dateFrom format. Use ISO format: yyyy-MM-ddTHH:mm:ss");
             }
         }
         
@@ -1129,7 +1161,7 @@ public class StudentService {
             try {
                 dateToParam = LocalDateTime.parse(dateTo.trim());
             } catch (Exception e) {
-                throw new RuntimeException("Invalid dateTo format. Use ISO format: yyyy-MM-ddTHH:mm:ss");
+                throw new BusinessException("Invalid dateTo format. Use ISO format: yyyy-MM-ddTHH:mm:ss");
             }
         }
         
@@ -1142,7 +1174,7 @@ public class StudentService {
             // Manager/Branch Partner: Use branch-specific filtering
             Long branchId = currentUserDetails.getBranchId();
             if (branchId == null) {
-                throw new RuntimeException("Manager must be assigned to a branch");
+                throw new BusinessException("Manager must be assigned to a branch");
             }
             // Override branch parameter with user's branch for security
             clientPayouts = clientPayoutRepository.findWithFiltersForBranch(
@@ -1160,7 +1192,7 @@ public class StudentService {
                 paymentStatusParam != null ? paymentStatusParam.name() : null, dateFromParam, dateToParam);
         } else {
             // Other roles: Return empty list or throw exception
-            throw new RuntimeException("Access denied. This API is only available for ADMIN, MANAGER, REFERRAL, and COMPANY roles.");
+            throw new BusinessException("Access denied. This API is only available for ADMIN, MANAGER, REFERRAL, and COMPANY roles.");
         }
         
         // Apply pagination

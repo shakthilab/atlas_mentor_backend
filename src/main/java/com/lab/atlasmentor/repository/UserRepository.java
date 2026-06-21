@@ -62,6 +62,14 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Modifying
     @Query("UPDATE User u SET u.status = :status WHERE u.id = :userId")
     void updateUserStatus(@Param("userId") Long userId, @Param("status") UserStatus status);
+
+    @Modifying
+    @Query("UPDATE User u SET u.failedLoginAttempts = :attempts, u.lockedUntil = :lockedUntil WHERE u.id = :userId")
+    void updateFailedAttempts(@Param("userId") Long userId, @Param("attempts") int attempts, @Param("lockedUntil") java.time.LocalDateTime lockedUntil);
+
+    @Modifying
+    @Query("UPDATE User u SET u.failedLoginAttempts = 0, u.lockedUntil = null WHERE u.id = :userId")
+    void resetFailedAttempts(@Param("userId") Long userId);
     
     // Hierarchy query methods
     @Query("SELECT DISTINCT u FROM User u WHERE u.role.name = 'MANAGER'")
@@ -129,6 +137,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
     
     @Query("SELECT u FROM User u WHERE u.role.name IN ('SENIOR_COUNSELLOR', 'JUNIOR_COUNSELLOR', 'COUNSELLOR') AND u.branch.id = :branchId AND u.status = 'ACTIVE'")
     List<User> findActiveCounsellorsByBranchId(@Param("branchId") Long branchId);
+
+    @Query("SELECT u FROM User u WHERE u.role.name IN ('SENIOR_COUNSELLOR', 'JUNIOR_COUNSELLOR') AND u.branch.id = :branchId")
+    List<User> findSeniorAndJuniorCounsellorsByBranchId(@Param("branchId") Long branchId);
     
     // Task bundle related queries
     @Query("SELECT u FROM User u WHERE u.role.id = :roleId AND u.status = :status")
@@ -139,5 +150,61 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     @Query("SELECT u FROM User u WHERE u.role.id = :roleId AND u.branch.id = :branchId AND u.status = 'ACTIVE'")
     List<User> findActiveUsersByRoleIdAndBranchId(@Param("roleId") Long roleId, @Param("branchId") Long branchId);
+
+    @Modifying
+    @Query("UPDATE User u SET u.reportingManager = null WHERE u.reportingManager.id = :userId")
+    void nullifyReportingManagerByUserId(@Param("userId") Long userId);
+
+    // ==================== DASHBOARD QUERIES ====================
+
+    @Query(value = "SELECT COUNT(u.id) FROM users u JOIN roles r ON r.id = u.role_id " +
+           "WHERE r.name NOT IN ('ADMIN','STUDENT','REFERRAL','COMPANY') AND u.status = 'ACTIVE'", nativeQuery = true)
+    Long countActiveEmployees();
+
+    @Query(value = "SELECT r.name, COUNT(u.id) FROM users u JOIN roles r ON r.id = u.role_id " +
+           "WHERE r.name NOT IN ('ADMIN','STUDENT','REFERRAL','COMPANY') AND u.status = 'ACTIVE' " +
+           "GROUP BY r.name ORDER BY COUNT(u.id) DESC", nativeQuery = true)
+    List<Object[]> countActiveEmployeesByRole();
+
+    @Query(value = "SELECT u.id, CONCAT(u.first_name, ' ', COALESCE(u.last_name, '')) as emp_name, " +
+           "b.name as branch_name, COALESCE(SUM(sp.paid_amount), 0) as revenue " +
+           "FROM users u " +
+           "JOIN roles r ON r.id = u.role_id " +
+           "LEFT JOIN branches b ON b.id = u.branch_id " +
+           "LEFT JOIN students s ON s.assigned_by_id = u.id " +
+           "LEFT JOIN student_payments sp ON sp.student_id = s.id AND sp.is_deleted = false AND sp.created_at >= :from " +
+           "WHERE r.name NOT IN ('ADMIN','STUDENT','REFERRAL','COMPANY') AND u.status = 'ACTIVE' " +
+           "GROUP BY u.id, emp_name, b.name ORDER BY revenue DESC LIMIT 5", nativeQuery = true)
+    List<Object[]> findEmployeeLeaderboard(@Param("from") java.time.LocalDateTime from);
+
+    @Query(value = "SELECT COUNT(u.id) FROM users u JOIN roles r ON r.id = u.role_id " +
+           "WHERE r.name NOT IN ('ADMIN','STUDENT','REFERRAL','COMPANY') AND u.status = 'ACTIVE' " +
+           "AND DATE_TRUNC('month', u.created_at) = DATE_TRUNC('month', CURRENT_TIMESTAMP - INTERVAL '1 month')", nativeQuery = true)
+    Long countActiveEmployeesLastMonth();
+
+    // ==================== BRANCH-SCOPED DASHBOARD QUERIES ====================
+
+    @Query(value = "SELECT COUNT(u.id) FROM users u JOIN roles r ON r.id = u.role_id " +
+           "WHERE r.name NOT IN ('ADMIN','STUDENT','REFERRAL','COMPANY') AND u.status = 'ACTIVE' AND u.branch_id = :branchId", nativeQuery = true)
+    Long countActiveEmployeesForBranch(@Param("branchId") Long branchId);
+
+    @Query(value = "SELECT r.name, COUNT(u.id) FROM users u JOIN roles r ON r.id = u.role_id " +
+           "WHERE r.name NOT IN ('ADMIN','STUDENT','REFERRAL','COMPANY') AND u.status = 'ACTIVE' AND u.branch_id = :branchId " +
+           "GROUP BY r.name ORDER BY COUNT(u.id) DESC", nativeQuery = true)
+    List<Object[]> countActiveEmployeesByRoleForBranch(@Param("branchId") Long branchId);
+
+    @Query(value = "SELECT u.id, CONCAT(u.first_name, ' ', COALESCE(u.last_name, '')) as emp_name, " +
+           "b.name as branch_name, COALESCE(SUM(sp.paid_amount), 0) as revenue " +
+           "FROM users u " +
+           "JOIN roles r ON r.id = u.role_id " +
+           "LEFT JOIN branches b ON b.id = u.branch_id " +
+           "LEFT JOIN students s ON s.assigned_by_id = u.id " +
+           "LEFT JOIN student_payments sp ON sp.student_id = s.id AND sp.is_deleted = false AND sp.created_at >= :from " +
+           "WHERE r.name NOT IN ('ADMIN','STUDENT','REFERRAL','COMPANY') AND u.status = 'ACTIVE' AND u.branch_id = :branchId " +
+           "GROUP BY u.id, emp_name, b.name ORDER BY revenue DESC LIMIT 5", nativeQuery = true)
+    List<Object[]> findEmployeeLeaderboardForBranch(@Param("branchId") Long branchId, @Param("from") java.time.LocalDateTime from);
+
+    @Query("SELECT u FROM User u LEFT JOIN FETCH u.reportingManager WHERE u.id = :userId")
+    java.util.Optional<User> findByIdWithManager(@Param("userId") Long userId);
 
 }

@@ -1,4 +1,5 @@
 package com.lab.atlasmentor.controller;
+import com.lab.atlasmentor.exception.BusinessException;
 
 import com.lab.atlasmentor.dto.ApiResponse;
 import com.lab.atlasmentor.dto.CreateUserRequest;
@@ -37,7 +38,7 @@ public class ManagerController {
             
             ApiResponse<UserResponse> response = ApiResponse.success("User created successfully", createdUser);
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<UserResponse> response = ApiResponse.badRequest(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -52,7 +53,7 @@ public class ManagerController {
         } catch (IllegalArgumentException e) {
             ApiResponse<List<UserResponse>> response = ApiResponse.badRequest("Invalid role: " + role);
             return ResponseEntity.badRequest().body(response);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             ApiResponse<List<UserResponse>> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
@@ -67,7 +68,7 @@ public class ManagerController {
             UserResponse updatedUser = adminService.updateUser(userId, request, "MANAGER");
             ApiResponse<UserResponse> response = ApiResponse.success("User updated successfully", updatedUser);
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             ApiResponse<UserResponse> response = ApiResponse.badRequest(e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
