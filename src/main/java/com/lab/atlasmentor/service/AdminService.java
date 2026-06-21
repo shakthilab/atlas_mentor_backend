@@ -68,6 +68,9 @@ public class AdminService {
     private RefreshTokenRepository refreshTokenRepository;
 
     @Autowired
+    private StudentRepository studentRepository;
+
+    @Autowired
     private ClientPayoutRepository clientPayoutRepository;
 
     @Autowired
@@ -724,16 +727,17 @@ public class AdminService {
             lastName = null; // Companies don't need lastName
         }
         
-        // Get staff and student counts for companies
+        // Get staff and student counts for companies; leads/registered counts for referrals
         UserResponse.UserCounts userCounts = null;
         if (primaryRole != null && "COMPANY".equals(primaryRole.getName()) && user.getBranchId() != null) {
-            // Define staff roles (excluding ADMIN as they don't belong to branches)
             List<String> staffRoles = List.of("MANAGER", "VIDEO_EDITOR", "JUNIOR_COUNSELLOR", "SENIOR_COUNSELLOR", "COUNSELLOR");
-            
             Long totalStaffs = userRepository.countStaffsByBranchId(user.getBranchId(), staffRoles);
             Long totalStudents = userRepository.countStudentsByBranchId(user.getBranchId());
-            
             userCounts = new UserResponse.UserCounts(totalStaffs, totalStudents);
+        } else if (primaryRole != null && "REFERRAL".equals(primaryRole.getName())) {
+            Long leadsCount = studentRepository.countByReferralIdAndStatus(user.getId(), "LEAD");
+            Long registeredCount = studentRepository.countByReferralIdAndStatus(user.getId(), "REGISTERED");
+            userCounts = new UserResponse.UserCounts(null, null, leadsCount, registeredCount);
         }
         
         return new UserResponse(

@@ -1,5 +1,6 @@
 package com.lab.atlasmentor.controller;
 import com.lab.atlasmentor.exception.BusinessException;
+import lombok.extern.slf4j.Slf4j;
 
 import com.lab.atlasmentor.dto.ApiResponse;
 import com.lab.atlasmentor.dto.CounsellorAssignmentRequest;
@@ -23,6 +24,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/hierarchy")
 public class HierarchyController {
@@ -98,13 +100,7 @@ public class HierarchyController {
     @PostMapping("/assign-employee-by-roles")
     public ResponseEntity<ApiResponse<String>> assignEmployeesToManagerByRoles(@RequestBody EmployeeAssignmentRequest request) {
         try {
-            // Get current user
-            User currentUser = userRepository.findById(SecurityUtils.getCurrentUserId())
-                .orElseThrow(() -> new RuntimeException("Current user not found"));
-            
-            // Validate that manager exists
-            User manager = userRepository.findById(request.getManagerId())
-                .orElseThrow(() -> new RuntimeException("Manager not found"));
+            Long currentUserId = SecurityUtils.getCurrentUserId();
             
             int successCount = 0;
             int failureCount = 0;
@@ -132,10 +128,11 @@ public class HierarchyController {
                         continue;
                     }
                     
-                    hierarchyService.assignEmployeeToManager(user, manager, currentUser);
+                    hierarchyService.assignEmployeeToManager(userId, request.getManagerId(), currentUserId);
                     successCount++;
                     
                 } catch (Exception e) {
+                    log.error("[assignEmployeeByRoles] inner error userId={}: {}", userId, e.getMessage(), e);
                     errorMessages.append("Error assigning user ").append(userId).append(": ").append(e.getMessage()).append(". ");
                     failureCount++;
                 }
@@ -149,6 +146,7 @@ public class HierarchyController {
 
             return ResponseEntity.ok(ApiResponse.success(message, null));
         } catch (Exception e) {
+            log.error("[assignEmployeeByRoles] outer error: {}", e.getMessage(), e);
             return ResponseEntity.badRequest().body(ApiResponse.badRequest(e.getMessage()));
         }
     }

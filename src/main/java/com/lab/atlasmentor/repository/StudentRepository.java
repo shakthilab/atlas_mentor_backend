@@ -133,6 +133,9 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
            "OR p.sourceType IN ('REFERRAL', 'COMPANY'))")
     Page<StudentWithStudentPaymentDto> findStudentsWithPaymentByBranch(@Param("branchId") Long branchId, Pageable pageable);
 
+    @Query(value = "SELECT COUNT(*) FROM students WHERE status = :status AND (created_by = :referralId OR (source_type = 'REFERRAL' AND source_id = :referralId))", nativeQuery = true)
+    Long countByReferralIdAndStatus(@Param("referralId") Long referralId, @Param("status") String status);
+
     @Modifying
     @Query("UPDATE Student s SET s.assignedBy = null WHERE s.assignedBy.id = :userId")
     void nullifyAssignedByByUserId(@Param("userId") Long userId);

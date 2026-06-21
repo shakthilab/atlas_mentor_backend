@@ -52,6 +52,8 @@ public class UserResponse {
     public static class UserCounts {
         private Long totalStaffs;
         private Long totalStudents;
+        private Long leadsCount;
+        private Long registeredCount;
 
         public UserCounts() {}
 
@@ -60,10 +62,23 @@ public class UserResponse {
             this.totalStudents = totalStudents;
         }
 
+        public UserCounts(Long totalStaffs, Long totalStudents, Long leadsCount, Long registeredCount) {
+            this.totalStaffs = totalStaffs;
+            this.totalStudents = totalStudents;
+            this.leadsCount = leadsCount;
+            this.registeredCount = registeredCount;
+        }
+
         public Long getTotalStaffs() { return totalStaffs; }
         public void setTotalStaffs(Long totalStaffs) { this.totalStaffs = totalStaffs; }
 
         public Long getTotalStudents() { return totalStudents; }
         public void setTotalStudents(Long totalStudents) { this.totalStudents = totalStudents; }
+
+        public Long getLeadsCount() { return leadsCount; }
+        public void setLeadsCount(Long leadsCount) { this.leadsCount = leadsCount; }
+
+        public Long getRegisteredCount() { return registeredCount; }
+        public void setRegisteredCount(Long registeredCount) { this.registeredCount = registeredCount; }
     }
 }

@@ -54,36 +54,48 @@ public class HierarchyService {
     @Autowired
     private EmployeeDetailsRepository employeeDetailsRepository;
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void assignEmployeeToManager(User user, User manager, User currentUser) {
-        // Remove existing assignment if any
-        ManagerEmployeeHierarchy existing = managerEmployeeHierarchyRepository.findByEmployeeId(user.getId());
-        if (existing != null) {
-            managerEmployeeHierarchyRepository.delete(existing);
-            managerEmployeeHierarchyRepository.flush();
-        }
+    @Transactional
+    public void assignEmployeeToManager(Long employeeId, Long managerId, Long currentUserId) {
+        log.info("[assignEmployee] START employeeId={} managerId={} currentUserId={}", employeeId, managerId, currentUserId);
 
-        managerEmployeeHierarchyRepository.save(new ManagerEmployeeHierarchy(manager.getId(), user.getId()));
+        User user = userRepository.findById(employeeId)
+                .orElseThrow(() -> new RuntimeException("User not found: " + employeeId));
+        log.info("[assignEmployee] user found: id={} role={}", user.getId(), user.getRole() != null ? user.getRole().getName() : "null");
+
+        User manager = userRepository.findById(managerId)
+                .orElseThrow(() -> new RuntimeException("Manager not found: " + managerId));
+        log.info("[assignEmployee] manager found: id={}", manager.getId());
+
+        log.info("[assignEmployee] deleting existing assignment for employeeId={}", employeeId);
+        managerEmployeeHierarchyRepository.deleteDirectlyByEmployeeId(employeeId);
+
+        log.info("[assignEmployee] saving new ManagerEmployeeHierarchy managerId={} employeeId={}", managerId, employeeId);
+        managerEmployeeHierarchyRepository.save(new ManagerEmployeeHierarchy(managerId, employeeId));
 
         if (user.hasRole("COMPANY")) {
-            companyDetailsRepository.findByUserId(user.getId()).ifPresent(cd -> {
+            log.info("[assignEmployee] user is COMPANY, updating companyDetails");
+            companyDetailsRepository.findByUserId(employeeId).ifPresent(cd -> {
                 cd.setAssignedTo(manager);
                 companyDetailsRepository.save(cd);
             });
         }
 
         if (user.hasRole("REFERRAL")) {
-            referralAssignmentRepository.deleteByReferralId(user.getId());
+            log.info("[assignEmployee] user is REFERRAL, updating referralAssignment");
+            referralAssignmentRepository.deleteByReferralId(employeeId);
             ReferralAssignment ra = new ReferralAssignment(user, manager);
-            ra.setCreatedBy(currentUser.getId());
-            ra.setUpdatedBy(currentUser.getId());
+            ra.setCreatedBy(currentUserId);
+            ra.setUpdatedBy(currentUserId);
             referralAssignmentRepository.save(ra);
         }
 
-        employeeDetailsRepository.findByUserId(user.getId()).ifPresent(ed -> {
+        log.info("[assignEmployee] updating employeeDetails.assignedTo");
+        employeeDetailsRepository.findByUserId(employeeId).ifPresent(ed -> {
             ed.setAssignedTo(manager);
             employeeDetailsRepository.save(ed);
         });
+
+        log.info("[assignEmployee] DONE employeeId={} managerId={}", employeeId, managerId);
     }
 
     public List<ManagerHierarchyResponse> getManagerHierarchy() {
