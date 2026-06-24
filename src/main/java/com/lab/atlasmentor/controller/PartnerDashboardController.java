@@ -26,7 +26,7 @@ public class PartnerDashboardController {
      * ADMIN, MANAGER, BRANCH_PARTNER may query any partner.
      */
     @GetMapping("/{partnerId}/dashboard")
-    @PreAuthorize("hasAnyRole('REFERRAL', 'COMPANY', 'ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
+    @PreAuthorize("hasAnyRole('REFERRAL', 'COMPANY', 'ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<ApiResponse<PartnerDashboardResponse>> getPartnerDashboard(
             @PathVariable Long partnerId,
             @RequestParam(defaultValue = "30d") String period) {

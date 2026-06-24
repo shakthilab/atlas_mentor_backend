@@ -49,7 +49,7 @@ public class PaymentDisputeActivityController {
     private UserRepository userRepository;
 
     @GetMapping("/{paymentId}/activities")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'REFERRAL', 'COMPANY')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'ADMINISTRATIVE_ASSISTANT', 'REFERRAL', 'COMPANY')")
     public ResponseEntity<ApiResponse<List<PaymentDisputeActivityDto>>> getPaymentActivities(
             @PathVariable Long paymentId) {
         try {
@@ -65,7 +65,7 @@ public class PaymentDisputeActivityController {
     }
 
     @PostMapping("/{paymentId}/dispute")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'REFERRAL', 'COMPANY')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'ADMINISTRATIVE_ASSISTANT', 'REFERRAL', 'COMPANY')")
     public ResponseEntity<ApiResponse<ClientPayoutDto>> raiseDispute(
             @PathVariable Long paymentId,
             @Valid @RequestBody PaymentDisputeRequest request) {

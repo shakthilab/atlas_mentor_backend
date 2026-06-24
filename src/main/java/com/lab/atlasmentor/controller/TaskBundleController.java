@@ -43,7 +43,7 @@ public class TaskBundleController {
      * Create a new task bundle
      */
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<TaskBundleResponse> createTaskBundle(
             @Valid @RequestBody CreateTaskBundleRequest request) {
         log.info("Create task bundle request: {}", request.getName());
@@ -57,7 +57,7 @@ public class TaskBundleController {
      * Get all task bundles with pagination and filtering
      */
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<TaskBundlePageResponse> getTaskBundles(
             @RequestParam(required = false) Long roleId,
             @RequestParam(required = false) BundleStatus status,
@@ -81,7 +81,7 @@ public class TaskBundleController {
      * Get task bundle by ID
      */
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<TaskBundleResponse> getTaskBundle(@PathVariable Long id) {
         log.info("Get task bundle details for ID: {}", id);
         
@@ -93,7 +93,7 @@ public class TaskBundleController {
      * Update task bundle
      */
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<TaskBundleResponse> updateTaskBundle(
             @PathVariable Long id,
             @Valid @RequestBody UpdateTaskBundleRequest request) {
@@ -108,7 +108,7 @@ public class TaskBundleController {
      * Delete task bundle (soft delete)
      */
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<Map<String, Object>> deleteTaskBundle(@PathVariable Long id) {
         log.info("Delete task bundle request for ID: {}", id);
         
@@ -128,7 +128,7 @@ public class TaskBundleController {
      * Activate task bundle
      */
     @PostMapping("/{id}/activate")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<TaskBundleResponse> activateTaskBundle(@PathVariable Long id) {
         log.info("Activate task bundle request for ID: {}", id);
         
@@ -141,7 +141,7 @@ public class TaskBundleController {
      * Deactivate task bundle
      */
     @PostMapping("/{id}/deactivate")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<TaskBundleResponse> deactivateTaskBundle(@PathVariable Long id) {
         log.info("Deactivate task bundle request for ID: {}", id);
         
@@ -154,7 +154,7 @@ public class TaskBundleController {
      * Get task bundles by role
      */
     @GetMapping("/role/{roleId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<List<TaskBundleListResponse>> getTaskBundlesByRole(@PathVariable Long roleId) {
         log.info("Get task bundles for role ID: {}", roleId);
         
@@ -166,7 +166,7 @@ public class TaskBundleController {
      * Add task to task bundle
      */
     @PostMapping("/{bundleId}/tasks")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<TaskBundleTaskResponse> addTaskToBundle(
             @PathVariable Long bundleId,
             @Valid @RequestBody CreateTaskBundleTaskRequest request) {
@@ -181,7 +181,7 @@ public class TaskBundleController {
      * Get tasks in task bundle
      */
     @GetMapping("/{bundleId}/tasks")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<TaskBundleResponse> getTasksInBundle(@PathVariable Long bundleId) {
         log.info("Get tasks in bundle: {}", bundleId);
 
@@ -193,7 +193,7 @@ public class TaskBundleController {
      * Update task in task bundle
      */
     @PutMapping("/{bundleId}/tasks/{taskId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<TaskBundleTaskResponse> updateTaskInBundle(
             @PathVariable Long bundleId,
             @PathVariable Long taskId,
@@ -209,7 +209,7 @@ public class TaskBundleController {
      * Remove task from task bundle (soft delete)
      */
     @DeleteMapping("/{bundleId}/tasks/{taskId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<Void> removeTaskFromBundle(
             @PathVariable Long bundleId,
             @PathVariable Long taskId) {
@@ -224,7 +224,7 @@ public class TaskBundleController {
      * Manually trigger bundle execution
      */
     @PostMapping("/{id}/execute")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<String> triggerBundleExecution(@PathVariable Long id) {
         log.info("Manual trigger execution for bundle: {}", id);
         
@@ -236,7 +236,7 @@ public class TaskBundleController {
      * Execute bundle now with detailed response
      */
     @PostMapping("/{id}/execute-now")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<BundleExecutionResponse> executeBundleNow(@PathVariable Long id) {
         log.info("Execute now request for bundle: {}", id);
         
@@ -248,7 +248,7 @@ public class TaskBundleController {
      * Manually generate tasks for a bundle on specific date
      */
     @PostMapping("/{id}/generate-tasks")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<TaskGenerationService.GenerationResult> generateTasksForBundle(
             @PathVariable Long id,
             @RequestParam LocalDate executionDate) {
@@ -262,7 +262,7 @@ public class TaskBundleController {
      * Get bundle execution statistics
      */
     @GetMapping("/{id}/execution-stats")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<BundleSchedulerService.BundleExecutionStats> getBundleExecutionStats(@PathVariable Long id) {
         log.info("Get execution statistics for bundle: {}", id);
         
@@ -274,7 +274,7 @@ public class TaskBundleController {
      * Get bundles scheduled for next hour
      */
     @GetMapping("/scheduled-next-hour")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<List<TaskBundleListResponse>> getBundlesScheduledNextHour() {
         log.info("Get bundles scheduled for next hour");
         
@@ -310,7 +310,7 @@ public class TaskBundleController {
      * Get task generation statistics
      */
     @GetMapping("/generation-stats")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<TaskGenerationService.TaskGenerationStats> getTaskGenerationStats(
             @RequestParam LocalDate startDate,
             @RequestParam LocalDate endDate) {
@@ -324,7 +324,7 @@ public class TaskBundleController {
      * Process overdue tasks manually
      */
     @PostMapping("/process-overdue-tasks")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<OverdueTaskSchedulerService.OverdueTaskResult> processOverdueTasks() {
         log.info("Manual processing of overdue tasks");
         
@@ -336,7 +336,7 @@ public class TaskBundleController {
      * Get overdue task statistics
      */
     @GetMapping("/overdue-stats")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<OverdueTaskSchedulerService.OverdueTaskStats> getOverdueTaskStats() {
         log.info("Get overdue task statistics");
         
@@ -348,7 +348,7 @@ public class TaskBundleController {
      * Generate tasks for specific user by role
      */
     @PostMapping("/generate-tasks/user/{userId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<TaskGenerationService.GenerationResult> generateTasksForUser(
             @PathVariable Long userId,
             @RequestParam LocalDate executionDate) {
@@ -362,7 +362,7 @@ public class TaskBundleController {
      * Get overdue tasks for user
      */
     @GetMapping("/overdue-tasks/user/{userId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<List<com.lab.atlasmentor.dto.TaskResponse>> getOverdueTasksForUser(@PathVariable Long userId) {
         log.info("Get overdue tasks for user: {}", userId);
         
@@ -418,7 +418,7 @@ public class TaskBundleController {
      * Get overdue tasks by branch
      */
     @GetMapping("/overdue-tasks/branch/{branchId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<List<TaskResponse>> getOverdueTasksByBranch(@PathVariable Long branchId) {
         log.info("Get overdue tasks for branch: {}", branchId);
         

@@ -148,7 +148,7 @@ public class AdminService {
 
     public List<ManagerResponse> getAllManagers() {
         return userRepository.findAll().stream()
-                .filter(user -> user.hasRole("MANAGER") || user.hasRole("BRANCH_PARTNER"))
+                .filter(user -> user.hasRole("MANAGER") || user.hasRole("BRANCH_PARTNER") || user.hasRole("ADMINISTRATIVE_ASSISTANT"))
                 .filter(user -> user.getStatus() == com.lab.atlasmentor.enums.UserStatus.ACTIVE)
                 .map(this::convertToManagerResponse)
                 .collect(Collectors.toList());
@@ -252,7 +252,7 @@ public class AdminService {
             if ("STUDENT".equals(roleToCreateName)) {
                 throw new BusinessException("Students must register themselves");
             }
-        } else if ("MANAGER".equals(createdByRoleName)) {
+        } else if ("MANAGER".equals(createdByRoleName) || "ADMINISTRATIVE_ASSISTANT".equals(createdByRoleName)) {
             // Manager can create: JUNIOR_COUNSELLOR, COUNSELLOR, VIDEO_EDITOR
             if (!List.of("JUNIOR_COUNSELLOR", "SENIOR_COUNSELLOR", "VIDEO_EDITOR").contains(roleToCreateName)) {
                 throw new BusinessException("Manager can only create JUNIOR_COUNSELLOR, SENIOR_COUNSELLOR, or VIDEO_EDITOR users");

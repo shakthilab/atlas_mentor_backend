@@ -278,13 +278,13 @@ public class ReferralResourceService {
     }
 
     private boolean canManageResources(CustomUserDetails user) {
-        return user.isAdmin() || user.isManager() || user.getRole().equalsIgnoreCase("BRANCH_PARTNER");
+        return user.isAdmin() || user.isManager() || user.getRole().equalsIgnoreCase("BRANCH_PARTNER") || user.getRole().equalsIgnoreCase("ADMINISTRATIVE_ASSISTANT");
     }
 
     private boolean canAccessResource(CustomUserDetails user, ReferralResource resource) {
         if (user.isAdmin()) return true;
 
-        if (user.isManager() || user.getRole().equalsIgnoreCase("BRANCH_PARTNER")) {
+        if (user.isManager() || user.getRole().equalsIgnoreCase("BRANCH_PARTNER") || user.getRole().equalsIgnoreCase("ADMINISTRATIVE_ASSISTANT")) {
             if (user.getBranchId() == null) return true;
             return resource.getOwners().stream().anyMatch(o ->
                     o.getBranchId() != null && o.getBranchId().equals(user.getBranchId()));
@@ -308,7 +308,7 @@ public class ReferralResourceService {
     private boolean canAccessOwnerResources(CustomUserDetails user, User owner) {
         if (user.isAdmin()) return true;
 
-        if (user.isManager() || user.getRole().equalsIgnoreCase("BRANCH_PARTNER")) {
+        if (user.isManager() || user.getRole().equalsIgnoreCase("BRANCH_PARTNER") || user.getRole().equalsIgnoreCase("ADMINISTRATIVE_ASSISTANT")) {
             if (user.getBranchId() != null && owner.getBranchId() != null) {
                 return owner.getBranchId().equals(user.getBranchId());
             }

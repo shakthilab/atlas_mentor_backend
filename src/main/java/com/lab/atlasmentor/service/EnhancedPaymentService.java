@@ -79,7 +79,7 @@ public class EnhancedPaymentService {
         String userRole = currentUserDetails.getRole();
         
         // Only ADMIN and MANAGER/BRANCH_PARTNER can assign amounts
-        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole))) {
+        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(userRole))) {
             throw new BusinessException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can assign amounts.");
         }
 
@@ -87,7 +87,7 @@ public class EnhancedPaymentService {
                 .orElseThrow(() -> new RuntimeException("Student payment not found for student: " + studentId));
 
         // Validate manager branch access if user is MANAGER or BRANCH_PARTNER
-        if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole)) {
+        if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(userRole)) {
             validateManagerBranchAccess(studentPayment.getBranchId());
         }
 
@@ -119,7 +119,7 @@ public class EnhancedPaymentService {
         String userRole = currentUserDetails.getRole();
         
         // Only ADMIN and MANAGER/BRANCH_PARTNER can request amount changes
-        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole))) {
+        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(userRole))) {
             throw new BusinessException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can request amount changes.");
         }
 
@@ -127,7 +127,7 @@ public class EnhancedPaymentService {
                 .orElseThrow(() -> new RuntimeException("Student payment not found for student: " + studentId));
 
         // Validate manager branch access if user is MANAGER or BRANCH_PARTNER
-        if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole)) {
+        if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(userRole)) {
             validateManagerBranchAccess(studentPayment.getBranchId());
         }
 
@@ -162,7 +162,7 @@ public class EnhancedPaymentService {
         String userRole = currentUserDetails.getRole();
         
         // Only ADMIN and MANAGER can approve amount changes
-        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole))) {
+        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(userRole))) {
             throw new BusinessException("Access denied. Only ADMIN and MANAGER can approve amount changes.");
         }
 
@@ -170,7 +170,7 @@ public class EnhancedPaymentService {
                 .orElseThrow(() -> new RuntimeException("Amount change request not found: " + changeRequestId));
 
         // Validate manager branch access if user is MANAGER
-        if ("MANAGER".equalsIgnoreCase(userRole)) {
+        if ("MANAGER".equalsIgnoreCase(userRole) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(userRole)) {
             validateManagerBranchAccess(amountChange.getStudent().getBranch() != null ? amountChange.getStudent().getBranch().getId() : null);
         }
 
@@ -205,7 +205,7 @@ public class EnhancedPaymentService {
         String userRole = currentUserDetails.getRole();
         
         // Only ADMIN and MANAGER can reject amount changes
-        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole))) {
+        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(userRole))) {
             throw new BusinessException("Access denied. Only ADMIN and MANAGER can reject amount changes.");
         }
 
@@ -213,7 +213,7 @@ public class EnhancedPaymentService {
                 .orElseThrow(() -> new RuntimeException("Amount change request not found: " + changeRequestId));
 
         // Validate manager branch access if user is MANAGER
-        if ("MANAGER".equalsIgnoreCase(userRole)) {
+        if ("MANAGER".equalsIgnoreCase(userRole) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(userRole)) {
             validateManagerBranchAccess(amountChange.getStudent().getBranch() != null ? amountChange.getStudent().getBranch().getId() : null);
         }
 
@@ -239,7 +239,7 @@ public class EnhancedPaymentService {
         String userRole = currentUserDetails.getRole();
         
         // Only ADMIN and MANAGER/BRANCH_PARTNER can request status changes
-        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole))) {
+        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(userRole))) {
             throw new BusinessException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can request status changes.");
         }
 
@@ -247,7 +247,7 @@ public class EnhancedPaymentService {
                 .orElseThrow(() -> new RuntimeException("Student payment not found for student: " + studentId));
 
         // Validate manager branch access if user is MANAGER or BRANCH_PARTNER
-        if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole)) {
+        if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(userRole)) {
             validateManagerBranchAccess(studentPayment.getBranchId());
         }
 
@@ -287,7 +287,7 @@ public class EnhancedPaymentService {
         String userRole = currentUserDetails.getRole();
         
         // Only ADMIN, MANAGER/BRANCH_PARTNER, REFERRAL, and COMPANY can approve based on context
-        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole) ||
+        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(userRole) ||
               "REFERRAL".equalsIgnoreCase(userRole) || "COMPANY".equalsIgnoreCase(userRole))) {
             throw new BusinessException("Access denied.");
         }
@@ -329,7 +329,7 @@ public class EnhancedPaymentService {
         String userRole = currentUserDetails.getRole();
         
         // Only ADMIN, MANAGER/BRANCH_PARTNER, REFERRAL, and COMPANY can reject based on context
-        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole) ||
+        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(userRole) ||
               "REFERRAL".equalsIgnoreCase(userRole) || "COMPANY".equalsIgnoreCase(userRole))) {
             throw new BusinessException("Access denied.");
         }
@@ -363,7 +363,7 @@ public class EnhancedPaymentService {
         String userRole = currentUserDetails.getRole();
         
         // Only ADMIN and MANAGER/BRANCH_PARTNER can update payment amounts
-        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole))) {
+        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(userRole))) {
             throw new BusinessException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can update payment amounts.");
         }
 
@@ -371,7 +371,7 @@ public class EnhancedPaymentService {
                 .orElseThrow(() -> new RuntimeException("Student payment not found for student: " + studentId));
 
         // Validate manager branch access if user is MANAGER or BRANCH_PARTNER
-        if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole)) {
+        if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(userRole)) {
             validateManagerBranchAccess(studentPayment.getBranchId());
         }
 
@@ -413,7 +413,7 @@ public class EnhancedPaymentService {
         if ("ADMIN".equalsIgnoreCase(userRole)) {
             // Admin can approve all
             return;
-        } else if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole)) {
+        } else if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(userRole)) {
             // Manager/Branch Partner can approve within their branch
             validateManagerBranchAccess(studentPayment.getBranchId());
         } else if ("REFERRAL".equalsIgnoreCase(userRole)) {
@@ -476,7 +476,7 @@ public class EnhancedPaymentService {
         
         if ("ADMIN".equalsIgnoreCase(userRole)) {
             return studentPaymentRepository.findAll();
-        } else if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole)) {
+        } else if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(userRole)) {
             return studentPaymentRepository.findByBranchIdOrderByCreatedAtDesc(currentUserDetails.getBranchId());
         } else if ("REFERRAL".equalsIgnoreCase(userRole)) {
             return studentPaymentRepository.findBySourceIdAndSourceType(currentUserDetails.getUserId(), SourceType.REFERRAL);
@@ -491,11 +491,11 @@ public class EnhancedPaymentService {
         var currentUserDetails = SecurityUtils.getCurrentUser();
         String userRole = currentUserDetails.getRole();
         
-        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole))) {
+        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(userRole))) {
             throw new BusinessException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can view pending amount changes.");
         }
 
-        if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole)) {
+        if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(userRole)) {
             // Get pending changes for manager's/branch partner's branch
             List<StudentPayment> managerPayments = studentPaymentRepository.findByBranchIdOrderByCreatedAtDesc(currentUserDetails.getBranchId());
             return managerPayments.stream()
@@ -512,7 +512,7 @@ public class EnhancedPaymentService {
         
         if ("ADMIN".equalsIgnoreCase(userRole)) {
             return studentStatusApprovalRepository.findByStatusOrderByCreatedAtDesc(ApprovalStatus.PENDING);
-        } else if ("MANAGER".equalsIgnoreCase(userRole)) {
+        } else if ("MANAGER".equalsIgnoreCase(userRole) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(userRole)) {
             // Get pending approvals for manager's branch
             List<StudentPayment> managerPayments = studentPaymentRepository.findByBranchIdOrderByCreatedAtDesc(currentUserDetails.getBranchId());
             return managerPayments.stream()

@@ -64,7 +64,27 @@ public class TaskBundle extends BaseEntity {
     
     @Column(name = "is_deleted", nullable = false)
     private Boolean isDeleted = false;
-    
+
+    // ---- ClickUp-style extensions (non-breaking additions) ----
+
+    @Column(name = "color", length = 20)
+    private String color;
+
+    @Column(name = "icon", length = 50)
+    private String icon;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "bundle_branch_id", nullable = true)
+    @JsonIgnoreProperties({"users"})
+    private Branch branch;
+
+    @Column(name = "display_order")
+    private Integer displayOrder = 0;
+
+    @OneToMany(mappedBy = "taskBundle", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @JsonIgnoreProperties({"taskBundle"})
+    private List<TaskList> taskLists;
+
     public TaskBundle() {}
     
     public TaskBundle(String name, String description, Role role, BundleStatus status) {

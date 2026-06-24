@@ -217,6 +217,9 @@ public class AuthService {
                 case "MANAGER":
                     employeeType = EmployeeType.MANAGER;
                     break;
+                case "ADMINISTRATIVE_ASSISTANT":
+                    employeeType = EmployeeType.ADMINISTRATIVE_ASSISTANT;
+                    break;
                 case "JUNIOR_COUNSELLOR":
                     employeeType = EmployeeType.JUNIOR_COUNSELLOR;
                     break;
@@ -431,7 +434,7 @@ public class AuthService {
             }
             
             // Define all roles
-            List<String> employeeRoleNames = List.of("ADMIN", "MANAGER", "VIDEO_EDITOR", "JUNIOR_COUNSELLOR", "SENIOR_COUNSELLOR", "COUNSELLOR", "BRANCH_PARTNER");
+            List<String> employeeRoleNames = List.of("ADMIN", "MANAGER", "ADMINISTRATIVE_ASSISTANT", "VIDEO_EDITOR", "JUNIOR_COUNSELLOR", "SENIOR_COUNSELLOR", "COUNSELLOR", "BRANCH_PARTNER");
             
             // Convert search to lowercase for case-insensitive search
             String searchLower = search != null ? search.toLowerCase() : null;
@@ -523,7 +526,7 @@ public class AuthService {
         } catch (Exception e) {
             log.error("Error getting current user for employee filtering: {}", e.getMessage(), e);
             // Fallback to original behavior without branch filtering
-            List<String> employeeRoleNames = List.of("ADMIN", "MANAGER", "VIDEO_EDITOR", "JUNIOR_COUNSELLOR", "SENIOR_COUNSELLOR", "COUNSELLOR", "BRANCH_PARTNER");
+            List<String> employeeRoleNames = List.of("ADMIN", "MANAGER", "ADMINISTRATIVE_ASSISTANT", "VIDEO_EDITOR", "JUNIOR_COUNSELLOR", "SENIOR_COUNSELLOR", "COUNSELLOR", "BRANCH_PARTNER");
             String searchLower = search != null ? search.toLowerCase() : null;
             Pageable pageable = PageRequest.of(page, size);
             Page<User> employees = userRepository.findEmployeesWithFilters(role, branch, searchLower, employeeRoleNames, pageable);

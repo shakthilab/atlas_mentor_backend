@@ -193,7 +193,7 @@ public interface ClientPayoutRepository extends JpaRepository<ClientPayout, Long
                                                @Param("paymentStatus") String paymentStatus,
                                                @Param("dateFrom") LocalDateTime dateFrom,
                                                @Param("dateTo") LocalDateTime dateTo);
-    
+
     // Advanced filtering for manager/branch partner role with search and multiple criteria
     @Query(value = "SELECT cp.* FROM client_payouts cp " +
            "JOIN students s ON s.id = cp.student_id " +
@@ -212,7 +212,7 @@ public interface ClientPayoutRepository extends JpaRepository<ClientPayout, Long
                                                @Param("paymentStatus") String paymentStatus,
                                                @Param("dateFrom") LocalDateTime dateFrom,
                                                @Param("dateTo") LocalDateTime dateTo);
-    
+
     // Advanced filtering for referral/company role with search and multiple criteria
     @Query(value = "SELECT cp.* FROM client_payouts cp " +
            "JOIN students s ON s.id = cp.student_id " +

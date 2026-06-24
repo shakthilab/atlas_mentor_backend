@@ -34,7 +34,7 @@ public class ClientPayoutController {
     // ==================== VIEW PAYOUTS ====================
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'REFERRAL', 'COMPANY')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT', 'REFERRAL', 'COMPANY')")
     public ResponseEntity<ApiResponse<List<ClientPayoutDto>>> getClientPayouts() {
         try {
             List<ClientPayout> payouts = clientPayoutService.getClientPayoutsByRole();
@@ -49,7 +49,7 @@ public class ClientPayoutController {
     }
 
     @GetMapping("/{payoutId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'REFERRAL', 'COMPANY')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT', 'REFERRAL', 'COMPANY')")
     public ResponseEntity<ApiResponse<ClientPayoutDto>> getClientPayoutById(@PathVariable Long payoutId) {
         try {
             ClientPayout payout = clientPayoutService.getClientPayoutById(payoutId);
@@ -62,7 +62,7 @@ public class ClientPayoutController {
     }
 
     @GetMapping("/{payoutId}/activities")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'REFERRAL', 'COMPANY')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT', 'REFERRAL', 'COMPANY')")
     public ResponseEntity<ApiResponse<List<ClientPayoutActivityDto>>> getPayoutActivities(@PathVariable Long payoutId) {
         try {
             List<ClientPayoutActivity> activities = clientPayoutService.getPayoutActivities(payoutId);
@@ -77,7 +77,7 @@ public class ClientPayoutController {
     }
 
     @PostMapping("/{payoutId}/dispute")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'REFERRAL', 'COMPANY')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'ADMINISTRATIVE_ASSISTANT', 'REFERRAL', 'COMPANY')")
     public ResponseEntity<ApiResponse<ClientPayoutDto>> initiateDispute(
             @PathVariable Long payoutId,
             @Valid @RequestBody PaymentDisputeRequest request) {
@@ -93,7 +93,7 @@ public class ClientPayoutController {
     // ==================== AMOUNT ASSIGNMENT ====================
 
     @PostMapping("/{payoutId}/assign-amount")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<ApiResponse<ClientPayoutDto>> assignAmount(
             @PathVariable Long payoutId,
             @Valid @RequestBody AmountAssignmentRequest request) {
@@ -110,7 +110,7 @@ public class ClientPayoutController {
     // ==================== PAYMENT PROCESSING ====================
 
     @PostMapping("/{payoutId}/add-payment")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<ApiResponse<ClientPayoutDto>> addPayment(
             @PathVariable Long payoutId,
             @Valid @RequestBody PaymentRequest request) {
@@ -133,7 +133,7 @@ public class ClientPayoutController {
     // ==================== DISPUTE MANAGEMENT ====================
 
     @PostMapping("/{payoutId}/initiate-dispute")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<ApiResponse<ClientPayoutDto>> initiateDispute(
             @PathVariable Long payoutId,
             @Valid @RequestBody DisputeRequest request) {
@@ -180,7 +180,7 @@ public class ClientPayoutController {
     // ==================== REPORTING ====================
 
     @GetMapping("/reports/summary")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<ApiResponse<Object>> getPayoutSummary(
             @RequestParam(required = false) Long userId,
             @RequestParam(required = false) String status,

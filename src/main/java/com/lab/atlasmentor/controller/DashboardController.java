@@ -22,13 +22,13 @@ public class DashboardController {
     private DashboardService dashboardService;
 
     @GetMapping("/referral-summary")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'REFERRAL', 'COMPANY')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT', 'REFERRAL', 'COMPANY')")
     public ResponseEntity<ReferralSummaryResponse> getReferralSummary() {
         return ResponseEntity.ok(dashboardService.getReferralSummary());
     }
 
     @GetMapping("/referral-commission-trend")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'REFERRAL', 'COMPANY')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT', 'REFERRAL', 'COMPANY')")
     public ResponseEntity<CommissionTrendResponse> getCommissionTrend(
             @RequestParam(required = false) String range,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,

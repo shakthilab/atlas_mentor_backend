@@ -38,7 +38,7 @@ public class PaymentService {
         String userRole = currentUserDetails.getRole();
         
         // Only ADMIN and MANAGER/BRANCH_PARTNER can create payments
-        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole))) {
+        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(userRole))) {
             throw new BusinessException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can create payments.");
         }
 
@@ -53,7 +53,7 @@ public class PaymentService {
         }
 
         // Validate manager branch access if user is MANAGER or BRANCH_PARTNER
-        if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole)) {
+        if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(userRole)) {
             validateManagerBranchAccess(student.getBranch() != null ? student.getBranch().getId() : null);
         }
 
@@ -75,7 +75,7 @@ public class PaymentService {
         String userRole = currentUserDetails.getRole();
         
         // Only ADMIN and MANAGER/BRANCH_PARTNER can update payments
-        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole))) {
+        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(userRole))) {
             throw new BusinessException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can update payments.");
         }
 
@@ -83,7 +83,7 @@ public class PaymentService {
                 .orElseThrow(() -> new RuntimeException("Payment not found with id: " + paymentId));
 
         // Validate manager branch access if user is MANAGER
-        if ("MANAGER".equalsIgnoreCase(userRole)) {
+        if ("MANAGER".equalsIgnoreCase(userRole) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(userRole)) {
             Student student = studentRepository.findById(payment.getStudentId())
                     .orElseThrow(() -> new RuntimeException("Student not found with id: " + payment.getStudentId()));
             validateManagerBranchAccess(student.getBranch() != null ? student.getBranch().getId() : null);
@@ -114,7 +114,7 @@ public class PaymentService {
         String userRole = currentUserDetails.getRole();
         
         // Only ADMIN and MANAGER/BRANCH_PARTNER can reject payments
-        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole))) {
+        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(userRole))) {
             throw new BusinessException("Access denied. Only ADMIN and MANAGER/BRANCH_PARTNER can reject payments.");
         }
 
@@ -122,7 +122,7 @@ public class PaymentService {
                 .orElseThrow(() -> new RuntimeException("Payment not found with id: " + paymentId));
 
         // Validate manager branch access if user is MANAGER
-        if ("MANAGER".equalsIgnoreCase(userRole)) {
+        if ("MANAGER".equalsIgnoreCase(userRole) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(userRole)) {
             Student student = studentRepository.findById(payment.getStudentId())
                     .orElseThrow(() -> new RuntimeException("Student not found with id: " + payment.getStudentId()));
             validateManagerBranchAccess(student.getBranch() != null ? student.getBranch().getId() : null);
@@ -150,7 +150,7 @@ public class PaymentService {
         } else if ("COMPANY".equalsIgnoreCase(userRole)) {
             // Company can only see payments where they are the company
             return paymentRepository.findByCompanyIdOrderByCreatedAtDesc(currentUserDetails.getUserId());
-        } else if ("MANAGER".equalsIgnoreCase(userRole)) {
+        } else if ("MANAGER".equalsIgnoreCase(userRole) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(userRole)) {
             // Manager can see payments from their branch
             return paymentRepository.findByBranchIdOrderByCreatedAtDesc(currentUserDetails.getBranchId());
         } else if ("ADMIN".equalsIgnoreCase(userRole)) {
@@ -165,11 +165,11 @@ public class PaymentService {
         var currentUserDetails = SecurityUtils.getCurrentUser();
         String userRole = currentUserDetails.getRole();
         
-        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole))) {
+        if (!("ADMIN".equalsIgnoreCase(userRole) || "MANAGER".equalsIgnoreCase(userRole) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(userRole))) {
             throw new BusinessException("Access denied. Only ADMIN and MANAGER can view payments by status.");
         }
 
-        if ("MANAGER".equalsIgnoreCase(userRole)) {
+        if ("MANAGER".equalsIgnoreCase(userRole) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(userRole)) {
             return paymentRepository.findByBranchIdAndStatusOrderByCreatedAtDesc(currentUserDetails.getBranchId(), status);
         } else {
             return paymentRepository.findByStatusOrderByCreatedAtDesc(status);
@@ -192,7 +192,7 @@ public class PaymentService {
             if (!currentUserDetails.getUserId().equals(payment.getCompanyId())) {
                 throw new BusinessException("Access denied. You can only view your own payments.");
             }
-        } else if ("MANAGER".equalsIgnoreCase(userRole)) {
+        } else if ("MANAGER".equalsIgnoreCase(userRole) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(userRole)) {
             Student student = studentRepository.findById(payment.getStudentId())
                     .orElseThrow(() -> new RuntimeException("Student not found with id: " + payment.getStudentId()));
             validateManagerBranchAccess(student.getBranch() != null ? student.getBranch().getId() : null);

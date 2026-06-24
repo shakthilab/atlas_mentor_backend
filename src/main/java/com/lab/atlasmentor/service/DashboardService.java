@@ -36,7 +36,7 @@ public class DashboardService {
 
         if ("ADMIN".equalsIgnoreCase(role)) {
             return buildAdminSummary();
-        } else if ("MANAGER".equalsIgnoreCase(role) || "BRANCH_PARTNER".equalsIgnoreCase(role)) {
+        } else if ("MANAGER".equalsIgnoreCase(role) || "BRANCH_PARTNER".equalsIgnoreCase(role) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(role)) {
             return buildBranchSummary(currentUser.getBranchId());
         } else {
             // REFERRAL or COMPANY — their own data only
@@ -166,7 +166,7 @@ public class DashboardService {
         String role = currentUser.getRole();
         if ("ADMIN".equalsIgnoreCase(role)) {
             return clientPayoutRepository.getTrendDataGlobal(from, to);
-        } else if ("MANAGER".equalsIgnoreCase(role) || "BRANCH_PARTNER".equalsIgnoreCase(role)) {
+        } else if ("MANAGER".equalsIgnoreCase(role) || "BRANCH_PARTNER".equalsIgnoreCase(role) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(role)) {
             return clientPayoutRepository.getTrendDataForBranch(currentUser.getBranchId(), from, to);
         } else {
             return clientPayoutRepository.getTrendDataForUser(currentUser.getUserId(), from, to);

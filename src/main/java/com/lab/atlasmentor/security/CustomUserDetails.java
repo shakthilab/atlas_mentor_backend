@@ -73,6 +73,6 @@ public class CustomUserDetails implements UserDetails {
     }
     
     public boolean isManager() {
-        return "MANAGER".equalsIgnoreCase(role) || "BRANCH_PARTNER".equalsIgnoreCase(role);
+        return "MANAGER".equalsIgnoreCase(role) || "BRANCH_PARTNER".equalsIgnoreCase(role) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(role);
     }
 }

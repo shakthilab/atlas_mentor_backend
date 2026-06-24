@@ -217,7 +217,7 @@ public class StudentService {
                 null, 
                 pageable
             );
-        } else if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole)) {
+        } else if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(userRole)) {
             // Manager/Branch Partner: Show only branch-specific students
             students = studentRepository.findByFiltersWithAccess(
                 statusParam, 
@@ -306,6 +306,9 @@ public class StudentService {
                     case "BRANCH_PARTNER":
                         sourceRoles.add("BRANCH_PARTNER");
                         break;
+                    case "ADMINISTRATIVE_ASSISTANT":
+                        sourceRoles.add("ADMINISTRATIVE_ASSISTANT");
+                        break;
                 }
             }
         }
@@ -338,7 +341,7 @@ public class StudentService {
                 sourceTypes,
                 pageable
             );
-        } else if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole)) {
+        } else if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(userRole)) {
             // Manager/Branch Partner: Show only branch-specific students except REGISTERED
             students = studentRepository.findByNonRegisteredStatusWithAccess(
                 searchParam, 
@@ -1097,7 +1100,7 @@ public class StudentService {
         if ("ADMIN".equalsIgnoreCase(userRole)) {
             // Admin: Return all client payouts with referral and company source types
             clientPayouts = clientPayoutRepository.findBySourceTypeIn(sourceTypes);
-        } else if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole)) {
+        } else if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(userRole)) {
             // Manager/Branch Partner: Return client payouts from their branch with referral and company source types
             Long branchId = currentUserDetails.getBranchId();
             if (branchId == null) {
@@ -1126,7 +1129,7 @@ public class StudentService {
         var currentUserDetails = SecurityUtils.getCurrentUser();
         String userRole = currentUserDetails.getRole();
         List<ClientPayout> clientPayouts;
-        
+
         // Parse filter parameters
         String searchParam = (search != null && !search.trim().isEmpty()) ? search.trim() : null;
         SourceType sourceParam = null;
@@ -1137,7 +1140,7 @@ public class StudentService {
                 throw new BusinessException("Invalid source type. Valid values: REFERRAL, COMPANY");
             }
         }
-        
+
         ClientPayoutStatus paymentStatusParam = null;
         if (paymentStatus != null && !paymentStatus.trim().isEmpty()) {
             try {
@@ -1146,7 +1149,7 @@ public class StudentService {
                 throw new BusinessException("Invalid payment status. Valid values: " + java.util.Arrays.toString(ClientPayoutStatus.values()));
             }
         }
-        
+
         LocalDateTime dateFromParam = null;
         if (dateFrom != null && !dateFrom.trim().isEmpty()) {
             try {
@@ -1155,7 +1158,7 @@ public class StudentService {
                 throw new BusinessException("Invalid dateFrom format. Use ISO format: yyyy-MM-ddTHH:mm:ss");
             }
         }
-        
+
         LocalDateTime dateToParam = null;
         if (dateTo != null && !dateTo.trim().isEmpty()) {
             try {
@@ -1164,13 +1167,13 @@ public class StudentService {
                 throw new BusinessException("Invalid dateTo format. Use ISO format: yyyy-MM-ddTHH:mm:ss");
             }
         }
-        
+
         if ("ADMIN".equalsIgnoreCase(userRole)) {
             // Admin: Use advanced filtering
             clientPayouts = clientPayoutRepository.findWithFiltersForAdmin(
-                searchParam, sourceParam != null ? sourceParam.name() : null, branch, 
+                searchParam, sourceParam != null ? sourceParam.name() : null, branch,
                 paymentStatusParam != null ? paymentStatusParam.name() : null, dateFromParam, dateToParam);
-        } else if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole)) {
+        } else if ("MANAGER".equalsIgnoreCase(userRole) || "BRANCH_PARTNER".equalsIgnoreCase(userRole) || "ADMINISTRATIVE_ASSISTANT".equalsIgnoreCase(userRole)) {
             // Manager/Branch Partner: Use branch-specific filtering
             Long branchId = currentUserDetails.getBranchId();
             if (branchId == null) {
@@ -1178,39 +1181,39 @@ public class StudentService {
             }
             // Override branch parameter with user's branch for security
             clientPayouts = clientPayoutRepository.findWithFiltersForBranch(
-                branchId, searchParam, sourceParam != null ? sourceParam.name() : null, 
+                branchId, searchParam, sourceParam != null ? sourceParam.name() : null,
                 paymentStatusParam != null ? paymentStatusParam.name() : null, dateFromParam, dateToParam);
         } else if ("REFERRAL".equalsIgnoreCase(userRole)) {
             // Referral: Use user-specific filtering
             clientPayouts = clientPayoutRepository.findWithFiltersForUser(
-                currentUserDetails.getUserId(), SourceType.REFERRAL.name(), searchParam, 
+                currentUserDetails.getUserId(), SourceType.REFERRAL.name(), searchParam,
                 paymentStatusParam != null ? paymentStatusParam.name() : null, dateFromParam, dateToParam);
         } else if ("COMPANY".equalsIgnoreCase(userRole)) {
             // Company: Use user-specific filtering
             clientPayouts = clientPayoutRepository.findWithFiltersForUser(
-                currentUserDetails.getUserId(), SourceType.COMPANY.name(), searchParam, 
+                currentUserDetails.getUserId(), SourceType.COMPANY.name(), searchParam,
                 paymentStatusParam != null ? paymentStatusParam.name() : null, dateFromParam, dateToParam);
         } else {
             // Other roles: Return empty list or throw exception
             throw new BusinessException("Access denied. This API is only available for ADMIN, MANAGER, REFERRAL, and COMPANY roles.");
         }
-        
+
         // Apply pagination
         int startIndex = page * size;
         int endIndex = Math.min(startIndex + size, clientPayouts.size());
         List<ClientPayout> paginatedPayouts = clientPayouts.subList(startIndex, endIndex);
-        
+
         // Convert to DTOs
         List<ClientPayoutDto> payoutDtos = paginatedPayouts.stream()
                 .map(this::convertToClientPayoutDto)
                 .collect(java.util.stream.Collectors.toList());
-        
+
         // Calculate summary statistics based on filtered results
         ClientPayoutSummaryDto summary = calculateClientPayoutSummary(clientPayouts);
-        
+
         return new ClientPayoutWithSummaryDto(payoutDtos, summary);
     }
-    
+
     private ClientPayoutSummaryDto calculateClientPayoutSummary(List<ClientPayout> clientPayouts) {
         // Initialize counters
         long totalAssigned = 0;
@@ -1220,7 +1223,7 @@ public class StudentService {
         long disputes = 0;
         long rejected = 0;
         long partialPayments = 0;
-        
+
         // Initialize amount totals
         java.math.BigDecimal totalAssignedAmount = java.math.BigDecimal.ZERO;
         java.math.BigDecimal totalPaidAmount = java.math.BigDecimal.ZERO;
@@ -1228,13 +1231,13 @@ public class StudentService {
         java.math.BigDecimal totalDisputedAmount = java.math.BigDecimal.ZERO;
         java.math.BigDecimal totalRejectedAmount = java.math.BigDecimal.ZERO;
         java.math.BigDecimal totalPartialAmount = java.math.BigDecimal.ZERO;
-        
+
         for (ClientPayout payout : clientPayouts) {
             // Count-based statistics
             if (payout.getAssignedAmount() != null && payout.getAssignedAmount().compareTo(java.math.BigDecimal.ZERO) > 0) {
                 totalAssigned++;
                 totalAssignedAmount = totalAssignedAmount.add(payout.getAssignedAmount());
-                
+
                 if (payout.getPayoutStatus() == com.lab.atlasmentor.enums.ClientPayoutStatus.PAID) {
                     totalPaid++;
                     totalPaidAmount = totalPaidAmount.add(payout.getPaidAmount() != null ? payout.getPaidAmount() : java.math.BigDecimal.ZERO);
@@ -1251,15 +1254,15 @@ public class StudentService {
             } else {
                 totalPending++;
             }
-            
+
             if (payout.getPayoutStatus() == com.lab.atlasmentor.enums.ClientPayoutStatus.DISPUTE) {
                 disputes++;
                 totalDisputedAmount = totalDisputedAmount.add(
-                    payout.getDisputeAmount() != null ? payout.getDisputeAmount() : 
+                    payout.getDisputeAmount() != null ? payout.getDisputeAmount() :
                     (payout.getAssignedAmount() != null ? payout.getAssignedAmount() : java.math.BigDecimal.ZERO)
                 );
             }
-            
+
             if (payout.getPayoutStatus() == com.lab.atlasmentor.enums.ClientPayoutStatus.REJECTED) {
                 rejected++;
                 totalRejectedAmount = totalRejectedAmount.add(
@@ -1267,18 +1270,19 @@ public class StudentService {
                 );
             }
         }
-        
+
         ClientPayoutSummaryDto summary = new ClientPayoutSummaryDto(
             totalAssigned, totalPaid, totalPending, pendingApprovals, disputes,
             totalAssignedAmount, totalPaidAmount, totalPendingAmount, totalDisputedAmount,
             partialPayments, totalPartialAmount
         );
-        
+
         // Set rejected values after construction
         summary.setRejected(rejected);
         summary.setTotalRejectedAmount(totalRejectedAmount);
         return summary;
     }
+    
     
     private PaymentDisputeActivityDto convertToDisputeDto(PaymentDisputeActivity activity) {
         UserInfoDto doneByDto = null;

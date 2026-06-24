@@ -3,6 +3,7 @@ package com.lab.atlasmentor.model;
 import jakarta.persistence.*;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
@@ -22,7 +23,10 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
            @Index(name = "idx_tasks_priority", columnList = "priority"),
            @Index(name = "idx_tasks_due_date", columnList = "due_date"),
            @Index(name = "idx_tasks_reference", columnList = "reference_type, reference_id"),
-           @Index(name = "idx_tasks_bundle_id", columnList = "task_bundle_id")
+           @Index(name = "idx_tasks_bundle_id", columnList = "task_bundle_id"),
+           @Index(name = "idx_tasks_task_list_id", columnList = "task_list_id"),
+           @Index(name = "idx_tasks_parent_task_id", columnList = "parent_task_id"),
+           @Index(name = "idx_tasks_start_date", columnList = "start_date")
        })
 @Data
 @EqualsAndHashCode(callSuper = true)
@@ -93,6 +97,31 @@ public class Task extends BaseEntity {
 
     @Column(name = "due_time")
     private LocalDateTime dueTime;
+
+    // ---- ClickUp-style extensions (non-breaking additions) ----
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "task_list_id", nullable = true)
+    @JsonIgnoreProperties({"tasks"})
+    private TaskList taskList;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_task_id", nullable = true)
+    @JsonIgnoreProperties({"subtasks", "parentTask"})
+    private Task parentTask;
+
+    @OneToMany(mappedBy = "parentTask", fetch = FetchType.LAZY)
+    @JsonIgnoreProperties({"parentTask"})
+    private List<Task> subtasks;
+
+    @Column(name = "start_date")
+    private LocalDate startDate;
+
+    @Column(name = "estimated_minutes")
+    private Integer estimatedMinutes;
+
+    @Column(name = "actual_minutes")
+    private Integer actualMinutes;
 
     public Task() {}
 

@@ -21,7 +21,7 @@ public class CompanyController {
     private AdminService adminService;
 
     @PostMapping("/create")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<UserResponse> createCompany(
             @Valid @RequestBody CompanyRequest companyRequest,
             HttpServletRequest request) {
@@ -33,7 +33,7 @@ public class CompanyController {
     }
 
     @GetMapping("/list")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<PageResponse<UserResponse>> getCompanies(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
@@ -45,7 +45,7 @@ public class CompanyController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<UserResponse> getCompanyById(@PathVariable Long id) {
         
         User company = adminService.getCompanyById(id);
@@ -55,7 +55,7 @@ public class CompanyController {
     }
 
     @PutMapping("/edit/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<UserResponse> editCompany(
             @PathVariable Long id,
             @Valid @RequestBody CompanyEditRequest editRequest) {
@@ -67,7 +67,7 @@ public class CompanyController {
     }
 
     @PutMapping("/toggle-status/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<UserResponse> toggleCompanyStatus(@PathVariable Long id) {
         
         User company = adminService.toggleCompanyStatus(id);
@@ -77,7 +77,7 @@ public class CompanyController {
     }
 
     @DeleteMapping("/delete/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<?> deleteCompany(@PathVariable Long id) {
         
         adminService.deleteCompany(id);

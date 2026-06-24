@@ -314,6 +314,7 @@ public class TaskService {
                     break;
                     
                 case "MANAGER":
+                case "ADMINISTRATIVE_ASSISTANT":
                     // MANAGER: return tasks WHERE branchId = user.branchId
                     tasks = taskRepository.findTasksByBranchForManagerList(branchId);
                     break;
@@ -368,6 +369,7 @@ public class TaskService {
                     break;
                     
                 case "MANAGER":
+                case "ADMINISTRATIVE_ASSISTANT":
                     // MANAGER: return tasks WHERE branchId = user.branchId
                     taskPage = taskRepository.findTasksByBranchForManager(branchId, pageable);
                     break;
@@ -434,7 +436,7 @@ public class TaskService {
             } else {
                 tasks = taskRepository.findAllTasksForAdminList();
             }
-        } else if ("MANAGER".equals(currentUser.getRole()) || "BRANCH_PARTNER".equals(currentUser.getRole())) {
+        } else if ("MANAGER".equals(currentUser.getRole()) || "BRANCH_PARTNER".equals(currentUser.getRole()) || "ADMINISTRATIVE_ASSISTANT".equals(currentUser.getRole())) {
             // MANAGER/BRANCH_PARTNER: See all tasks in their branch
             if (status != null) {
                 tasks = taskRepository.findByBranchIdAndStatus(currentUser.getBranchId(), status);
@@ -589,7 +591,7 @@ public class TaskService {
             } else {
                 taskPage = taskRepository.findAllTasksForAdmin(pageable);
             }
-        } else if ("MANAGER".equals(currentUser.getRole()) || "BRANCH_PARTNER".equals(currentUser.getRole())) {
+        } else if ("MANAGER".equals(currentUser.getRole()) || "BRANCH_PARTNER".equals(currentUser.getRole()) || "ADMINISTRATIVE_ASSISTANT".equals(currentUser.getRole())) {
             // MANAGER/BRANCH_PARTNER: See all tasks in their branch
             if (status != null) {
                 taskPage = taskRepository.findTasksByBranchForManagerWithStatus(currentUser.getBranchId(), status, pageable);
@@ -784,6 +786,7 @@ public class TaskService {
                 return taskRepository.findAllTasksForAdminList();
             case "MANAGER":
             case "BRANCH_PARTNER":
+            case "ADMINISTRATIVE_ASSISTANT":
                 return taskRepository.findTasksByBranchForManagerList(branchId);
             case "SENIOR_COUNSELLOR":
                 List<Long> juniorIds = getJuniorCounsellorIds(userId, branchId);
@@ -987,6 +990,7 @@ public class TaskService {
                 break;
                 
             case "MANAGER":
+            case "ADMINISTRATIVE_ASSISTANT":
                 // Manager can update tasks WHERE branchId = user.branchId (already validated above)
                 log.info("MANAGER user ID {} updating task {} in branch {}", updatedBy.getId(), task.getId(), userBranchId);
                 break;
@@ -1093,6 +1097,7 @@ public class TaskService {
                 break;
                 
             case "MANAGER":
+            case "ADMINISTRATIVE_ASSISTANT":
                 // Manager can create task ONLY for users in their branch
                 if (createdBy.getBranch() == null || assignedTo.getBranch() == null) {
                     throw new BusinessException("MANAGER must have a branch assignment to create tasks");
@@ -1174,6 +1179,7 @@ public class TaskService {
                 
             case "MANAGER":
             case "BRANCH_PARTNER":
+            case "ADMINISTRATIVE_ASSISTANT":
                 // Manager/Branch Partner can assign ONLY to: SENIOR_COUNSELLOR, JUNIOR_COUNSELLOR, Video Editor, Web Developer
                 // Cannot assign to ADMIN, MANAGER, or other BRANCH_PARTNER
                 String roleDisplay = "MANAGER".equals(assignerRole) ? "MANAGER" : "BRANCH_PARTNER";

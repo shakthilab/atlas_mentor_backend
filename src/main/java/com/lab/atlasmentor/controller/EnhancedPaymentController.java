@@ -29,7 +29,7 @@ public class EnhancedPaymentController {
     // ==================== STUDENT PAYMENT MANAGEMENT ====================
 
     @PostMapping("/create")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<StudentPayment> createStudentPayment(@RequestParam Long studentId, 
                                                              @RequestParam String sourceType, 
                                                              @RequestParam Long sourceId) {
@@ -43,7 +43,7 @@ public class EnhancedPaymentController {
     }
 
     @PutMapping("/{studentId}/assign-amount")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<StudentPayment> assignAmount(@PathVariable Long studentId, 
                                                      @RequestParam BigDecimal amount) {
         try {
@@ -57,7 +57,7 @@ public class EnhancedPaymentController {
     // ==================== PAYMENT TRANSACTIONS ====================
 
     @PostMapping("/transactions")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<ApiResponse<PaymentTransaction>> addPaymentTransaction(@Valid @RequestBody PaymentTransactionRequest request) {
         try {
             PaymentTransaction transaction = finalPaymentService.addPaymentTransaction(
@@ -75,7 +75,7 @@ public class EnhancedPaymentController {
     }
 
     @GetMapping("/{studentId}/transactions")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'REFERRAL', 'COMPANY')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'ADMINISTRATIVE_ASSISTANT', 'REFERRAL', 'COMPANY')")
     public ResponseEntity<ApiResponse<List<PaymentTransactionDto>>> getPaymentTransactions(@PathVariable Long studentId) {
         try {
             List<PaymentTransactionDto> transactions = finalPaymentService.getPaymentTransactions(studentId);
@@ -86,7 +86,7 @@ public class EnhancedPaymentController {
     }
 
     @GetMapping("/{studentId}/net-amount")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'REFERRAL', 'COMPANY')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'ADMINISTRATIVE_ASSISTANT', 'REFERRAL', 'COMPANY')")
     public ResponseEntity<BigDecimal> getNetPaidAmount(@PathVariable Long studentId) {
         try {
             BigDecimal amount = finalPaymentService.getNetPaidAmount(studentId);
@@ -99,7 +99,7 @@ public class EnhancedPaymentController {
     // ==================== AMOUNT CHANGE WORKFLOW ====================
 
     @PostMapping("/amount-change/request")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<PaymentAmountChange> requestAmountChange(@Valid @RequestBody AmountChangeRequest request) {
         try {
             PaymentAmountChange amountChange = finalPaymentService.requestAmountChange(
@@ -114,7 +114,7 @@ public class EnhancedPaymentController {
     }
 
     @PostMapping("/amount-change/approve/{changeRequestId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<PaymentAmountChange> approveAmountChange(@PathVariable Long changeRequestId,
                                                                   @RequestParam String approvalRemarks) {
         try {
@@ -128,7 +128,7 @@ public class EnhancedPaymentController {
     // ==================== STATUS CHANGE WORKFLOW ====================
 
     @PostMapping("/status-change/request")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<StudentStatusApproval> requestStatusChange(@Valid @RequestBody StatusChangeRequest request) {
         try {
             StudentStatusApproval statusApproval = finalPaymentService.requestStatusChange(
@@ -144,7 +144,7 @@ public class EnhancedPaymentController {
     }
 
     @PostMapping("/status-change/approve/{approvalRequestId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'REFERRAL', 'COMPANY')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'ADMINISTRATIVE_ASSISTANT', 'REFERRAL', 'COMPANY')")
     public ResponseEntity<StudentStatusApproval> approveStatusChange(@PathVariable Long approvalRequestId,
                                                                    @RequestParam String approvalRemarks) {
         try {
@@ -158,7 +158,7 @@ public class EnhancedPaymentController {
     // ==================== PAYMENT QUERY METHODS ====================
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'REFERRAL', 'COMPANY')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'ADMINISTRATIVE_ASSISTANT', 'REFERRAL', 'COMPANY')")
     public ResponseEntity<List<StudentPayment>> getStudentPaymentsByRole() {
         try {
             List<StudentPayment> payments = finalPaymentService.getStudentPaymentsByRole();
@@ -171,7 +171,7 @@ public class EnhancedPaymentController {
     // ==================== REPORTING ====================
 
     @GetMapping("/reports/{sourceId}/{sourceType}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'REFERRAL', 'COMPANY')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'ADMINISTRATIVE_ASSISTANT', 'REFERRAL', 'COMPANY')")
     public ResponseEntity<FinalPaymentService.ReportingData> getReportingData(@PathVariable Long sourceId,
                                                                               @PathVariable String sourceType) {
         try {

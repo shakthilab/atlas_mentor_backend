@@ -387,6 +387,7 @@ public class ClientPayoutService {
                 return clientPayoutRepository.findAllByOrderByCreatedAtDesc();
             case "MANAGER":
             case "BRANCH_PARTNER":
+            case "ADMINISTRATIVE_ASSISTANT":
                 return clientPayoutRepository.findAllByOrderByCreatedAtDesc();
             case "REFERRAL":
             case "COMPANY":
@@ -441,19 +442,19 @@ public class ClientPayoutService {
     }
     
     private void validateAmountAssignmentAccess(String userRole) {
-        if (!List.of("ADMIN", "MANAGER", "BRANCH_PARTNER").contains(userRole.toUpperCase())) {
+        if (!List.of("ADMIN", "MANAGER", "BRANCH_PARTNER", "ADMINISTRATIVE_ASSISTANT").contains(userRole.toUpperCase())) {
             throw new BusinessException("Access denied. Only ADMIN, MANAGER, or BRANCH_PARTNER can assign amounts.");
         }
     }
     
     private void validatePaymentProcessingAccess(String userRole) {
-        if (!List.of("ADMIN", "MANAGER", "BRANCH_PARTNER").contains(userRole.toUpperCase())) {
+        if (!List.of("ADMIN", "MANAGER", "BRANCH_PARTNER", "ADMINISTRATIVE_ASSISTANT").contains(userRole.toUpperCase())) {
             throw new BusinessException("Access denied. Only ADMIN, MANAGER, or BRANCH_PARTNER can process payments.");
         }
     }
     
     private void validateDisputeInitiationAccess(String userRole) {
-        if (!List.of("ADMIN", "MANAGER", "BRANCH_PARTNER").contains(userRole.toUpperCase())) {
+        if (!List.of("ADMIN", "MANAGER", "BRANCH_PARTNER", "ADMINISTRATIVE_ASSISTANT").contains(userRole.toUpperCase())) {
             throw new BusinessException("Access denied. Only ADMIN, MANAGER, or BRANCH_PARTNER can initiate disputes.");
         }
     }
@@ -476,6 +477,7 @@ public class ClientPayoutService {
             case "ADMIN":
             case "MANAGER":
             case "BRANCH_PARTNER":
+            case "ADMINISTRATIVE_ASSISTANT":
                 return; // Full access
             case "REFERRAL":
             case "COMPANY":

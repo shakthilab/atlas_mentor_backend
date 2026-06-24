@@ -22,7 +22,7 @@ public class ReferralResourceController {
     private ReferralResourceService referralResourceService;
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<ReferralResourceResponse> createResource(
             @Valid @RequestBody ReferralResourceRequest request) {
 
@@ -31,7 +31,7 @@ public class ReferralResourceController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<ReferralResourceResponse> updateResource(
             @PathVariable Long id,
             @Valid @RequestBody ReferralResourceRequest request) {
@@ -41,7 +41,7 @@ public class ReferralResourceController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<Void> deleteResource(@PathVariable Long id) {
         
         referralResourceService.deleteResource(id);
@@ -49,7 +49,7 @@ public class ReferralResourceController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'REFERRAL', 'COMPANY')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT', 'REFERRAL', 'COMPANY')")
     public ResponseEntity<ReferralResourceResponse> getResourceById(@PathVariable Long id) {
         
         ReferralResourceResponse response = referralResourceService.getResourceById(id);
@@ -57,7 +57,7 @@ public class ReferralResourceController {
     }
 
     @GetMapping("/owner/{ownerId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'REFERRAL', 'COMPANY')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT', 'REFERRAL', 'COMPANY')")
     public ResponseEntity<List<ReferralResourceResponse>> getResourcesByOwnerId(
             @PathVariable Long ownerId,
             @RequestParam OwnerType ownerType) {
@@ -67,7 +67,7 @@ public class ReferralResourceController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'REFERRAL', 'COMPANY')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT', 'REFERRAL', 'COMPANY')")
     public ResponseEntity<PageResponse<ReferralResourceResponse>> getAllResources(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
