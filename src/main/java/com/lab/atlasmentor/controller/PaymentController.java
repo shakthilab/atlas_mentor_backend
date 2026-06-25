@@ -93,7 +93,9 @@ public class PaymentController {
     public ResponseEntity<ApiResponse<List<ClientPayment>>> getPaymentsByStudent(@PathVariable Long studentId) {
         try {
             List<ClientPayment> payments = paymentService.getPaymentsByStudent(studentId);
-            ApiResponse<List<ClientPayment>> response = ApiResponse.success("Payments retrieved successfully", payments);
+            ApiResponse<List<ClientPayment>> response = payments.isEmpty()
+                    ? ApiResponse.success("No data found", payments)
+                    : ApiResponse.success("Payments retrieved successfully", payments);
             return ResponseEntity.ok(response);
         } catch (BusinessException e) {
             ApiResponse<List<ClientPayment>> response = ApiResponse.error(e.getMessage());
@@ -105,7 +107,9 @@ public class PaymentController {
     public ResponseEntity<ApiResponse<List<ClientPayment>>> getPaymentsByStatus(@PathVariable PaymentStatus status) {
         try {
             List<ClientPayment> payments = paymentService.getPaymentsByStatus(status);
-            ApiResponse<List<ClientPayment>> response = ApiResponse.success("Payments retrieved successfully", payments);
+            ApiResponse<List<ClientPayment>> response = payments.isEmpty()
+                    ? ApiResponse.success("No data found", payments)
+                    : ApiResponse.success("Payments retrieved successfully", payments);
             return ResponseEntity.ok(response);
         } catch (BusinessException e) {
             ApiResponse<List<ClientPayment>> response = ApiResponse.error(e.getMessage());
@@ -117,7 +121,9 @@ public class PaymentController {
     public ResponseEntity<ApiResponse<List<ClientPayment>>> getPendingPayments() {
         try {
             List<ClientPayment> payments = paymentService.getPaymentsByStatus(PaymentStatus.PENDING);
-            ApiResponse<List<ClientPayment>> response = ApiResponse.success("Pending payments retrieved successfully", payments);
+            ApiResponse<List<ClientPayment>> response = payments.isEmpty()
+                    ? ApiResponse.success("No data found", payments)
+                    : ApiResponse.success("Pending payments retrieved successfully", payments);
             return ResponseEntity.ok(response);
         } catch (BusinessException e) {
             ApiResponse<List<ClientPayment>> response = ApiResponse.error(e.getMessage());
@@ -129,7 +135,9 @@ public class PaymentController {
     public ResponseEntity<ApiResponse<List<ClientPayment>>> getPaidPayments() {
         try {
             List<ClientPayment> payments = paymentService.getPaymentsByStatus(PaymentStatus.PAID);
-            ApiResponse<List<ClientPayment>> response = ApiResponse.success("Paid payments retrieved successfully", payments);
+            ApiResponse<List<ClientPayment>> response = payments.isEmpty()
+                    ? ApiResponse.success("No data found", payments)
+                    : ApiResponse.success("Paid payments retrieved successfully", payments);
             return ResponseEntity.ok(response);
         } catch (BusinessException e) {
             ApiResponse<List<ClientPayment>> response = ApiResponse.error(e.getMessage());
@@ -141,7 +149,9 @@ public class PaymentController {
     public ResponseEntity<ApiResponse<List<ClientPayment>>> getRejectedPayments() {
         try {
             List<ClientPayment> payments = paymentService.getPaymentsByStatus(PaymentStatus.REJECTED);
-            ApiResponse<List<ClientPayment>> response = ApiResponse.success("Rejected payments retrieved successfully", payments);
+            ApiResponse<List<ClientPayment>> response = payments.isEmpty()
+                    ? ApiResponse.success("No data found", payments)
+                    : ApiResponse.success("Rejected payments retrieved successfully", payments);
             return ResponseEntity.ok(response);
         } catch (BusinessException e) {
             ApiResponse<List<ClientPayment>> response = ApiResponse.error(e.getMessage());

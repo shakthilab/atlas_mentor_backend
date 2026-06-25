@@ -58,6 +58,9 @@ public class PaymentDisputeActivityController {
                 .map(this::convertToDto)
                 .collect(Collectors.toList());
             
+            if (activityDtos.isEmpty()) {
+                return ResponseEntity.ok(ApiResponse.success("No data found", activityDtos));
+            }
             return ResponseEntity.ok(ApiResponse.success("Activities retrieved successfully", activityDtos));
         } catch (BusinessException e) {
             return ResponseEntity.badRequest().body(ApiResponse.badRequest(e.getMessage()));

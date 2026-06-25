@@ -41,7 +41,10 @@ public class ClientPayoutController {
             List<ClientPayoutDto> payoutDtos = payouts.stream()
                 .map(this::convertToDto)
                 .collect(Collectors.toList());
-            
+
+            if (payoutDtos.isEmpty()) {
+                return ResponseEntity.ok(ApiResponse.success("No data found", payoutDtos));
+            }
             return ResponseEntity.ok(ApiResponse.success("Client payouts retrieved successfully", payoutDtos));
         } catch (BusinessException e) {
             return ResponseEntity.badRequest().body(ApiResponse.badRequest(e.getMessage()));
@@ -69,7 +72,10 @@ public class ClientPayoutController {
             List<ClientPayoutActivityDto> activityDtos = activities.stream()
                 .map(this::convertActivityToDto)
                 .collect(Collectors.toList());
-            
+
+            if (activityDtos.isEmpty()) {
+                return ResponseEntity.ok(ApiResponse.success("No data found", activityDtos));
+            }
             return ResponseEntity.ok(ApiResponse.success("Payout activities retrieved successfully", activityDtos));
         } catch (BusinessException e) {
             return ResponseEntity.badRequest().body(ApiResponse.badRequest(e.getMessage()));

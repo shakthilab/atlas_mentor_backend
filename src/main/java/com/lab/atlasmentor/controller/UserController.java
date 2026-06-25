@@ -24,6 +24,9 @@ public class UserController {
             @RequestParam Long branchId) {
         try {
             List<CounsellorResponse> counsellors = userService.getCounsellorsByBranch(branchId);
+            if (counsellors.isEmpty()) {
+                return ResponseEntity.ok(ApiResponse.success("No data found", counsellors));
+            }
             ApiResponse<List<CounsellorResponse>> response = ApiResponse.success(
                 "Counsellors retrieved successfully", counsellors);
             return ResponseEntity.ok(response);
@@ -38,6 +41,9 @@ public class UserController {
             @RequestParam Long branchId) {
         try {
             List<CounsellorResponse> counsellors = userService.getActiveCounsellorsByBranch(branchId);
+            if (counsellors.isEmpty()) {
+                return ResponseEntity.ok(ApiResponse.success("No data found", counsellors));
+            }
             ApiResponse<List<CounsellorResponse>> response = ApiResponse.success(
                 "Active counsellors retrieved successfully", counsellors);
             return ResponseEntity.ok(response);
@@ -53,6 +59,9 @@ public class UserController {
             @RequestParam Long branchId) {
         try {
             List<ReferralCompanyUserResponse> users = userService.getActiveReferralsAndCompaniesByBranch(roleIds, branchId);
+            if (users.isEmpty()) {
+                return ResponseEntity.ok(ApiResponse.success("No data found", users));
+            }
             ApiResponse<List<ReferralCompanyUserResponse>> response = ApiResponse.success(
                 "Active users retrieved successfully", users);
             return ResponseEntity.ok(response);
@@ -64,10 +73,13 @@ public class UserController {
 
     @GetMapping("/active-by-role-and-branch")
     public ResponseEntity<ApiResponse<List<UserResponse>>> getActiveUsersByRoleIdAndBranch(
-            @RequestParam Long roleId,
-            @RequestParam Long branchId) {
+            @RequestParam(required = false) Long roleId,
+            @RequestParam(required = false) Long branchId) {
         try {
             List<UserResponse> users = userService.getActiveUsersByRoleIdAndBranchId(roleId, branchId);
+            if (users.isEmpty()) {
+                return ResponseEntity.ok(ApiResponse.success("No data found", users));
+            }
             ApiResponse<List<UserResponse>> response = ApiResponse.success(
                 "Active users retrieved successfully", users);
             return ResponseEntity.ok(response);

@@ -1,6 +1,7 @@
 package com.lab.atlasmentor.controller;
 
 import com.lab.atlasmentor.enums.ReferralType;
+import com.lab.atlasmentor.dto.ApiResponse;
 import com.lab.atlasmentor.dto.PageResponse;
 import com.lab.atlasmentor.dto.ReferralRequest;
 import com.lab.atlasmentor.dto.UserResponse;
@@ -29,33 +30,39 @@ public class ReferralController {
     public ResponseEntity<UserResponse> createReferral(
             @Valid @RequestBody ReferralRequest referralRequest,
             HttpServletRequest request) {
-        
+
         User referral = adminService.createReferral(referralRequest, request);
         UserResponse response = adminService.convertToUserResponse(referral);
-        
+
         return ResponseEntity.ok(response);
     }
 
     @GetMapping("/list")
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
-    public ResponseEntity<PageResponse<UserResponse>> getReferrals(
+    public ResponseEntity<ApiResponse<PageResponse<UserResponse>>> getReferrals(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String referralType,
             @RequestParam(required = false) Long branchId) {
-        
+
         PageResponse<UserResponse> referrals = adminService.getReferrals(page, size, search, referralType, branchId);
-        return ResponseEntity.ok(referrals);
+        if (referrals.isEmpty()) {
+            return ResponseEntity.ok(ApiResponse.success("No data found", referrals));
+        }
+        return ResponseEntity.ok(ApiResponse.success(referrals));
     }
 
     @GetMapping("/types")
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
-    public ResponseEntity<List<String>> getReferralTypes() {
+    public ResponseEntity<ApiResponse<List<String>>> getReferralTypes() {
         List<String> referralTypes = Arrays.stream(ReferralType.values())
                 .map(Enum::name)
                 .collect(Collectors.toList());
-        return ResponseEntity.ok(referralTypes);
+        if (referralTypes.isEmpty()) {
+            return ResponseEntity.ok(ApiResponse.success("No data found", referralTypes));
+        }
+        return ResponseEntity.ok(ApiResponse.success(referralTypes));
     }
 
     @PutMapping("/update/{id}")
@@ -63,10 +70,10 @@ public class ReferralController {
     public ResponseEntity<UserResponse> updateReferral(
             @PathVariable Long id,
             @Valid @RequestBody ReferralRequest referralRequest) {
-        
+
         User updatedReferral = adminService.updateReferral(id, referralRequest);
         UserResponse response = adminService.convertToUserResponse(updatedReferral);
-        
+
         return ResponseEntity.ok(response);
     }
 
@@ -84,7 +91,7 @@ public class ReferralController {
             @RequestParam com.lab.atlasmentor.enums.UserStatus status) {
         User updatedReferral = adminService.updateReferralStatus(id, status);
         UserResponse response = adminService.convertToUserResponse(updatedReferral);
-        
+
         return ResponseEntity.ok(response);
     }
 
@@ -93,7 +100,7 @@ public class ReferralController {
     public ResponseEntity<UserResponse> deactivateReferral(@PathVariable Long id) {
         User deactivatedReferral = adminService.updateReferralStatus(id, com.lab.atlasmentor.enums.UserStatus.INACTIVE);
         UserResponse response = adminService.convertToUserResponse(deactivatedReferral);
-        
+
         return ResponseEntity.ok(response);
     }
 
@@ -102,7 +109,7 @@ public class ReferralController {
     public ResponseEntity<UserResponse> activateReferral(@PathVariable Long id) {
         User activatedReferral = adminService.updateReferralStatus(id, com.lab.atlasmentor.enums.UserStatus.ACTIVE);
         UserResponse response = adminService.convertToUserResponse(activatedReferral);
-        
+
         return ResponseEntity.ok(response);
     }
 }

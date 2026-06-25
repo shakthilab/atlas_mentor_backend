@@ -14,8 +14,6 @@ import com.lab.atlasmentor.security.CustomUserDetails;
 import com.lab.atlasmentor.security.SecurityUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,7 +38,7 @@ public class ReferralResourceService {
         CustomUserDetails currentUser = SecurityUtils.getCurrentUser();
 
         if (!canManageResources(currentUser)) {
-            throw new BusinessException("Access denied. Only ADMIN, MANAGER, or BRANCH_PARTNER can create resources.");
+            throw new BusinessException("Access denied. Only ADMIN, MANAGER, BRANCH_PARTNER, or ADMINISTRATIVE_ASSISTANT can create resources.");
         }
 
         User uploadedBy = userRepository.findById(currentUser.getUserId())
@@ -50,14 +48,7 @@ public class ReferralResourceService {
             User owner = userRepository.findById(ownerId)
                     .orElseThrow(() -> new RuntimeException("Owner not found with ID: " + ownerId));
 
-            if (request.getOwnerType() == OwnerType.REFERRAL && !owner.hasRole("REFERRAL")) {
-                throw new BusinessException("User is not a referral: " + ownerId);
-            }
-            if (request.getOwnerType() == OwnerType.COMPANY && !owner.hasRole("COMPANY")) {
-                throw new BusinessException("User is not a company: " + ownerId);
-            }
-
-            if (!currentUser.isAdmin() && currentUser.getBranchId() != null) {
+            if (!currentUser.isAdmin() && !currentUser.isManager() && currentUser.getBranchId() != null) {
                 if (owner.getBranchId() == null || !owner.getBranchId().equals(currentUser.getBranchId())) {
                     throw new BusinessException("Access denied. You can only manage resources for owners in your branch. Owner: " + ownerId);
                 }
@@ -104,7 +95,7 @@ public class ReferralResourceService {
             throw new BusinessException("Access denied. Only ADMIN, MANAGER, or BRANCH_PARTNER can update resources.");
         }
 
-        if (!currentUser.isAdmin() && !resource.getUploadedById().equals(currentUser.getUserId())) {
+        if (!currentUser.isAdmin() && !currentUser.isManager() && !resource.getUploadedById().equals(currentUser.getUserId())) {
             throw new BusinessException("Access denied. You can only update resources you uploaded.");
         }
 
@@ -153,7 +144,7 @@ public class ReferralResourceService {
             throw new BusinessException("Access denied. Only ADMIN, MANAGER, or BRANCH_PARTNER can delete resources.");
         }
 
-        if (!currentUser.isAdmin() && !resource.getUploadedById().equals(currentUser.getUserId())) {
+        if (!currentUser.isAdmin() && !currentUser.isManager() && !resource.getUploadedById().equals(currentUser.getUserId())) {
             throw new BusinessException("Access denied. You can only delete resources you uploaded.");
         }
 
@@ -193,13 +184,6 @@ public class ReferralResourceService {
         User owner = userRepository.findById(ownerId)
                 .orElseThrow(() -> new RuntimeException("Owner not found with ID: " + ownerId));
 
-        if (ownerType == OwnerType.REFERRAL && !owner.hasRole("REFERRAL")) {
-            throw new BusinessException("User is not a referral");
-        }
-        if (ownerType == OwnerType.COMPANY && !owner.hasRole("COMPANY")) {
-            throw new BusinessException("User is not a company");
-        }
-
         if (!canAccessOwnerResources(currentUser, owner)) {
             throw new BusinessException("Access denied. You do not have permission to view resources for this owner.");
         }
@@ -219,31 +203,26 @@ public class ReferralResourceService {
         CustomUserDetails currentUser = SecurityUtils.getCurrentUser();
 
         String role = currentUser.getRole();
-        boolean isReferralOrCompany = role.equalsIgnoreCase("REFERRAL") || role.equalsIgnoreCase("COMPANY");
 
-        if (!canManageResources(currentUser) && !isReferralOrCompany) {
-            throw new BusinessException("Access denied. This API is only available for ADMIN, MANAGER, BRANCH_PARTNER, REFERRAL, and COMPANY roles.");
-        }
-
-        Pageable pageable = PageRequest.of(page, size);
-
-        List<ReferralResource> allResources = referralResourceRepository.findAll();
-
-        List<ReferralResource> filteredResources = allResources.stream()
+        List<ReferralResource> filteredResources = referralResourceRepository.findAll().stream()
                 .filter(r -> r.getIsActive())
                 .filter(r -> ownerId == null || r.getOwners().stream().anyMatch(o -> o.getId().equals(ownerId)))
                 .filter(r -> ownerType == null || r.getOwnerType() == ownerType)
                 .filter(r -> resourceType == null || r.getResourceType().name().equalsIgnoreCase(resourceType))
+                .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
                 .filter(r -> {
+                    // ADMIN sees everything
                     if (currentUser.isAdmin()) return true;
-                    if (isReferralOrCompany) {
-                        OwnerType expectedType = role.equalsIgnoreCase("REFERRAL") ? OwnerType.REFERRAL : OwnerType.COMPANY;
-                        return r.getOwnerType() == expectedType
-                                && r.getOwners().stream().anyMatch(o -> o.getId().equals(currentUser.getUserId()));
+
+                    // MANAGER, BRANCH_PARTNER, ADMINISTRATIVE_ASSISTANT see their branch's resources
+                    if (currentUser.isManager()) {
+                        if (currentUser.getBranchId() == null) return true;
+                        return r.getOwners().stream().anyMatch(o ->
+                                o.getBranchId() != null && o.getBranchId().equals(currentUser.getBranchId()));
                     }
-                    if (currentUser.getBranchId() == null) return true;
-                    return r.getOwners().stream().anyMatch(o ->
-                            o.getBranchId() != null && o.getBranchId().equals(currentUser.getBranchId()));
+
+                    // Everyone else sees only resources they are assigned to (in owners list)
+                    return r.getOwners().stream().anyMatch(o -> o.getId().equals(currentUser.getUserId()));
                 })
                 .collect(Collectors.toList());
 
@@ -264,66 +243,44 @@ public class ReferralResourceService {
     public List<ReferralResourceResponse> getMyResources() {
         CustomUserDetails currentUser = SecurityUtils.getCurrentUser();
 
-        String role = currentUser.getRole();
-        if (!role.equalsIgnoreCase("REFERRAL") && !role.equalsIgnoreCase("COMPANY")) {
-            throw new BusinessException("Access denied. This API is only available for REFERRAL and COMPANY roles.");
-        }
-
-        OwnerType ownerType = role.equalsIgnoreCase("REFERRAL") ? OwnerType.REFERRAL : OwnerType.COMPANY;
-
-        List<ReferralResource> resources = referralResourceRepository.findByOwner_IdAndOwnerTypeAndIsActiveTrue(
-                currentUser.getUserId(), ownerType);
-
-        return resources.stream().map(this::convertToResponse).collect(Collectors.toList());
+        // All non-admin, non-manager roles see only resources assigned to them
+        return referralResourceRepository.findAll().stream()
+                .filter(r -> r.getIsActive())
+                .filter(r -> r.getOwners().stream().anyMatch(o -> o.getId().equals(currentUser.getUserId())))
+                .map(this::convertToResponse)
+                .collect(Collectors.toList());
     }
 
     private boolean canManageResources(CustomUserDetails user) {
-        return user.isAdmin() || user.isManager() || user.getRole().equalsIgnoreCase("BRANCH_PARTNER") || user.getRole().equalsIgnoreCase("ADMINISTRATIVE_ASSISTANT");
+        return user.isAdmin() || user.isManager();
     }
 
     private boolean canAccessResource(CustomUserDetails user, ReferralResource resource) {
         if (user.isAdmin()) return true;
 
-        if (user.isManager() || user.getRole().equalsIgnoreCase("BRANCH_PARTNER") || user.getRole().equalsIgnoreCase("ADMINISTRATIVE_ASSISTANT")) {
+        if (user.isManager()) {
             if (user.getBranchId() == null) return true;
             return resource.getOwners().stream().anyMatch(o ->
                     o.getBranchId() != null && o.getBranchId().equals(user.getBranchId()));
         }
 
-        if (user.getRole().equalsIgnoreCase("REFERRAL")) {
-            return resource.getIsActive()
-                    && resource.getOwnerType() == OwnerType.REFERRAL
-                    && resource.getOwners().stream().anyMatch(o -> o.getId().equals(user.getUserId()));
-        }
-
-        if (user.getRole().equalsIgnoreCase("COMPANY")) {
-            return resource.getIsActive()
-                    && resource.getOwnerType() == OwnerType.COMPANY
-                    && resource.getOwners().stream().anyMatch(o -> o.getId().equals(user.getUserId()));
-        }
-
-        return false;
+        // Everyone else can only access resources they are assigned to
+        return resource.getIsActive()
+                && resource.getOwners().stream().anyMatch(o -> o.getId().equals(user.getUserId()));
     }
 
     private boolean canAccessOwnerResources(CustomUserDetails user, User owner) {
         if (user.isAdmin()) return true;
 
-        if (user.isManager() || user.getRole().equalsIgnoreCase("BRANCH_PARTNER") || user.getRole().equalsIgnoreCase("ADMINISTRATIVE_ASSISTANT")) {
+        if (user.isManager()) {
             if (user.getBranchId() != null && owner.getBranchId() != null) {
                 return owner.getBranchId().equals(user.getBranchId());
             }
             return true;
         }
 
-        if (user.getRole().equalsIgnoreCase("REFERRAL")) {
-            return owner.getId().equals(user.getUserId()) && owner.hasRole("REFERRAL");
-        }
-
-        if (user.getRole().equalsIgnoreCase("COMPANY")) {
-            return owner.getId().equals(user.getUserId()) && owner.hasRole("COMPANY");
-        }
-
-        return false;
+        // Everyone else can only look up resources for themselves
+        return owner.getId().equals(user.getUserId());
     }
 
     private ReferralResourceResponse convertToResponse(ReferralResource resource) {

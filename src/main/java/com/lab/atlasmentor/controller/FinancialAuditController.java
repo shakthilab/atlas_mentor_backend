@@ -27,7 +27,7 @@ public class FinancialAuditController {
             @PathVariable String entityType,
             @PathVariable Long entityId) {
         List<FinancialAuditLog> records = financialAuditService.getByEntity(entityType, entityId);
-        return ResponseEntity.ok(ApiResponse.success("Audit records retrieved", records));
+        return ResponseEntity.ok(ApiResponse.success(records.isEmpty() ? "No data found" : "Audit records retrieved", records));
     }
 
     /** All audit records performed by a specific user. */
@@ -36,7 +36,7 @@ public class FinancialAuditController {
     public ResponseEntity<ApiResponse<List<FinancialAuditLog>>> getByActor(
             @PathVariable Long actorId) {
         List<FinancialAuditLog> records = financialAuditService.getByActor(actorId);
-        return ResponseEntity.ok(ApiResponse.success("Audit records retrieved", records));
+        return ResponseEntity.ok(ApiResponse.success(records.isEmpty() ? "No data found" : "Audit records retrieved", records));
     }
 
     /** All records for a given action type. */
@@ -45,7 +45,7 @@ public class FinancialAuditController {
     public ResponseEntity<ApiResponse<List<FinancialAuditLog>>> getByAction(
             @PathVariable FinancialAuditAction action) {
         List<FinancialAuditLog> records = financialAuditService.getByAction(action);
-        return ResponseEntity.ok(ApiResponse.success("Audit records retrieved", records));
+        return ResponseEntity.ok(ApiResponse.success(records.isEmpty() ? "No data found" : "Audit records retrieved", records));
     }
 
     /** All records within a time window. */
@@ -55,7 +55,7 @@ public class FinancialAuditController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
         List<FinancialAuditLog> records = financialAuditService.getByDateRange(from, to);
-        return ResponseEntity.ok(ApiResponse.success("Audit records retrieved", records));
+        return ResponseEntity.ok(ApiResponse.success(records.isEmpty() ? "No data found" : "Audit records retrieved", records));
     }
 
     /**

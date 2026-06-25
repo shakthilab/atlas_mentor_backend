@@ -48,7 +48,9 @@ public class ManagerController {
     public ResponseEntity<ApiResponse<List<UserResponse>>> getUsersByRole(@RequestParam String role) {
         try {
             List<UserResponse> users = adminService.getUsersByRole(role.toUpperCase());
-            ApiResponse<List<UserResponse>> response = ApiResponse.success("Users retrieved successfully", users);
+            ApiResponse<List<UserResponse>> response = users.isEmpty()
+                    ? ApiResponse.success("No data found", users)
+                    : ApiResponse.success("Users retrieved successfully", users);
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             ApiResponse<List<UserResponse>> response = ApiResponse.badRequest("Invalid role: " + role);

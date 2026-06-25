@@ -36,15 +36,15 @@ public class AdminController {
             String token = authorization.substring(7);
             String email = jwtService.extractUsername(token);
             String roleStr = jwtService.extractRole(token);
-            
+
             // Only ADMIN users can create other users
             if (!"ADMIN".equals(roleStr.toUpperCase())) {
                 ApiResponse<UserResponse> response = ApiResponse.badRequest("Only ADMIN users can create users");
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
             }
-            
+
             UserResponse createdUser = adminService.createUser(request, roleStr.toUpperCase());
-            
+
             ApiResponse<UserResponse> response = ApiResponse.success("User created successfully", createdUser);
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
         } catch (BusinessException e) {
@@ -57,7 +57,9 @@ public class AdminController {
     public ResponseEntity<ApiResponse<List<UserResponse>>> getAllUsers() {
         try {
             List<UserResponse> users = adminService.getAllUsers();
-            ApiResponse<List<UserResponse>> response = ApiResponse.success("Users retrieved successfully", users);
+            ApiResponse<List<UserResponse>> response = users.isEmpty()
+                    ? ApiResponse.success("No data found", users)
+                    : ApiResponse.success("Users retrieved successfully", users);
             return ResponseEntity.ok(response);
         } catch (BusinessException e) {
             ApiResponse<List<UserResponse>> response = ApiResponse.error(e.getMessage());
@@ -69,7 +71,9 @@ public class AdminController {
     public ResponseEntity<ApiResponse<List<UserResponse>>> getUsersByRole(@PathVariable String role) {
         try {
             List<UserResponse> users = adminService.getUsersByRole(role.toUpperCase());
-            ApiResponse<List<UserResponse>> response = ApiResponse.success("Users retrieved successfully", users);
+            ApiResponse<List<UserResponse>> response = users.isEmpty()
+                    ? ApiResponse.success("No data found", users)
+                    : ApiResponse.success("Users retrieved successfully", users);
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             ApiResponse<List<UserResponse>> response = ApiResponse.badRequest("Invalid role: " + role);
@@ -87,7 +91,9 @@ public class AdminController {
             @RequestParam(required = false) Long branchId) {
         try {
             List<UserResponse> users = adminService.getUsersExcludingAdminAndStudent(roleIds, branchId);
-            ApiResponse<List<UserResponse>> response = ApiResponse.success("Users retrieved successfully", users);
+            ApiResponse<List<UserResponse>> response = users.isEmpty()
+                    ? ApiResponse.success("No data found", users)
+                    : ApiResponse.success("Users retrieved successfully", users);
             return ResponseEntity.ok(response);
         } catch (BusinessException e) {
             ApiResponse<List<UserResponse>> response = ApiResponse.error(e.getMessage());
@@ -103,13 +109,13 @@ public class AdminController {
         try {
             String token = authorization.substring(7);
             String roleStr = jwtService.extractRole(token);
-            
+
             // Only ADMIN users can update other users
             if (!"ADMIN".equals(roleStr.toUpperCase())) {
                 ApiResponse<UserResponse> response = ApiResponse.badRequest("Only ADMIN users can update users");
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
             }
-            
+
             UserResponse updatedUser = adminService.updateUser(userId, request, roleStr.toUpperCase());
             ApiResponse<UserResponse> response = ApiResponse.success("User updated successfully", updatedUser);
             return ResponseEntity.ok(response);

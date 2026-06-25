@@ -36,12 +36,12 @@ public class TaskController {
             @RequestHeader("Authorization") String token,
             @Valid @RequestBody CreateTaskRequest request) {
         log.info("Create task request: {}", request.getTitle());
-        
+
         try {
             // Extract current user using SecurityUtils
             Long currentUserId = SecurityUtils.getCurrentUserId();
             log.info("Current user ID extracted: {}", currentUserId);
-            
+
             TaskResponse response = taskService.createTask(request, currentUserId);
             return ResponseEntity.ok(response);
         } catch (BusinessException e) {
@@ -51,7 +51,7 @@ public class TaskController {
     }
 
     @GetMapping
-    public ResponseEntity<TaskPageWithStatsResponse> getAllTasks(
+    public ResponseEntity<ApiResponse<TaskPageWithStatsResponse>> getAllTasks(
             @RequestParam(required = false) TaskStatus status,
             @RequestParam(required = false) Long assigneeId,
             @RequestParam(required = false) Long branchId,
@@ -76,22 +76,30 @@ public class TaskController {
 
         Page<TaskResponse> tasks = taskService.getTasksWithFiltersPaginated(status, assigneeId, branchId, priority, createdBy, keyword, overdue, search, dueDateFrom, dueDateTo, assignedDateFrom, assignedDateTo, pageable);
         TaskStatsResponse stats = taskService.getTaskStats(status, assigneeId, branchId, priority, createdBy, keyword, overdue, search, dueDateFrom, dueDateTo, assignedDateFrom, assignedDateTo);
-        return ResponseEntity.ok(new TaskPageWithStatsResponse(stats, tasks));
+        TaskPageWithStatsResponse response = new TaskPageWithStatsResponse(stats, tasks);
+
+        if (tasks.isEmpty()) {
+            return ResponseEntity.ok(ApiResponse.success("No data found", response));
+        }
+        return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     @GetMapping("/paginated")
-    public ResponseEntity<Page<TaskResponse>> getAllTasksPaginated(
+    public ResponseEntity<ApiResponse<Page<TaskResponse>>> getAllTasksPaginated(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "createdAt") String sortBy,
             @RequestParam(defaultValue = "desc") String sortDir) {
         log.info("Get paginated tasks: page={}, size={}, sortBy={}, sortDir={}", page, size, sortBy, sortDir);
-        
+
         Sort.Direction direction = sortDir.equalsIgnoreCase("desc") ? Sort.Direction.DESC : Sort.Direction.ASC;
         Pageable pageable = PageRequest.of(page, size, Sort.by(direction, sortBy));
-        
+
         Page<TaskResponse> taskPage = taskService.getAllTasksPaginated(pageable);
-        return ResponseEntity.ok(taskPage);
+        if (taskPage.isEmpty()) {
+            return ResponseEntity.ok(ApiResponse.success("No data found", taskPage));
+        }
+        return ResponseEntity.ok(ApiResponse.success(taskPage));
     }
 
     @GetMapping("/{id}")
@@ -114,10 +122,10 @@ public class TaskController {
             @RequestHeader("Authorization") String token,
             @Valid @RequestBody UpdateTaskStatusRequest request) {
         log.info("Update task status request for ID: {} to status: {}", id, request.getStatus());
-        
+
         // Extract current user using SecurityUtils
         Long currentUserId = SecurityUtils.getCurrentUserId();
-        
+
         TaskResponse response = taskService.updateTaskStatus(id, request.getStatus(), currentUserId);
         return ResponseEntity.ok(response);
     }
@@ -128,10 +136,10 @@ public class TaskController {
             @RequestHeader("Authorization") String token,
             @Valid @RequestBody AssignTaskRequest request) {
         log.info("Assign task request for ID: {} to user: {}", id, request.getAssignedToId());
-        
+
         // Extract current user using SecurityUtils
         Long currentUserId = SecurityUtils.getCurrentUserId();
-        
+
         TaskResponse response = taskService.assignTask(id, request.getAssignedToId(), currentUserId);
         return ResponseEntity.ok(response);
     }
@@ -142,10 +150,10 @@ public class TaskController {
             @RequestHeader("Authorization") String token,
             @Valid @RequestBody UpdatePriorityRequest request) {
         log.info("Update task priority request for ID: {} to priority: {}", id, request.getPriority());
-        
+
         // Extract current user using SecurityUtils
         Long currentUserId = SecurityUtils.getCurrentUserId();
-        
+
         TaskResponse response = taskService.updateTaskPriority(id, request.getPriority(), currentUserId);
         return ResponseEntity.ok(response);
     }
@@ -156,19 +164,22 @@ public class TaskController {
             @RequestHeader("Authorization") String token,
             @Valid @RequestBody UpdateDueDateRequest request) {
         log.info("Update task due date request for ID: {} to date: {}", id, request.getDueDate());
-        
+
         // Extract current user using SecurityUtils
         Long currentUserId = SecurityUtils.getCurrentUserId();
-        
+
         TaskResponse response = taskService.updateTaskDueDate(id, request.getDueDate(), currentUserId);
         return ResponseEntity.ok(response);
     }
 
     @GetMapping("/{id}/comments")
-    public ResponseEntity<List<TaskCommentResponse>> getTaskComments(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse<List<TaskCommentResponse>>> getTaskComments(@PathVariable Long id) {
         log.info("Get comments for task ID: {}", id);
         List<TaskCommentResponse> comments = taskService.getTaskComments(id);
-        return ResponseEntity.ok(comments);
+        if (comments.isEmpty()) {
+            return ResponseEntity.ok(ApiResponse.success("No data found", comments));
+        }
+        return ResponseEntity.ok(ApiResponse.success(comments));
     }
 
     @PostMapping("/{id}/comments")
@@ -177,19 +188,22 @@ public class TaskController {
             @RequestHeader("Authorization") String token,
             @Valid @RequestBody AddCommentRequest request) {
         log.info("Add comment request for task ID: {}", id);
-        
+
         // Extract current user using SecurityUtils
         Long currentUserId = SecurityUtils.getCurrentUserId();
-        
+
         TaskCommentResponse response = taskService.addComment(id, request, currentUserId);
         return ResponseEntity.ok(response);
     }
 
     @GetMapping("/{id}/activity")
-    public ResponseEntity<List<ActivityResponse>> getTaskActivity(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse<List<ActivityResponse>>> getTaskActivity(@PathVariable Long id) {
         log.info("Get task activity for ID: {}", id);
         List<ActivityResponse> activities = taskService.getTaskActivities(id);
-        return ResponseEntity.ok(activities);
+        if (activities.isEmpty()) {
+            return ResponseEntity.ok(ApiResponse.success("No data found", activities));
+        }
+        return ResponseEntity.ok(ApiResponse.success(activities));
     }
 
     @DeleteMapping("/{id}")
@@ -197,16 +211,16 @@ public class TaskController {
             @PathVariable Long id,
             @RequestHeader("Authorization") String token) {
         log.info("Delete task request for ID: {}", id);
-        
+
         // Extract current user using SecurityUtils
         Long currentUserId = SecurityUtils.getCurrentUserId();
-        
+
         taskService.deleteTask(id, currentUserId);
         return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/statuses")
-    public ResponseEntity<List<Map<String, String>>> getTaskStatuses() {
+    public ResponseEntity<ApiResponse<List<Map<String, String>>>> getTaskStatuses() {
         log.info("Get all task statuses");
         List<Map<String, String>> statuses = Arrays.stream(TaskStatus.values())
                 .map(status -> Map.of(
@@ -214,11 +228,14 @@ public class TaskController {
                         "label", formatEnumLabel(status.name())
                 ))
                 .collect(Collectors.toList());
-        return ResponseEntity.ok(statuses);
+        if (statuses.isEmpty()) {
+            return ResponseEntity.ok(ApiResponse.success("No data found", statuses));
+        }
+        return ResponseEntity.ok(ApiResponse.success(statuses));
     }
 
     @GetMapping("/priorities")
-    public ResponseEntity<List<Map<String, String>>> getTaskPriorities() {
+    public ResponseEntity<ApiResponse<List<Map<String, String>>>> getTaskPriorities() {
         log.info("Get all task priorities");
         List<Map<String, String>> priorities = Arrays.stream(Priority.values())
                 .map(priority -> Map.of(
@@ -226,7 +243,10 @@ public class TaskController {
                         "label", formatEnumLabel(priority.name())
                 ))
                 .collect(Collectors.toList());
-        return ResponseEntity.ok(priorities);
+        if (priorities.isEmpty()) {
+            return ResponseEntity.ok(ApiResponse.success("No data found", priorities));
+        }
+        return ResponseEntity.ok(ApiResponse.success(priorities));
     }
 
     private String formatEnumLabel(String enumName) {

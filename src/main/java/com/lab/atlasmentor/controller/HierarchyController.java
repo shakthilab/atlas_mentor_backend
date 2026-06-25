@@ -57,6 +57,9 @@ public class HierarchyController {
     public ResponseEntity<ApiResponse<List<ManagerHierarchyResponse>>> getManagerHierarchy() {
         try {
             List<ManagerHierarchyResponse> managerHierarchy = hierarchyService.getManagerHierarchy();
+            if (managerHierarchy.isEmpty()) {
+                return ResponseEntity.ok(ApiResponse.success("No data found", managerHierarchy));
+            }
             ApiResponse<List<ManagerHierarchyResponse>> response = ApiResponse.success("Manager hierarchy retrieved successfully", managerHierarchy);
             return ResponseEntity.ok(response);
         } catch (BusinessException e) {
@@ -69,6 +72,9 @@ public class HierarchyController {
     public ResponseEntity<ApiResponse<List<CounsellorHierarchyResponse>>> getCounsellorHierarchy() {
         try {
             List<CounsellorHierarchyResponse> counsellorHierarchy = hierarchyService.getCounsellorHierarchy();
+            if (counsellorHierarchy.isEmpty()) {
+                return ResponseEntity.ok(ApiResponse.success("No data found", counsellorHierarchy));
+            }
             ApiResponse<List<CounsellorHierarchyResponse>> response = ApiResponse.success("Counsellor hierarchy retrieved successfully", counsellorHierarchy);
             return ResponseEntity.ok(response);
         } catch (BusinessException e) {
@@ -313,10 +319,14 @@ public class HierarchyController {
                 ))
                 .collect(java.util.stream.Collectors.toList());
             
-            String message = branchId != null ? 
-                "Unassigned users retrieved successfully for role " + role + " and branch " + branchId : 
+            if (userResponses.isEmpty()) {
+                return ResponseEntity.ok(ApiResponse.success("No data found", userResponses));
+            }
+
+            String message = branchId != null ?
+                "Unassigned users retrieved successfully for role " + role + " and branch " + branchId :
                 "Unassigned users retrieved successfully for role " + role;
-            
+
             ApiResponse<List<SeniorCounsellorResponse>> response = ApiResponse.success(message, userResponses);
             return ResponseEntity.ok(response);
         } catch (BusinessException e) {
@@ -350,10 +360,14 @@ public class HierarchyController {
                 ))
                 .collect(java.util.stream.Collectors.toList());
             
-            String message = branchId != null ? 
-                "Junior counsellors retrieved successfully for branch " + branchId : 
+            if (juniorCounsellorResponses.isEmpty()) {
+                return ResponseEntity.ok(ApiResponse.success("No data found", juniorCounsellorResponses));
+            }
+
+            String message = branchId != null ?
+                "Junior counsellors retrieved successfully for branch " + branchId :
                 "Junior counsellors retrieved successfully";
-            
+
             ApiResponse<List<JuniorCounsellorResponse>> response = ApiResponse.success(message, juniorCounsellorResponses);
             return ResponseEntity.ok(response);
         } catch (BusinessException e) {

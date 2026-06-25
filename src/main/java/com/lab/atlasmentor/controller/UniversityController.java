@@ -22,6 +22,10 @@ public class UniversityController {
     public ResponseEntity<ApiResponse<List<University>>> getAllUniversities() {
         try {
             List<University> universities = universityService.getAllActiveUniversities();
+            if (universities.isEmpty()) {
+                ApiResponse<List<University>> response = ApiResponse.success("No data found", universities);
+                return ResponseEntity.ok(response);
+            }
             ApiResponse<List<University>> response = ApiResponse.success("Universities retrieved successfully", universities);
             return ResponseEntity.ok(response);
         } catch (BusinessException e) {
@@ -34,6 +38,10 @@ public class UniversityController {
     public ResponseEntity<ApiResponse<List<University>>> getAllUniversitiesIncludingInactive() {
         try {
             List<University> universities = universityService.getAllUniversities();
+            if (universities.isEmpty()) {
+                ApiResponse<List<University>> response = ApiResponse.success("No data found", universities);
+                return ResponseEntity.ok(response);
+            }
             ApiResponse<List<University>> response = ApiResponse.success("All universities retrieved successfully", universities);
             return ResponseEntity.ok(response);
         } catch (BusinessException e) {
@@ -64,6 +72,10 @@ public class UniversityController {
     public ResponseEntity<ApiResponse<List<University>>> getUniversitiesByCountryId(@PathVariable Long countryId) {
         try {
             List<University> universities = universityService.getActiveUniversitiesByCountryId(countryId);
+            if (universities.isEmpty()) {
+                ApiResponse<List<University>> response = ApiResponse.success("No data found", universities);
+                return ResponseEntity.ok(response);
+            }
             ApiResponse<List<University>> response = ApiResponse.success("Universities retrieved successfully for country: " + countryId, universities);
             return ResponseEntity.ok(response);
         } catch (BusinessException e) {
@@ -79,7 +91,7 @@ public class UniversityController {
                 ApiResponse<University> response = ApiResponse.error("University with this name already exists in the specified country");
                 return ResponseEntity.badRequest().body(response);
             }
-            
+
             University createdUniversity = universityService.createUniversity(university);
             ApiResponse<University> response = ApiResponse.success("University created successfully", createdUniversity);
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -96,7 +108,7 @@ public class UniversityController {
                 ApiResponse<University> response = ApiResponse.error("University with this name already exists in the specified country");
                 return ResponseEntity.badRequest().body(response);
             }
-            
+
             University createdUniversity = universityService.createUniversity(request.getName(), request.getCountryId());
             if (createdUniversity != null) {
                 ApiResponse<University> response = ApiResponse.success("University created successfully", createdUniversity);

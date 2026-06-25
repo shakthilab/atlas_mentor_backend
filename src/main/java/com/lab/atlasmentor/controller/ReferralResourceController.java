@@ -1,5 +1,6 @@
 package com.lab.atlasmentor.controller;
 
+import com.lab.atlasmentor.dto.ApiResponse;
 import com.lab.atlasmentor.dto.PageResponse;
 import com.lab.atlasmentor.dto.ReferralResourceRequest;
 import com.lab.atlasmentor.dto.ReferralResourceResponse;
@@ -18,11 +19,16 @@ import java.util.List;
 @RequestMapping("/api/referral-resources")
 public class ReferralResourceController {
 
+    private static final String ALL_ROLES = "hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT', " +
+            "'SENIOR_COUNSELLOR', 'JUNIOR_COUNSELLOR', 'VIDEO_EDITOR', 'COUNSELLOR', 'REFERRAL', 'COMPANY')";
+
+    private static final String MANAGE_ROLES = "hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')";
+
     @Autowired
     private ReferralResourceService referralResourceService;
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
+    @PreAuthorize(MANAGE_ROLES)
     public ResponseEntity<ReferralResourceResponse> createResource(
             @Valid @RequestBody ReferralResourceRequest request) {
 
@@ -31,60 +37,70 @@ public class ReferralResourceController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
+    @PreAuthorize(MANAGE_ROLES)
     public ResponseEntity<ReferralResourceResponse> updateResource(
             @PathVariable Long id,
             @Valid @RequestBody ReferralResourceRequest request) {
-        
+
         ReferralResourceResponse response = referralResourceService.updateResource(id, request);
         return ResponseEntity.ok(response);
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
+    @PreAuthorize(MANAGE_ROLES)
     public ResponseEntity<Void> deleteResource(@PathVariable Long id) {
-        
+
         referralResourceService.deleteResource(id);
         return ResponseEntity.ok().build();
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT', 'REFERRAL', 'COMPANY')")
+    @PreAuthorize(ALL_ROLES)
     public ResponseEntity<ReferralResourceResponse> getResourceById(@PathVariable Long id) {
-        
+
         ReferralResourceResponse response = referralResourceService.getResourceById(id);
         return ResponseEntity.ok(response);
     }
 
     @GetMapping("/owner/{ownerId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT', 'REFERRAL', 'COMPANY')")
-    public ResponseEntity<List<ReferralResourceResponse>> getResourcesByOwnerId(
+    @PreAuthorize(ALL_ROLES)
+    public ResponseEntity<ApiResponse<List<ReferralResourceResponse>>> getResourcesByOwnerId(
             @PathVariable Long ownerId,
             @RequestParam OwnerType ownerType) {
-        
+
         List<ReferralResourceResponse> responses = referralResourceService.getResourcesByOwnerId(ownerId, ownerType);
-        return ResponseEntity.ok(responses);
+        if (responses.isEmpty()) {
+            return ResponseEntity.ok(ApiResponse.success("No data found", responses));
+        }
+        return ResponseEntity.ok(ApiResponse.success(responses));
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT', 'REFERRAL', 'COMPANY')")
-    public ResponseEntity<PageResponse<ReferralResourceResponse>> getAllResources(
+    @PreAuthorize(ALL_ROLES)
+    public ResponseEntity<ApiResponse<PageResponse<ReferralResourceResponse>>> getAllResources(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) Long ownerId,
             @RequestParam(required = false) OwnerType ownerType,
             @RequestParam(required = false) String resourceType) {
-        
+
         PageResponse<ReferralResourceResponse> responses = referralResourceService.getAllResources(
                 page, size, ownerId, ownerType, resourceType);
-        return ResponseEntity.ok(responses);
+
+        if (responses.isEmpty()) {
+            return ResponseEntity.ok(ApiResponse.success("No data found", responses));
+        }
+        return ResponseEntity.ok(ApiResponse.success(responses));
     }
 
     @GetMapping("/my-resources")
-    @PreAuthorize("hasAnyRole('REFERRAL', 'COMPANY')")
-    public ResponseEntity<List<ReferralResourceResponse>> getMyResources() {
-        
+    @PreAuthorize(ALL_ROLES)
+    public ResponseEntity<ApiResponse<List<ReferralResourceResponse>>> getMyResources() {
+
         List<ReferralResourceResponse> responses = referralResourceService.getMyResources();
-        return ResponseEntity.ok(responses);
+        if (responses.isEmpty()) {
+            return ResponseEntity.ok(ApiResponse.success("No data found", responses));
+        }
+        return ResponseEntity.ok(ApiResponse.success(responses));
     }
 }

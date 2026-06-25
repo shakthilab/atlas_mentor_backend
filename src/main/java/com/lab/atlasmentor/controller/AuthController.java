@@ -6,6 +6,7 @@ import com.lab.atlasmentor.dto.AuthResponse;
 import com.lab.atlasmentor.dto.LoginRequest;
 import com.lab.atlasmentor.dto.RefreshTokenRequest;
 import com.lab.atlasmentor.dto.RegisterRequest;
+import com.lab.atlasmentor.dto.ResetPasswordRequest;
 import com.lab.atlasmentor.exception.TooManyRequestsException;
 import com.lab.atlasmentor.model.User;
 import com.lab.atlasmentor.security.LoginRateLimiter;
@@ -17,6 +18,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -73,9 +76,9 @@ public class AuthController {
     }
 
     @PostMapping("/resend-verification")
-    public ResponseEntity<ApiResponse<Void>> resendVerificationEmail(@RequestParam String email) {
+    public ResponseEntity<ApiResponse<Void>> resendVerificationEmail(@RequestBody Map<String, String> body) {
         try {
-            authService.resendVerificationEmail(email);
+            authService.resendVerificationEmail(body.get("email"));
             return ResponseEntity.ok(ApiResponse.success("Verification email sent successfully", null));
         } catch (BusinessException e) {
             return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
@@ -84,8 +87,12 @@ public class AuthController {
 
     @PostMapping("/forgot-password")
     public ResponseEntity<ApiResponse<Void>> forgotPassword(
-            @RequestParam String email,
+            @RequestBody Map<String, String> body,
             HttpServletRequest request) {
+        String email = body.get("email");
+        if (email == null || email.isBlank()) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("Email is required"));
+        }
         String ip = extractClientIp(request);
         if (!loginRateLimiter.isAllowed(ip)) {
             long retryAfter = loginRateLimiter.retryAfterSeconds(ip);
@@ -120,8 +127,7 @@ public class AuthController {
 
     @PostMapping("/reset-password")
     public ResponseEntity<ApiResponse<Void>> resetPassword(
-            @RequestParam String token,
-            @RequestParam String newPassword,
+            @RequestBody ResetPasswordRequest body,
             HttpServletRequest request) {
         String ip = extractClientIp(request);
         if (!loginRateLimiter.isAllowed(ip)) {
@@ -129,7 +135,7 @@ public class AuthController {
             return tooManyRequests("Too many requests. Try again in " + retryAfter + " seconds.", retryAfter);
         }
         try {
-            authService.resetPassword(token, newPassword);
+            authService.resetPassword(body.getToken(), body.getPassword());
             return ResponseEntity.ok(ApiResponse.success("Password reset successfully", null));
         } catch (BusinessException e) {
             return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));

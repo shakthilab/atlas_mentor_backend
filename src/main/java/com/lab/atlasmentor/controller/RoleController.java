@@ -21,6 +21,10 @@ public class RoleController {
     public ResponseEntity<ApiResponse<List<Role>>> getAllRoles() {
         try {
             List<Role> roles = roleService.getAllRoles();
+            if (roles.isEmpty()) {
+                ApiResponse<List<Role>> response = ApiResponse.success("No data found", roles);
+                return ResponseEntity.ok(response);
+            }
             ApiResponse<List<Role>> response = ApiResponse.success("Roles retrieved successfully", roles);
             return ResponseEntity.ok(response);
         } catch (BusinessException e) {

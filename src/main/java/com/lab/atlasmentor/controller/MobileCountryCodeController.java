@@ -28,7 +28,10 @@ public class MobileCountryCodeController {
             List<MobileCountryCodeResponse> response = countryCodes.stream()
                     .map(MobileCountryCodeResponse::fromEntity)
                     .collect(Collectors.toList());
-            
+
+            if (response.isEmpty()) {
+                return ResponseEntity.ok(ApiResponse.success("No data found", response));
+            }
             return ResponseEntity.ok(ApiResponse.success("Mobile country codes retrieved successfully", response));
         } catch (BusinessException e) {
             return ResponseEntity.internalServerError()
@@ -43,7 +46,10 @@ public class MobileCountryCodeController {
             List<MobileCountryCodeResponse> response = countryCodes.stream()
                     .map(MobileCountryCodeResponse::fromEntity)
                     .collect(Collectors.toList());
-            
+
+            if (response.isEmpty()) {
+                return ResponseEntity.ok(ApiResponse.success("No data found", response));
+            }
             return ResponseEntity.ok(ApiResponse.success("Active mobile country codes retrieved successfully", response));
         } catch (BusinessException e) {
             return ResponseEntity.internalServerError()
@@ -55,7 +61,7 @@ public class MobileCountryCodeController {
     public ResponseEntity<ApiResponse<MobileCountryCodeResponse>> getByIsoAlpha2(@PathVariable String isoAlpha2) {
         try {
             Optional<MobileCountryCode> countryCode = mobileCountryCodeService.getByIsoAlpha2(isoAlpha2.toUpperCase());
-            
+
             if (countryCode.isPresent()) {
                 MobileCountryCodeResponse response = MobileCountryCodeResponse.fromEntity(countryCode.get());
                 return ResponseEntity.ok(ApiResponse.success("Country code found", response));
@@ -72,7 +78,7 @@ public class MobileCountryCodeController {
     public ResponseEntity<ApiResponse<MobileCountryCodeResponse>> getByIsoAlpha3(@PathVariable String isoAlpha3) {
         try {
             Optional<MobileCountryCode> countryCode = mobileCountryCodeService.getByIsoAlpha3(isoAlpha3.toUpperCase());
-            
+
             if (countryCode.isPresent()) {
                 MobileCountryCodeResponse response = MobileCountryCodeResponse.fromEntity(countryCode.get());
                 return ResponseEntity.ok(ApiResponse.success("Country code found", response));
@@ -92,7 +98,10 @@ public class MobileCountryCodeController {
             List<MobileCountryCodeResponse> response = countryCodes.stream()
                     .map(MobileCountryCodeResponse::fromEntity)
                     .collect(Collectors.toList());
-            
+
+            if (response.isEmpty()) {
+                return ResponseEntity.ok(ApiResponse.success("No data found", response));
+            }
             return ResponseEntity.ok(ApiResponse.success("Countries found for mobile code", response));
         } catch (BusinessException e) {
             return ResponseEntity.internalServerError()
@@ -108,7 +117,10 @@ public class MobileCountryCodeController {
             List<MobileCountryCodeResponse> response = countryCodes.stream()
                     .map(MobileCountryCodeResponse::fromEntity)
                     .collect(Collectors.toList());
-            
+
+            if (response.isEmpty()) {
+                return ResponseEntity.ok(ApiResponse.success("No data found", response));
+            }
             return ResponseEntity.ok(ApiResponse.success("Countries found matching search criteria", response));
         } catch (BusinessException e) {
             return ResponseEntity.internalServerError()

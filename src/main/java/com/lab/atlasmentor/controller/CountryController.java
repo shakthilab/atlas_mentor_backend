@@ -22,6 +22,10 @@ public class CountryController {
     public ResponseEntity<ApiResponse<List<Country>>> getAllCountries() {
         try {
             List<Country> countries = countryService.getAllActiveCountries();
+            if (countries.isEmpty()) {
+                ApiResponse<List<Country>> response = ApiResponse.success("No data found", countries);
+                return ResponseEntity.ok(response);
+            }
             ApiResponse<List<Country>> response = ApiResponse.success("Countries retrieved successfully", countries);
             return ResponseEntity.ok(response);
         } catch (BusinessException e) {
@@ -34,6 +38,10 @@ public class CountryController {
     public ResponseEntity<ApiResponse<List<Country>>> getAllCountriesIncludingInactive() {
         try {
             List<Country> countries = countryService.getAllCountries();
+            if (countries.isEmpty()) {
+                ApiResponse<List<Country>> response = ApiResponse.success("No data found", countries);
+                return ResponseEntity.ok(response);
+            }
             ApiResponse<List<Country>> response = ApiResponse.success("All countries retrieved successfully", countries);
             return ResponseEntity.ok(response);
         } catch (BusinessException e) {

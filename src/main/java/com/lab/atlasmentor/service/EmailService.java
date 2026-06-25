@@ -117,7 +117,7 @@ public class EmailService {
     }
 
     public void sendPasswordResetEmail(String toEmail, String resetToken) {
-        String resetLink = frontendUrl + "/reset-password?token=" + resetToken;
+        String resetLink = frontendUrl + "/auth/reset-password?token=" + resetToken;
 
         try {
             MimeMessage mimeMessage = mailSender.createMimeMessage();

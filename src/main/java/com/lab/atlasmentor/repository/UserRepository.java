@@ -148,7 +148,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("SELECT u FROM User u WHERE u.role.id IN :roleIds AND u.branch.id = :branchId AND u.status = 'ACTIVE'")
     List<User> findActiveUsersByRoleIdsAndBranchId(@Param("roleIds") List<Long> roleIds, @Param("branchId") Long branchId);
 
-    @Query("SELECT u FROM User u WHERE u.role.id = :roleId AND u.branch.id = :branchId AND u.status = 'ACTIVE'")
+    @Query("SELECT u FROM User u WHERE (:roleId IS NULL OR u.role.id = :roleId) AND (:branchId IS NULL OR u.branch.id = :branchId) AND u.status = 'ACTIVE'")
     List<User> findActiveUsersByRoleIdAndBranchId(@Param("roleId") Long roleId, @Param("branchId") Long branchId);
 
     @Modifying

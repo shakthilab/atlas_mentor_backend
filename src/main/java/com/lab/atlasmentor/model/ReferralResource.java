@@ -104,6 +104,13 @@ public class ReferralResource extends BaseEntity {
 
     public enum OwnerType {
         REFERRAL,
-        COMPANY
+        COMPANY,
+        SENIOR_COUNSELLOR,
+        JUNIOR_COUNSELLOR,
+        VIDEO_EDITOR,
+        COUNSELLOR,
+        MANAGER,
+        BRANCH_PARTNER,
+        ADMINISTRATIVE_ASSISTANT
     }
 }

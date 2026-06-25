@@ -47,7 +47,7 @@ public class TaskBundleController {
     public ResponseEntity<TaskBundleResponse> createTaskBundle(
             @Valid @RequestBody CreateTaskBundleRequest request) {
         log.info("Create task bundle request: {}", request.getName());
-        
+
         Long currentUserId = SecurityUtils.getCurrentUserId();
         TaskBundleResponse response = taskBundleService.createTaskBundle(request, currentUserId);
         return ResponseEntity.ok(response);
@@ -84,7 +84,7 @@ public class TaskBundleController {
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<TaskBundleResponse> getTaskBundle(@PathVariable Long id) {
         log.info("Get task bundle details for ID: {}", id);
-        
+
         TaskBundleResponse response = taskBundleService.getTaskBundleById(id);
         return ResponseEntity.ok(response);
     }
@@ -98,7 +98,7 @@ public class TaskBundleController {
             @PathVariable Long id,
             @Valid @RequestBody UpdateTaskBundleRequest request) {
         log.info("Update task bundle request for ID: {}", id);
-        
+
         Long currentUserId = SecurityUtils.getCurrentUserId();
         TaskBundleResponse response = taskBundleService.updateTaskBundle(id, request, currentUserId);
         return ResponseEntity.ok(response);
@@ -111,16 +111,16 @@ public class TaskBundleController {
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<Map<String, Object>> deleteTaskBundle(@PathVariable Long id) {
         log.info("Delete task bundle request for ID: {}", id);
-        
+
         Long currentUserId = SecurityUtils.getCurrentUserId();
         taskBundleService.deleteTaskBundle(id, currentUserId);
-        
+
         Map<String, Object> response = new HashMap<>();
         response.put("message", "Task bundle deleted successfully");
         response.put("bundleId", id);
         response.put("deleted", true);
         response.put("timestamp", LocalDateTime.now());
-        
+
         return ResponseEntity.ok(response);
     }
 
@@ -131,7 +131,7 @@ public class TaskBundleController {
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<TaskBundleResponse> activateTaskBundle(@PathVariable Long id) {
         log.info("Activate task bundle request for ID: {}", id);
-        
+
         Long currentUserId = SecurityUtils.getCurrentUserId();
         TaskBundleResponse response = taskBundleService.activateTaskBundle(id, currentUserId);
         return ResponseEntity.ok(response);
@@ -144,7 +144,7 @@ public class TaskBundleController {
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<TaskBundleResponse> deactivateTaskBundle(@PathVariable Long id) {
         log.info("Deactivate task bundle request for ID: {}", id);
-        
+
         Long currentUserId = SecurityUtils.getCurrentUserId();
         TaskBundleResponse response = taskBundleService.deactivateTaskBundle(id, currentUserId);
         return ResponseEntity.ok(response);
@@ -155,11 +155,14 @@ public class TaskBundleController {
      */
     @GetMapping("/role/{roleId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
-    public ResponseEntity<List<TaskBundleListResponse>> getTaskBundlesByRole(@PathVariable Long roleId) {
+    public ResponseEntity<ApiResponse<List<TaskBundleListResponse>>> getTaskBundlesByRole(@PathVariable Long roleId) {
         log.info("Get task bundles for role ID: {}", roleId);
-        
+
         List<TaskBundleListResponse> bundles = taskBundleService.getTaskBundlesByRole(roleId);
-        return ResponseEntity.ok(bundles);
+        if (bundles.isEmpty()) {
+            return ResponseEntity.ok(ApiResponse.success("No data found", bundles));
+        }
+        return ResponseEntity.ok(ApiResponse.success(bundles));
     }
 
     /**
@@ -171,7 +174,7 @@ public class TaskBundleController {
             @PathVariable Long bundleId,
             @Valid @RequestBody CreateTaskBundleTaskRequest request) {
         log.info("Add task to bundle {} request: {}", bundleId, request.getTitle());
-        
+
         Long currentUserId = SecurityUtils.getCurrentUserId();
         TaskBundleTaskResponse response = taskBundleService.addTaskToBundle(bundleId, request, currentUserId);
         return ResponseEntity.ok(response);
@@ -199,7 +202,7 @@ public class TaskBundleController {
             @PathVariable Long taskId,
             @Valid @RequestBody UpdateTaskBundleTaskRequest request) {
         log.info("Update task {} in bundle {} request", taskId, bundleId);
-        
+
         Long currentUserId = SecurityUtils.getCurrentUserId();
         TaskBundleTaskResponse response = taskBundleService.updateTaskInBundle(bundleId, taskId, request, currentUserId);
         return ResponseEntity.ok(response);
@@ -214,7 +217,7 @@ public class TaskBundleController {
             @PathVariable Long bundleId,
             @PathVariable Long taskId) {
         log.info("Remove task {} from bundle {} request", taskId, bundleId);
-        
+
         Long currentUserId = SecurityUtils.getCurrentUserId();
         taskBundleService.removeTaskFromBundle(bundleId, taskId, currentUserId);
         return ResponseEntity.noContent().build();
@@ -227,7 +230,7 @@ public class TaskBundleController {
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<String> triggerBundleExecution(@PathVariable Long id) {
         log.info("Manual trigger execution for bundle: {}", id);
-        
+
         bundleSchedulerService.triggerBundleExecution(id);
         return ResponseEntity.ok("Bundle execution triggered successfully");
     }
@@ -239,7 +242,7 @@ public class TaskBundleController {
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<BundleExecutionResponse> executeBundleNow(@PathVariable Long id) {
         log.info("Execute now request for bundle: {}", id);
-        
+
         BundleSchedulerService.BundleExecutionResult result = bundleSchedulerService.executeBundleNow(id);
         return ResponseEntity.ok(result.getResponse());
     }
@@ -253,7 +256,7 @@ public class TaskBundleController {
             @PathVariable Long id,
             @RequestParam LocalDate executionDate) {
         log.info("Manual task generation for bundle {} on date: {}", id, executionDate);
-        
+
         TaskGenerationService.GenerationResult result = taskGenerationService.manuallyGenerateTasks(id, executionDate);
         return ResponseEntity.ok(result);
     }
@@ -265,7 +268,7 @@ public class TaskBundleController {
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<BundleSchedulerService.BundleExecutionStats> getBundleExecutionStats(@PathVariable Long id) {
         log.info("Get execution statistics for bundle: {}", id);
-        
+
         BundleSchedulerService.BundleExecutionStats stats = bundleSchedulerService.getBundleExecutionStats(id);
         return ResponseEntity.ok(stats);
     }
@@ -275,9 +278,9 @@ public class TaskBundleController {
      */
     @GetMapping("/scheduled-next-hour")
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
-    public ResponseEntity<List<TaskBundleListResponse>> getBundlesScheduledNextHour() {
+    public ResponseEntity<ApiResponse<List<TaskBundleListResponse>>> getBundlesScheduledNextHour() {
         log.info("Get bundles scheduled for next hour");
-        
+
         List<com.lab.atlasmentor.model.TaskBundle> bundles = bundleSchedulerService.getBundlesScheduledNextHour();
         List<TaskBundleListResponse> response = bundles.stream()
                 .map(bundle -> {
@@ -290,20 +293,23 @@ public class TaskBundleController {
                     listResponse.setNextExecutionAt(bundle.getNextExecutionAt());
                     listResponse.setCreatedAt(bundle.getCreatedAt());
                     listResponse.setCreatedBy(bundle.getCreatedBy());
-                    
+
                     if (bundle.getRole() != null) {
                         listResponse.setRoleName(bundle.getRole().getName());
                     }
-                    
+
                     if (bundle.getSchedule() != null) {
                         listResponse.setScheduleType(bundle.getSchedule().getScheduleType().name());
                     }
-                    
+
                     return listResponse;
                 })
                 .toList();
-        
-        return ResponseEntity.ok(response);
+
+        if (response.isEmpty()) {
+            return ResponseEntity.ok(ApiResponse.success("No data found", response));
+        }
+        return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     /**
@@ -315,7 +321,7 @@ public class TaskBundleController {
             @RequestParam LocalDate startDate,
             @RequestParam LocalDate endDate) {
         log.info("Get task generation statistics from {} to {}", startDate, endDate);
-        
+
         TaskGenerationService.TaskGenerationStats stats = taskGenerationService.getGenerationStats(startDate, endDate);
         return ResponseEntity.ok(stats);
     }
@@ -327,7 +333,7 @@ public class TaskBundleController {
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<OverdueTaskSchedulerService.OverdueTaskResult> processOverdueTasks() {
         log.info("Manual processing of overdue tasks");
-        
+
         OverdueTaskSchedulerService.OverdueTaskResult result = overdueTaskSchedulerService.processOverdueTasksManually();
         return ResponseEntity.ok(result);
     }
@@ -339,7 +345,7 @@ public class TaskBundleController {
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<OverdueTaskSchedulerService.OverdueTaskStats> getOverdueTaskStats() {
         log.info("Get overdue task statistics");
-        
+
         OverdueTaskSchedulerService.OverdueTaskStats stats = overdueTaskSchedulerService.getOverdueTaskStats();
         return ResponseEntity.ok(stats);
     }
@@ -353,7 +359,7 @@ public class TaskBundleController {
             @PathVariable Long userId,
             @RequestParam LocalDate executionDate) {
         log.info("Generate tasks for user {} on date: {}", userId, executionDate);
-        
+
         TaskGenerationService.GenerationResult result = taskGenerationService.generateTasksForUserByRole(userId, executionDate);
         return ResponseEntity.ok(result);
     }
@@ -363,9 +369,9 @@ public class TaskBundleController {
      */
     @GetMapping("/overdue-tasks/user/{userId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
-    public ResponseEntity<List<com.lab.atlasmentor.dto.TaskResponse>> getOverdueTasksForUser(@PathVariable Long userId) {
+    public ResponseEntity<ApiResponse<List<TaskResponse>>> getOverdueTasksForUser(@PathVariable Long userId) {
         log.info("Get overdue tasks for user: {}", userId);
-        
+
         List<com.lab.atlasmentor.model.Task> tasks = overdueTaskSchedulerService.getOverdueTasksForUser(userId);
         List<TaskResponse> response = tasks.stream()
                 .map(task -> {
@@ -382,36 +388,39 @@ public class TaskBundleController {
                     taskResponse.setUpdatedAt(task.getUpdatedAt());
                     taskResponse.setCreatedBy(task.getCreatedBy());
                     taskResponse.setUpdatedBy(task.getUpdatedBy());
-                    
+
                     // Set assigned user
                     if (task.getAssignedTo() != null) {
                         taskResponse.setAssigneeName(task.getAssignedTo().getFullName());
                         taskResponse.setAssignedToId(task.getAssignedTo().getId());
                     }
-                    
+
                     // Set assigned by user
                     if (task.getAssignedBy() != null) {
                         taskResponse.setAssignerName(task.getAssignedBy().getFullName());
                         taskResponse.setAssignedById(task.getAssignedBy().getId());
                     }
-                    
+
                     // Set bundle info
                     if (task.getTaskBundle() != null) {
                         taskResponse.setTaskBundleId(task.getTaskBundle().getId());
                         taskResponse.setTaskBundleName(task.getTaskBundle().getName());
                     }
-                    
+
                     // Set branch info
                     if (task.getBranch() != null) {
                         taskResponse.setBranchId(task.getBranch().getId());
                         taskResponse.setBranchName(task.getBranch().getName());
                     }
-                    
+
                     return taskResponse;
                 })
                 .toList();
-        
-        return ResponseEntity.ok(response);
+
+        if (response.isEmpty()) {
+            return ResponseEntity.ok(ApiResponse.success("No data found", response));
+        }
+        return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     /**
@@ -419,9 +428,9 @@ public class TaskBundleController {
      */
     @GetMapping("/overdue-tasks/branch/{branchId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
-    public ResponseEntity<List<TaskResponse>> getOverdueTasksByBranch(@PathVariable Long branchId) {
+    public ResponseEntity<ApiResponse<List<TaskResponse>>> getOverdueTasksByBranch(@PathVariable Long branchId) {
         log.info("Get overdue tasks for branch: {}", branchId);
-        
+
         List<com.lab.atlasmentor.model.Task> tasks = overdueTaskSchedulerService.getOverdueTasksByBranch(branchId);
         List<TaskResponse> response = tasks.stream()
                 .map(task -> {
@@ -438,35 +447,38 @@ public class TaskBundleController {
                     taskResponse.setUpdatedAt(task.getUpdatedAt());
                     taskResponse.setCreatedBy(task.getCreatedBy());
                     taskResponse.setUpdatedBy(task.getUpdatedBy());
-                    
+
                     // Set assigned user
                     if (task.getAssignedTo() != null) {
                         taskResponse.setAssigneeName(task.getAssignedTo().getFullName());
                         taskResponse.setAssignedToId(task.getAssignedTo().getId());
                     }
-                    
+
                     // Set assigned by user
                     if (task.getAssignedBy() != null) {
                         taskResponse.setAssignerName(task.getAssignedBy().getFullName());
                         taskResponse.setAssignedById(task.getAssignedBy().getId());
                     }
-                    
+
                     // Set bundle info
                     if (task.getTaskBundle() != null) {
                         taskResponse.setTaskBundleId(task.getTaskBundle().getId());
                         taskResponse.setTaskBundleName(task.getTaskBundle().getName());
                     }
-                    
+
                     // Set branch info
                     if (task.getBranch() != null) {
                         taskResponse.setBranchId(task.getBranch().getId());
                         taskResponse.setBranchName(task.getBranch().getName());
                     }
-                    
+
                     return taskResponse;
                 })
                 .toList();
-        
-        return ResponseEntity.ok(response);
+
+        if (response.isEmpty()) {
+            return ResponseEntity.ok(ApiResponse.success("No data found", response));
+        }
+        return ResponseEntity.ok(ApiResponse.success(response));
     }
 }

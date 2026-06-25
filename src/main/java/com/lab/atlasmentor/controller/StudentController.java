@@ -29,7 +29,7 @@ public class StudentController {
         try {
             Student student = studentService.registerStudent(request);
             ApiResponse<Student> response = ApiResponse.success(
-                "Student registration successful. We will contact you soon.", 
+                "Student registration successful. We will contact you soon.",
                 student
             );
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -71,12 +71,13 @@ public class StudentController {
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "id") String sortBy,
             @RequestParam(defaultValue = "desc") String direction) {
-        
+
         Sort sort = direction.equalsIgnoreCase("asc") ? Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
         Pageable pageable = PageRequest.of(page, size, sort);
-        
+
         PageResponse<StudentResponse> students = studentService.getAllStudents(status, search, pageable);
-        ApiResponse<PageResponse<StudentResponse>> response = ApiResponse.success("Students retrieved successfully", students);
+        String message = students.isEmpty() ? "No data found" : "Students retrieved successfully";
+        ApiResponse<PageResponse<StudentResponse>> response = ApiResponse.success(message, students);
         return ResponseEntity.ok(response);
     }
 
@@ -87,12 +88,13 @@ public class StudentController {
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "id") String sortBy,
             @RequestParam(defaultValue = "desc") String direction) {
-        
+
         Sort sort = direction.equalsIgnoreCase("asc") ? Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
         Pageable pageable = PageRequest.of(page, size, sort);
-        
+
         PageResponse<StudentResponse> students = studentService.getAllStudents(StudentStatus.REGISTERED, search, pageable);
-        ApiResponse<PageResponse<StudentResponse>> response = ApiResponse.success("Registered students retrieved successfully", students);
+        String message = students.isEmpty() ? "No data found" : "Registered students retrieved successfully";
+        ApiResponse<PageResponse<StudentResponse>> response = ApiResponse.success(message, students);
         return ResponseEntity.ok(response);
     }
 
@@ -108,12 +110,13 @@ public class StudentController {
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "id") String sortBy,
             @RequestParam(defaultValue = "desc") String direction) {
-        
+
         Sort sort = direction.equalsIgnoreCase("asc") ? Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
         Pageable pageable = PageRequest.of(page, size, sort);
-        
+
         PageResponse<StudentNonRegisteredResponse> students = studentService.getNonRegisteredStudents(search, status, countryName, dateFrom, dateTo, source, pageable);
-        ApiResponse<PageResponse<StudentNonRegisteredResponse>> response = ApiResponse.<PageResponse<StudentNonRegisteredResponse>>success("Non-registered students retrieved successfully", students);
+        String message = students.isEmpty() ? "No data found" : "Non-registered students retrieved successfully";
+        ApiResponse<PageResponse<StudentNonRegisteredResponse>> response = ApiResponse.<PageResponse<StudentNonRegisteredResponse>>success(message, students);
         return ResponseEntity.ok(response);
     }
 
@@ -225,7 +228,8 @@ public class StudentController {
     public ResponseEntity<ApiResponse<java.util.List<com.lab.atlasmentor.model.StudentActivity>>> getStudentActivities(@PathVariable Long id) {
         try {
             java.util.List<com.lab.atlasmentor.model.StudentActivity> activities = studentService.getStudentActivities(id);
-            ApiResponse<java.util.List<com.lab.atlasmentor.model.StudentActivity>> response = ApiResponse.success("Student activities retrieved successfully", activities);
+            String message = activities.isEmpty() ? "No data found" : "Student activities retrieved successfully";
+            ApiResponse<java.util.List<com.lab.atlasmentor.model.StudentActivity>> response = ApiResponse.success(message, activities);
             return ResponseEntity.ok(response);
         } catch (BusinessException e) {
             ApiResponse<java.util.List<com.lab.atlasmentor.model.StudentActivity>> response = ApiResponse.error(e.getMessage());
@@ -318,4 +322,3 @@ public class StudentController {
         }
     }
 }
-

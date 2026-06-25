@@ -36,6 +36,10 @@ public class EmployeeController {
         try {
             String roleStr = role != null ? role : null;
             PageResponse<EmployeeResponse> employees = authService.getAllEmployees(page, size, roleStr, branch, search);
+            if (employees.isEmpty()) {
+                ApiResponse<PageResponse<EmployeeResponse>> response = ApiResponse.success("No data found", employees);
+                return ResponseEntity.ok(response);
+            }
             ApiResponse<PageResponse<EmployeeResponse>> response = ApiResponse.success("Employees retrieved successfully", employees);
             return ResponseEntity.ok(response);
         } catch (BusinessException e) {

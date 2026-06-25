@@ -40,7 +40,7 @@ public class BranchController {
 
     @Autowired
     private UserRepository userRepository;
-    
+
     @Autowired
     private StudentRepository studentRepository;
 
@@ -55,17 +55,17 @@ public class BranchController {
             }
             User currentUser = userRepository.findById(SecurityUtils.getCurrentUserId())
                 .orElseThrow(() -> new RuntimeException("Current user not found"));
-            
+
             Branch branch = new Branch();
             branch.setName(branchRequest.getName());
             branch.setLocation(branchRequest.getLocation());
             branch.setStatus(branchRequest.getStatus() != null ? branchRequest.getStatus() : UserStatus.ACTIVE);
             branch.setCreatedBy(currentUser.getId());
             branch.setUpdatedBy(currentUser.getId());
-            
+
             Branch createdBranch = branchService.createBranch(branch, branchRequest.getManagerId());
             BranchResponse response = convertToBranchResponse(createdBranch);
-            
+
             ApiResponse<BranchResponse> apiResponse = ApiResponse.success("Branch created successfully", response);
             return ResponseEntity.status(HttpStatus.CREATED).body(apiResponse);
         } catch (BusinessException e) {
@@ -104,7 +104,9 @@ public class BranchController {
             List<BranchResponse> branchResponses = branches.stream()
                     .map(this::convertToBranchResponse)
                     .collect(Collectors.toList());
-            ApiResponse<List<BranchResponse>> response = ApiResponse.success("Branches retrieved successfully", branchResponses);
+            ApiResponse<List<BranchResponse>> response = branchResponses.isEmpty()
+                    ? ApiResponse.success("No data found", branchResponses)
+                    : ApiResponse.success("Branches retrieved successfully", branchResponses);
             return ResponseEntity.ok(response);
         } catch (BusinessException e) {
             ApiResponse<List<BranchResponse>> response = ApiResponse.error(e.getMessage());
@@ -115,7 +117,7 @@ public class BranchController {
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<BranchResponse>> updateBranch(
             @RequestHeader("Authorization") String token,
-            @PathVariable Long id, 
+            @PathVariable Long id,
             @Valid @RequestBody BranchRequest branchRequest) {
         try {
             // Validate admin role using SecurityUtils
@@ -124,16 +126,16 @@ public class BranchController {
             }
             User currentUser = userRepository.findById(SecurityUtils.getCurrentUserId())
                 .orElseThrow(() -> new RuntimeException("Current user not found"));
-            
+
             Branch branchDetails = new Branch();
             branchDetails.setName(branchRequest.getName());
             branchDetails.setLocation(branchRequest.getLocation());
             branchDetails.setStatus(branchRequest.getStatus());
             branchDetails.setUpdatedBy(currentUser.getId());
-            
+
             Branch updatedBranch = branchService.updateBranch(id, branchDetails, branchRequest.getManagerId());
             BranchResponse response = convertToBranchResponse(updatedBranch);
-            
+
             ApiResponse<BranchResponse> apiResponse = ApiResponse.success("Branch updated successfully", response);
             return ResponseEntity.ok(apiResponse);
         } catch (BusinessException e) {
@@ -172,9 +174,9 @@ public class BranchController {
             }
             User currentUser = userRepository.findById(SecurityUtils.getCurrentUserId())
                 .orElseThrow(() -> new RuntimeException("Current user not found"));
-            
+
             Branch updatedBranch = branchService.changeBranchStatus(id, statusRequest.getStatus(), currentUser);
-            
+
             BranchResponse response = convertToBranchResponse(updatedBranch);
             ApiResponse<BranchResponse> apiResponse = ApiResponse.success("Branch status updated successfully", response);
             return ResponseEntity.ok(apiResponse);
@@ -187,12 +189,12 @@ public class BranchController {
     private BranchResponse convertToBranchResponse(Branch branch) {
         // Get staff and student counts for the branch
         List<String> staffRoles = List.of("MANAGER", "VIDEO_EDITOR", "JUNIOR_COUNSELLOR", "SENIOR_COUNSELLOR", "COUNSELLOR");
-        
+
         Long totalStaffs = userRepository.countStaffsByBranchId(branch.getId(), staffRoles);
         Long totalStudents = studentRepository.countStudentsByBranchId(branch.getId());
-        
+
         BranchResponse.UserCounts userCounts = new BranchResponse.UserCounts(totalStaffs, totalStudents);
-        
+
         BranchResponse response = new BranchResponse(
                 branch.getId(),
                 branch.getName(),
@@ -201,7 +203,7 @@ public class BranchController {
                 branch.getCreatedAt(),
                 userCounts
         );
-        
+
         // Set manager information if present
         if (branch.getManager() != null) {
             BranchResponse.ManagerInfo managerInfo = new BranchResponse.ManagerInfo(
@@ -211,7 +213,7 @@ public class BranchController {
             );
             response.setManager(managerInfo);
         }
-        
+
         return response;
     }
 
@@ -219,7 +221,9 @@ public class BranchController {
     public ResponseEntity<ApiResponse<List<ManagerResponse>>> getAllManagers() {
         try {
             List<ManagerResponse> managers = adminService.getAllManagers();
-            ApiResponse<List<ManagerResponse>> response = ApiResponse.success("Managers retrieved successfully", managers);
+            ApiResponse<List<ManagerResponse>> response = managers.isEmpty()
+                    ? ApiResponse.success("No data found", managers)
+                    : ApiResponse.success("Managers retrieved successfully", managers);
             return ResponseEntity.ok(response);
         } catch (BusinessException e) {
             ApiResponse<List<ManagerResponse>> response = ApiResponse.error(e.getMessage());
@@ -231,7 +235,9 @@ public class BranchController {
     public ResponseEntity<ApiResponse<List<SeniorCounsellorResponse>>> getAllActiveSeniorCounsellors() {
         try {
             List<SeniorCounsellorResponse> seniorCounsellors = adminService.getAllActiveSeniorCounsellors();
-            ApiResponse<List<SeniorCounsellorResponse>> response = ApiResponse.success("Senior counsellors retrieved successfully", seniorCounsellors);
+            ApiResponse<List<SeniorCounsellorResponse>> response = seniorCounsellors.isEmpty()
+                    ? ApiResponse.success("No data found", seniorCounsellors)
+                    : ApiResponse.success("Senior counsellors retrieved successfully", seniorCounsellors);
             return ResponseEntity.ok(response);
         } catch (BusinessException e) {
             ApiResponse<List<SeniorCounsellorResponse>> response = ApiResponse.error(e.getMessage());
@@ -244,7 +250,9 @@ public class BranchController {
             @RequestParam(required = false) Long managerId) {
         try {
             List<UnassignedEmployeeResponse> unassignedEmployees = adminService.getUnassignedEmployees(managerId);
-            ApiResponse<List<UnassignedEmployeeResponse>> response = ApiResponse.success("Unassigned employees retrieved successfully", unassignedEmployees);
+            ApiResponse<List<UnassignedEmployeeResponse>> response = unassignedEmployees.isEmpty()
+                    ? ApiResponse.success("No data found", unassignedEmployees)
+                    : ApiResponse.success("Unassigned employees retrieved successfully", unassignedEmployees);
             return ResponseEntity.ok(response);
         } catch (BusinessException e) {
             ApiResponse<List<UnassignedEmployeeResponse>> response = ApiResponse.error(e.getMessage());

@@ -79,6 +79,9 @@ public class EnhancedPaymentController {
     public ResponseEntity<ApiResponse<List<PaymentTransactionDto>>> getPaymentTransactions(@PathVariable Long studentId) {
         try {
             List<PaymentTransactionDto> transactions = finalPaymentService.getPaymentTransactions(studentId);
+            if (transactions.isEmpty()) {
+                return ResponseEntity.ok(ApiResponse.success("No data found", transactions));
+            }
             return ResponseEntity.ok(ApiResponse.success("Payment transactions retrieved successfully", transactions));
         } catch (BusinessException e) {
             return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
@@ -159,10 +162,13 @@ public class EnhancedPaymentController {
 
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'ADMINISTRATIVE_ASSISTANT', 'REFERRAL', 'COMPANY')")
-    public ResponseEntity<List<StudentPayment>> getStudentPaymentsByRole() {
+    public ResponseEntity<ApiResponse<List<StudentPayment>>> getStudentPaymentsByRole() {
         try {
             List<StudentPayment> payments = finalPaymentService.getStudentPaymentsByRole();
-            return ResponseEntity.ok(payments);
+            if (payments.isEmpty()) {
+                return ResponseEntity.ok(ApiResponse.success("No data found", payments));
+            }
+            return ResponseEntity.ok(ApiResponse.success(payments));
         } catch (BusinessException e) {
             return ResponseEntity.badRequest().build();
         }
