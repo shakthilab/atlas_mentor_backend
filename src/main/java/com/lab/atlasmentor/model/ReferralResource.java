@@ -11,8 +11,6 @@ import java.util.List;
 @Entity
 @Table(name = "referral_resources",
        indexes = {
-
-           @Index(name = "idx_referral_resources_owner_id", columnList = "owner_id"),
            @Index(name = "idx_referral_resources_owner_type", columnList = "owner_type"),
            @Index(name = "idx_referral_resources_storage_type", columnList = "storage_type"),
            @Index(name = "idx_referral_resources_is_active", columnList = "is_active")
