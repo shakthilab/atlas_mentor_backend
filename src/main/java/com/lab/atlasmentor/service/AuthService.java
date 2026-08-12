@@ -329,11 +329,22 @@ public class AuthService {
         }
 
         String primaryRole = user.getRole() != null ? user.getRole().getName() : "USER";
+        String primaryRoleName = resolveRoleDisplayName(user);
         boolean isEmployee = user.getRole() != null && user.getRole().getIsEmployee();
         String accessToken = jwtService.generateToken(user.getEmail(), user.getId(), primaryRole, user.getBranchId());
         String rawRefreshToken = refreshTokenService.createRefreshToken(user);
 
-        return new AuthResponse(accessToken, rawRefreshToken, user.getId(), user.getFullName(), user.getEmail(), primaryRole, isEmployee);
+        return new AuthResponse(accessToken, rawRefreshToken, user.getId(), user.getFullName(), user.getEmail(), primaryRole, primaryRoleName, isEmployee);
+    }
+
+    // Prefer the DB-configured display name (e.g. "Junior Counsellor"); fall back to
+    // the raw role code (e.g. "JUNIOR_COUNSELLOR") if it hasn't been set for a role yet.
+    private String resolveRoleDisplayName(User user) {
+        if (user.getRole() == null) {
+            return "USER";
+        }
+        String displayName = user.getRole().getDisplayName();
+        return (displayName != null && !displayName.isBlank()) ? displayName : user.getRole().getName();
     }
 
     public AuthResponse refresh(String rawRefreshToken) {
@@ -345,10 +356,11 @@ public class AuthService {
         RefreshTokenService.TokenPair pair = refreshTokenService.rotate(rawRefreshToken, user);
 
         String primaryRole = user.getRole() != null ? user.getRole().getName() : "USER";
+        String primaryRoleName = resolveRoleDisplayName(user);
         boolean isEmployee = user.getRole() != null && user.getRole().getIsEmployee();
 
         return new AuthResponse(pair.accessToken(), pair.refreshToken(),
-                user.getId(), user.getFullName(), user.getEmail(), primaryRole, isEmployee);
+                user.getId(), user.getFullName(), user.getEmail(), primaryRole, primaryRoleName, isEmployee);
     }
 
     public void logout(String rawRefreshToken) {

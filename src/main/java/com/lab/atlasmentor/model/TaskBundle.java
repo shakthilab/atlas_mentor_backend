@@ -85,6 +85,10 @@ public class TaskBundle extends BaseEntity {
     @JsonIgnoreProperties({"taskBundle"})
     private List<TaskList> taskLists;
 
+    @OneToMany(mappedBy = "roleTemplate", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @JsonIgnoreProperties({"roleTemplate"})
+    private List<TemplateDay> templateDays;
+
     public TaskBundle() {}
     
     public TaskBundle(String name, String description, Role role, BundleStatus status) {

@@ -130,6 +130,36 @@ public class TaskController {
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * Same behavior as PUT /{id}/status - added because Part D1 of the employee daily
+     * workflow spec calls for PATCH semantics (a partial update of just the status field).
+     * PUT is kept above for existing callers.
+     */
+    @PatchMapping("/{id}/status")
+    public ResponseEntity<TaskResponse> patchTaskStatus(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateTaskStatusRequest request) {
+        log.info("Patch task status request for ID: {} to status: {}", id, request.getStatus());
+
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+
+        TaskResponse response = taskService.updateTaskStatus(id, request.getStatus(), currentUserId);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Employee-triggered: only valid when the task is currently REFLECT. Restores the
+     * pre-flag status and routes re-review back to whichever stage flagged it (see
+     * TaskService#resubmitTask / DayApprovalService).
+     */
+    @PostMapping("/{id}/resubmit")
+    public ResponseEntity<TaskResponse> resubmitTask(@PathVariable Long id) {
+        log.info("Resubmit request for task ID: {}", id);
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        TaskResponse response = taskService.resubmitTask(id, currentUserId);
+        return ResponseEntity.ok(response);
+    }
+
     @PutMapping("/{id}/assignee")
     public ResponseEntity<TaskResponse> assignTask(
             @PathVariable Long id,
@@ -172,6 +202,20 @@ public class TaskController {
         return ResponseEntity.ok(response);
     }
 
+    @PutMapping("/{id}/due-time")
+    public ResponseEntity<TaskResponse> updateTaskDueTime(
+            @PathVariable Long id,
+            @RequestHeader("Authorization") String token,
+            @Valid @RequestBody UpdateDueTimeRequest request) {
+        log.info("Update task due time request for ID: {} to time: {}", id, request.getDueTime());
+
+        // Extract current user using SecurityUtils
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+
+        TaskResponse response = taskService.updateTaskDueTime(id, request.getDueTime(), currentUserId);
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/{id}/comments")
     public ResponseEntity<ApiResponse<List<TaskCommentResponse>>> getTaskComments(@PathVariable Long id) {
         log.info("Get comments for task ID: {}", id);
@@ -193,6 +237,29 @@ public class TaskController {
         Long currentUserId = SecurityUtils.getCurrentUserId();
 
         TaskCommentResponse response = taskService.addComment(id, request, currentUserId);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/{id}/attachments")
+    public ResponseEntity<ApiResponse<List<TaskAttachmentResponse>>> getTaskAttachments(@PathVariable Long id) {
+        log.info("Get attachments for task ID: {}", id);
+        List<TaskAttachmentResponse> attachments = taskService.getTaskAttachments(id);
+        if (attachments.isEmpty()) {
+            return ResponseEntity.ok(ApiResponse.success("No data found", attachments));
+        }
+        return ResponseEntity.ok(ApiResponse.success(attachments));
+    }
+
+    @PostMapping("/{id}/attachments")
+    public ResponseEntity<TaskAttachmentResponse> addAttachment(
+            @PathVariable Long id,
+            @RequestHeader("Authorization") String token,
+            @Valid @RequestBody AddAttachmentRequest request) {
+        log.info("Add attachment request for task ID: {}", id);
+
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+
+        TaskAttachmentResponse response = taskService.addAttachment(id, request, currentUserId);
         return ResponseEntity.ok(response);
     }
 

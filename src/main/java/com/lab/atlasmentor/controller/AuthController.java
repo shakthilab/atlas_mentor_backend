@@ -108,7 +108,13 @@ public class AuthController {
 
     @PostMapping("/refresh")
     public ResponseEntity<ApiResponse<AuthResponse>> refreshToken(
-            @Valid @RequestBody RefreshTokenRequest body) {
+            @Valid @RequestBody RefreshTokenRequest body,
+            HttpServletRequest request) {
+        String ip = extractClientIp(request);
+        if (!loginRateLimiter.isAllowed(ip)) {
+            long retryAfter = loginRateLimiter.retryAfterSeconds(ip);
+            return tooManyRequests("Too many refresh attempts. Try again in " + retryAfter + " seconds.", retryAfter);
+        }
         try {
             AuthResponse authResponse = authService.refresh(body.getRefreshToken());
             return ResponseEntity.ok(ApiResponse.success("Token refreshed", authResponse));

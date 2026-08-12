@@ -113,6 +113,13 @@ public class SecurityConfig {
                         .requestMatchers("/api/admin/dashboard/**")
                         .hasAnyRole("ADMIN", "MANAGER", "BRANCH_PARTNER", "ADMINISTRATIVE_ASSISTANT")
 
+                        // Employee Tree (EmployeeTreeController) - kept in sync with its
+                        // @PreAuthorize; must be listed before the generic /api/admin/** rule
+                        // below or MANAGER/BRANCH_PARTNER/ADMINISTRATIVE_ASSISTANT get a 403
+                        // at the filter-chain level before the controller is even reached.
+                        .requestMatchers("/api/admin/employee-tree", "/api/admin/employees/**")
+                        .hasAnyRole("ADMIN", "ADMINISTRATIVE_ASSISTANT", "MANAGER", "BRANCH_PARTNER")
+
                         .requestMatchers("/api/admin/**")
                         .hasAnyRole("ADMIN", "SENIOR_COUNSELLOR")
 

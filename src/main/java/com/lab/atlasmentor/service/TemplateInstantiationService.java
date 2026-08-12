@@ -1,14 +1,17 @@
 package com.lab.atlasmentor.service;
 
+import com.lab.atlasmentor.enums.TaskAction;
 import com.lab.atlasmentor.enums.TaskSource;
 import com.lab.atlasmentor.enums.TaskStatus;
 import com.lab.atlasmentor.model.DayWorkspace;
 import com.lab.atlasmentor.model.Task;
+import com.lab.atlasmentor.model.TaskActivity;
 import com.lab.atlasmentor.model.TaskBundle;
 import com.lab.atlasmentor.model.TemplateDay;
 import com.lab.atlasmentor.model.TemplateTask;
 import com.lab.atlasmentor.model.User;
 import com.lab.atlasmentor.repository.DayWorkspaceRepository;
+import com.lab.atlasmentor.repository.TaskActivityRepository;
 import com.lab.atlasmentor.repository.TaskRepository;
 import com.lab.atlasmentor.repository.TemplateDayRepository;
 import lombok.RequiredArgsConstructor;
@@ -56,6 +59,8 @@ public class TemplateInstantiationService {
     private final TemplateDayRepository templateDayRepository;
     private final DayWorkspaceRepository dayWorkspaceRepository;
     private final TaskRepository taskRepository;
+    private final TaskActivityRepository taskActivityRepository;
+    private final TaskDisplayIdService taskDisplayIdService;
 
     /**
      * Instantiate a single day's worth of tasks for one employee under one template, for
@@ -168,6 +173,7 @@ public class TemplateInstantiationService {
                     task.setTaskBundle(template);
                     task.setSourceType(TaskSource.TEMPLATE_GENERATED);
                     task.setSourceTemplateTask(templateTask);
+                    task.setDisplayId(taskDisplayIdService.nextDisplayId(template.getRole()));
                     task.setExecutionDate(today);
                     task.setDueDate(today);
                     task.setDayWorkspace(workspace);
@@ -177,7 +183,17 @@ public class TemplateInstantiationService {
                     }
                     task.setCreatedBy(SYSTEM_USER_ID);
                     task.setUpdatedBy(SYSTEM_USER_ID);
-                    taskRepository.save(task);
+                    Task savedTask = taskRepository.save(task);
+
+                    // Matches TaskService#createTask (CREATED) / TaskGenerationService
+                    // (AUTO_GENERATED) - every other task-creation path logs an initial
+                    // activity entry; this one hadn't, so template-instantiated tasks showed
+                    // no activity history at all.
+                    TaskActivity activity = new TaskActivity(savedTask, TaskAction.AUTO_GENERATED, null, null, systemUser);
+                    activity.setCreatedBy(SYSTEM_USER_ID);
+                    activity.setUpdatedBy(SYSTEM_USER_ID);
+                    taskActivityRepository.save(activity);
+
                     tasksCreated++;
                 }
             }

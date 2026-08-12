@@ -30,6 +30,11 @@ public class GlobalExceptionHandler {
         return status(HttpStatus.CONFLICT, ex.getMessage());
     }
 
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<ApiResponse<Void>> handleConflict(ConflictException ex) {
+        return status(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
     @ExceptionHandler(UserNotFoundException.class)
     public ResponseEntity<ApiResponse<Void>> handleUserNotFound(UserNotFoundException ex) {
         return status(HttpStatus.NOT_FOUND, ex.getMessage());

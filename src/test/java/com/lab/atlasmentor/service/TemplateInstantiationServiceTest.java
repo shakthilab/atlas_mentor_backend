@@ -8,6 +8,7 @@ import com.lab.atlasmentor.model.TemplateDay;
 import com.lab.atlasmentor.model.TemplateTask;
 import com.lab.atlasmentor.model.User;
 import com.lab.atlasmentor.repository.DayWorkspaceRepository;
+import com.lab.atlasmentor.repository.TaskActivityRepository;
 import com.lab.atlasmentor.repository.TaskRepository;
 import com.lab.atlasmentor.repository.TemplateDayRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,6 +40,10 @@ class TemplateInstantiationServiceTest {
     private DayWorkspaceRepository dayWorkspaceRepository;
     @Mock
     private TaskRepository taskRepository;
+    @Mock
+    private TaskActivityRepository taskActivityRepository;
+    @Mock
+    private TaskDisplayIdService taskDisplayIdService;
 
     @InjectMocks
     private TemplateInstantiationService service;

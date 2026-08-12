@@ -76,15 +76,21 @@ public class OverdueTaskSchedulerService {
     @Transactional
     public void markTaskAsOverdue(Task task) {
         log.debug("Marking task {} as overdue", task.getId());
-        
-        // Update task status
-        task.setStatus(TaskStatus.PENDING);
+
+        // Was previously setting TaskStatus.PENDING here - a task "marked overdue" that's
+        // actually left PENDING never reads as OVERDUE anywhere (task lists, the Day
+        // Approval Workflow, the Activity feed's "changed status from TODO to OVERDUE"
+        // message). Capture the real old status so the activity log entry is accurate.
+        TaskStatus oldStatus = task.getStatus();
+        task.setStatus(TaskStatus.OVERDUE);
         task.setUpdatedBy(SYSTEM_USER_ID);
         taskRepository.save(task);
-        
-        // Create task activity
-        createTaskActivity(task, TaskAction.STATUS_CHANGED, SYSTEM_USER_ID);
-        
+
+        // TaskAction.MARKED_OVERDUE (not STATUS_CHANGED) so the Activity tab can render the
+        // "...automatically changed due to passed due date" system-generated wording distinct
+        // from a person manually changing status - see TaskService#formatActivityMessage.
+        createTaskActivity(task, TaskAction.MARKED_OVERDUE, oldStatus.name(), TaskStatus.OVERDUE.name(), SYSTEM_USER_ID);
+
         log.info("Task {} marked as overdue", task.getId());
     }
     
@@ -187,18 +193,20 @@ public class OverdueTaskSchedulerService {
     /**
      * Create task activity record
      */
-    private void createTaskActivity(Task task, TaskAction action, Long userId) {
+    private void createTaskActivity(Task task, TaskAction action, String oldValue, String newValue, Long userId) {
         TaskActivity activity = new TaskActivity();
         activity.setTask(task);
         activity.setAction(action);
+        activity.setOldValue(oldValue);
+        activity.setNewValue(newValue);
         activity.setCreatedBy(userId);
         activity.setUpdatedBy(userId);
-        
+
         // Set doneBy to system user for automated actions
         User systemUser = userRepository.findById(SYSTEM_USER_ID)
                 .orElseThrow(() -> new RuntimeException("System user not found"));
         activity.setDoneBy(systemUser);
-        
+
         taskActivityRepository.save(activity);
     }
     

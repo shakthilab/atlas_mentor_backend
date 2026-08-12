@@ -30,6 +30,19 @@ public class TaskComment extends BaseEntity {
     @JsonIgnoreProperties({"comments", "taskComments"})
     private User commentedBy;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_comment_id")
+    @JsonIgnoreProperties({"replies", "task"})
+    private TaskComment parentComment;
+
+    @OneToMany(mappedBy = "parentComment", fetch = FetchType.LAZY)
+    @JsonIgnoreProperties({"parentComment", "task"})
+    private java.util.List<TaskComment> replies;
+
+    @OneToMany(mappedBy = "comment", fetch = FetchType.LAZY)
+    @JsonIgnoreProperties({"comment", "task"})
+    private java.util.List<TaskAttachment> attachments;
+
     public TaskComment() {}
 
     public TaskComment(Task task, String comment, User commentedBy) {

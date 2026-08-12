@@ -38,9 +38,6 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
     @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.priority = :priority")
     List<Task> findByPriority(@Param("priority") Priority priority);
 
-    @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.dueDate <= :date AND t.status != 'COMPLETED'")
-    List<Task> findOverdueTasks(@Param("date") LocalDate date);
-
     @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.dueDate = :date")
     List<Task> findByDueDate(@Param("date") LocalDate date);
 
@@ -198,10 +195,13 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
             @Param("startDate") LocalDate startDate,
             @Param("endDate") LocalDate endDate);
     
-    @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.dueDate < :currentDate AND t.status != 'OVERDUE' AND t.status != 'COMPLETED'")
+    // REFLECT excluded alongside the terminal statuses: a task sent back for rework is
+    // already in a review-managed state (see DayApprovalService#sendBackTasks) - the cron
+    // shouldn't overwrite that with OVERDUE just because its original due date has passed.
+    @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.dueDate < :currentDate AND t.status NOT IN ('OVERDUE', 'COMPLETED', 'DONE', 'REFLECT')")
     List<Task> findTasksToMarkOverdue(@Param("currentDate") LocalDate currentDate);
-    
-    @Query("SELECT COUNT(t) FROM Task t WHERE t.isDeleted = false AND t.dueDate < :currentDate AND t.status != 'OVERDUE'")
+
+    @Query("SELECT COUNT(t) FROM Task t WHERE t.isDeleted = false AND t.dueDate < :currentDate AND t.status NOT IN ('OVERDUE', 'COMPLETED', 'DONE', 'REFLECT')")
     Long countTasksToMarkOverdue(@Param("currentDate") LocalDate currentDate);
     
     @Query("SELECT COUNT(t) FROM Task t WHERE t.isDeleted = false AND t.dueDate < :currentDate AND t.status != 'OVERDUE'")
@@ -308,4 +308,46 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
 
     @Query(value = "SELECT COUNT(*) FROM tasks WHERE is_deleted = false AND branch_id = :branchId AND status = 'OVERDUE'", nativeQuery = true)
     Long countOverdueTasksForBranch(@Param("branchId") Long branchId);
+
+    // ==================== EMPLOYEE TREE / DAY WORKSPACE QUERIES ====================
+
+    /** All (non-deleted) tasks belonging to one day workspace - the Day Detail task table (Part B). */
+    @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.dayWorkspace.id = :dayWorkspaceId ORDER BY t.createdAt ASC")
+    List<Task> findByDayWorkspaceId(@Param("dayWorkspaceId") Long dayWorkspaceId);
+
+    /** All (non-deleted) day-workspace-driven tasks for one employee across a date range - used to
+     *  compute daily/weekly/monthly completion % (Part B) without relying on the not-reliably-maintained
+     *  DayWorkspace.dailyCompletionPct column. */
+    @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.dayWorkspace.employee.id = :employeeId " +
+           "AND t.dayWorkspace.workDate BETWEEN :start AND :end")
+    List<Task> findByDayWorkspaceEmployeeIdAndWorkDateBetween(
+            @Param("employeeId") Long employeeId, @Param("start") LocalDate start, @Param("end") LocalDate end);
+
+    /**
+     * Overall day-workspace task completion per employee (Employee Tree completion % badge,
+     * Part A1) - total vs. done count across every day-workspace-driven task they've ever had.
+     * DONE/COMPLETED are both counted as "done" since template-generated tasks use DONE while
+     * older manual-flow tasks still use COMPLETED (see TaskService#validateStatusTransition).
+     */
+    @Query("SELECT t.assignedTo.id, COUNT(t), SUM(CASE WHEN t.status IN ('DONE','COMPLETED') THEN 1 ELSE 0 END) " +
+           "FROM Task t WHERE t.isDeleted = false AND t.dayWorkspace IS NOT NULL AND t.assignedTo.id IN :employeeIds " +
+           "GROUP BY t.assignedTo.id")
+    List<Object[]> countDayWorkspaceTaskCompletionByAssignee(@Param("employeeIds") List<Long> employeeIds);
+
+    // ==================== SEND-BACK / REWORK TRACKING (V12) ====================
+
+    /** Needs Attention (Part 2): every REFLECT task for this employee, across ALL dates - never filtered by "today". */
+    @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.assignedTo.id = :employeeId AND t.status = 'REFLECT' " +
+           "ORDER BY t.reflectFlaggedAt DESC")
+    List<Task> findNeedsAttentionByAssignee(@Param("employeeId") Long employeeId);
+
+    /** Resubmitted tasks awaiting a given stage's re-review, scoped to one branch (Branch Partner/Manager). */
+    @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.reflectState = 'RESUBMITTED' " +
+           "AND t.reflectStage = :stage AND t.branch.id = :branchId ORDER BY t.reflectResubmittedAt ASC")
+    List<Task> findResubmittedByStageAndBranch(@Param("stage") String stage, @Param("branchId") Long branchId);
+
+    /** Resubmitted tasks awaiting a given stage's re-review, across all branches (Admin). */
+    @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.reflectState = 'RESUBMITTED' AND t.reflectStage = :stage " +
+           "ORDER BY t.reflectResubmittedAt ASC")
+    List<Task> findResubmittedByStage(@Param("stage") String stage);
 }

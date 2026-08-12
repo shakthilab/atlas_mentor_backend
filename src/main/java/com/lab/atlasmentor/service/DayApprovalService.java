@@ -1,0 +1,500 @@
+package com.lab.atlasmentor.service;
+
+import com.lab.atlasmentor.dto.DayApprovalActionRequest;
+import com.lab.atlasmentor.dto.DayApprovalResponse;
+import com.lab.atlasmentor.dto.PendingApprovalResponse;
+import com.lab.atlasmentor.dto.ResubmittedTaskResponse;
+import com.lab.atlasmentor.enums.TaskAction;
+import com.lab.atlasmentor.enums.TaskStatus;
+import com.lab.atlasmentor.exception.BusinessException;
+import com.lab.atlasmentor.exception.UnauthorizedAccessException;
+import com.lab.atlasmentor.model.*;
+import com.lab.atlasmentor.repository.*;
+import com.lab.atlasmentor.security.CustomUserDetails;
+import com.lab.atlasmentor.security.SecurityUtils;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
+
+/**
+ * Part E - the three-stage Day Approval Workflow: Branch Partner → Branch Manager → Admin,
+ * fixed order, enforced by day_workspaces.approval_stage (see V7/V8 migrations, which already
+ * define the pipeline this class implements):
+ *
+ * <pre>
+ * EMPLOYEE --(Submit Day, DayWorkspaceService)--&gt; COMPLETED
+ *   COMPLETED        --(Branch Partner APPROVE)--&gt; PARTNER_REVIEW
+ *   PARTNER_REVIEW    --(Branch Manager APPROVE)--&gt; MANAGER_REVIEW
+ *   MANAGER_REVIEW     --(Admin APPROVE)--&gt;         ADMIN_VERIFIED   (final / "Verified")
+ * </pre>
+ *
+ * Each of those three approve transitions is gated by exactly one role (stage ownership -
+ * see {@link #requiredRoleFor}); ADMIN may additionally act at any non-terminal stage as an
+ * override, consistent with the ADMIN-override pattern already used in TaskService.
+ *
+ * <p><b>Send-back / rework (V12)</b> is a deliberately separate concern from the day-level
+ * pipeline above. A day already sitting at ADMIN_VERIFIED from yesterday must still be
+ * reachable today when a reviewer spots a problem on one task - so SEND_BACK:
+ * <ul>
+ *   <li>is <b>not</b> gated by the day's current approval_stage - any of the three stages
+ *       (Partner/Manager/Admin) can act independently, whenever they're the one reviewing,
+ *       not only "whoever's turn is next" in the day's own pipeline;</li>
+ *   <li>only ever touches the specific {@code taskIds} listed - never the whole day, and
+ *       never {@code day_workspaces.approval_stage};</li>
+ *   <li>records which stage flagged each task directly on the {@link Task} row
+ *       ({@code reflect_stage}), so resubmission (see {@link TaskService#resubmitTask}) routes
+ *       back to that exact stage - tracked per task, not per day, so two tasks on the same day
+ *       flagged by two different stages resubmit independently and correctly.</li>
+ * </ul>
+ */
+@Service
+@RequiredArgsConstructor
+@Slf4j
+@Transactional
+public class DayApprovalService {
+
+    private static final String STAGE_EMPLOYEE = "EMPLOYEE";
+    private static final String STAGE_COMPLETED = "COMPLETED";
+    private static final String STAGE_PARTNER_REVIEW = "PARTNER_REVIEW";
+    private static final String STAGE_MANAGER_REVIEW = "MANAGER_REVIEW";
+    private static final String STAGE_ADMIN_VERIFIED = "ADMIN_VERIFIED";
+
+    private static final String ACTION_APPROVE = "APPROVE";
+    private static final String ACTION_SEND_BACK = "SEND_BACK";
+
+    private static final String REFLECT_FLAGGED = "FLAGGED";
+    private static final String REFLECT_RESUBMITTED = "RESUBMITTED";
+
+    /** The only roles with a formal stage in this fixed Branch Partner → Branch Manager → Admin workflow. */
+    private static final List<String> REVIEWER_ROLES = List.of("ADMIN", "MANAGER", "BRANCH_PARTNER");
+
+    private final DayWorkspaceRepository dayWorkspaceRepository;
+    private final DayApprovalRepository dayApprovalRepository;
+    private final TaskRepository taskRepository;
+    private final TaskCommentRepository taskCommentRepository;
+    private final TaskActivityRepository taskActivityRepository;
+    private final UserRepository userRepository;
+
+    // ==================== E1: pending review queue (day-level, first-time review) ====================
+
+    @Transactional(readOnly = true)
+    public List<PendingApprovalResponse> getPendingApprovals(String requestedStage) {
+        var currentUser = SecurityUtils.getCurrentUser();
+        String role = currentUser.getRole();
+        String reviewStage = resolveReviewStage(role, requestedStage);
+        String targetApprovalStage = approvalStageAwaitingReviewStage(reviewStage);
+
+        List<DayWorkspace> pending;
+        if ("ADMIN".equalsIgnoreCase(role)) {
+            pending = dayWorkspaceRepository.findByApprovalStageOrderByWorkDateAsc(targetApprovalStage);
+        } else {
+            Long branchId = requireBranch(currentUser);
+            pending = dayWorkspaceRepository.findByApprovalStageAndBranchIdOrderByWorkDateAsc(targetApprovalStage, branchId);
+        }
+
+        return pending.stream().map(this::toPendingApprovalResponse).collect(Collectors.toList());
+    }
+
+    private PendingApprovalResponse toPendingApprovalResponse(DayWorkspace workspace) {
+        PendingApprovalResponse response = new PendingApprovalResponse();
+        response.setDayWorkspaceId(workspace.getId());
+        User employee = workspace.getEmployee();
+        response.setEmployeeId(employee != null ? employee.getId() : null);
+        response.setEmployeeName(employee != null ? employee.getFullName() : null);
+        Branch branch = workspace.getBranch();
+        response.setBranchId(branch != null ? branch.getId() : null);
+        response.setBranchName(branch != null ? branch.getName() : null);
+        response.setWorkDate(workspace.getWorkDate());
+        response.setDayNumber(workspace.getDayNumberInMonth());
+        response.setDailyCompletionPct(workspace.getDailyCompletionPct() != null
+                ? workspace.getDailyCompletionPct().intValue() : null);
+        response.setApprovalStage(workspace.getApprovalStage());
+        return response;
+    }
+
+    // ==================== Resubmitted-task review queue (per-task re-review, V12) ====================
+
+    /**
+     * Tasks the employee has already fixed and resubmitted (Part 5's "review item"),
+     * awaiting the specific stage that originally flagged them - independent of the day's
+     * own approval_stage, which never moved for these. Resolve via POST .../approve with
+     * that taskId (APPROVE closes the cycle, SEND_BACK re-flags it).
+     */
+    @Transactional(readOnly = true)
+    public List<ResubmittedTaskResponse> getResubmittedTasks(String requestedStage) {
+        var currentUser = SecurityUtils.getCurrentUser();
+        String role = currentUser.getRole();
+        String reviewStage = resolveReviewStage(role, requestedStage);
+
+        List<Task> tasks;
+        if ("ADMIN".equalsIgnoreCase(role)) {
+            tasks = taskRepository.findResubmittedByStage(reviewStage);
+        } else {
+            Long branchId = requireBranch(currentUser);
+            tasks = taskRepository.findResubmittedByStageAndBranch(reviewStage, branchId);
+        }
+
+        return tasks.stream().map(this::toResubmittedTaskResponse).collect(Collectors.toList());
+    }
+
+    private ResubmittedTaskResponse toResubmittedTaskResponse(Task task) {
+        ResubmittedTaskResponse response = new ResubmittedTaskResponse();
+        response.setTaskId(task.getId());
+        response.setDisplayId(task.getDisplayId());
+        response.setTitle(task.getTitle());
+        response.setPriority(task.getPriority());
+        response.setStatus(task.getStatus());
+        DayWorkspace workspace = task.getDayWorkspace();
+        if (workspace != null) {
+            response.setDayWorkspaceId(workspace.getId());
+            response.setWorkDate(workspace.getWorkDate());
+        }
+        User employee = task.getAssignedTo();
+        response.setEmployeeId(employee != null ? employee.getId() : null);
+        response.setEmployeeName(employee != null ? employee.getFullName() : null);
+        response.setOriginalComment(task.getReflectComment());
+        response.setFlaggedByName(task.getReflectFlaggedBy() != null ? task.getReflectFlaggedBy().getFullName() : null);
+        response.setFlaggedAt(task.getReflectFlaggedAt());
+        response.setResubmittedAt(task.getReflectResubmittedAt());
+        return response;
+    }
+
+    // ==================== E2: approve / send back ====================
+
+    public void actOnDay(Long dayWorkspaceId, DayApprovalActionRequest request) {
+        var currentUser = SecurityUtils.getCurrentUser();
+        String role = currentUser.getRole();
+        Long currentUserId = currentUser.getUserId();
+
+        DayWorkspace workspace = dayWorkspaceRepository.findById(dayWorkspaceId)
+                .orElseThrow(() -> new BusinessException("Day workspace not found: " + dayWorkspaceId));
+
+        if (!"ADMIN".equalsIgnoreCase(role)) {
+            Long userBranchId = currentUser.getBranchId();
+            Long workspaceBranchId = workspace.getBranch() != null ? workspace.getBranch().getId() : null;
+            if (userBranchId == null || !userBranchId.equals(workspaceBranchId)) {
+                throw new UnauthorizedAccessException("Cannot review a day outside your own branch");
+            }
+        }
+
+        User approver = userRepository.findById(currentUserId)
+                .orElseThrow(() -> new BusinessException("User not found: " + currentUserId));
+
+        boolean hasTaskIds = request.getTaskIds() != null && !request.getTaskIds().isEmpty();
+
+        if (ACTION_APPROVE.equals(request.getAction())) {
+            if (hasTaskIds) {
+                approveResubmittedTasks(workspace, request, approver, role);
+            } else {
+                approveDayLevel(workspace, request, approver, role);
+            }
+        } else if (ACTION_SEND_BACK.equals(request.getAction())) {
+            sendBackTasks(workspace, request, approver, role);
+        } else {
+            // Unreachable in practice - DayApprovalActionRequest.action is @Pattern-validated
+            // to APPROVE|SEND_BACK before this method is ever called - but fail loudly rather
+            // than silently falling through if that ever changes.
+            throw new BusinessException("Unknown approval action: " + request.getAction());
+        }
+    }
+
+    /** The normal day-level pipeline advance (Part E) - strict current-stage ownership, unchanged. */
+    private void approveDayLevel(DayWorkspace workspace, DayApprovalActionRequest request, User approver, String role) {
+        String currentStage = workspace.getApprovalStage();
+        String reviewStage = reviewStageOwningApprovalStage(currentStage);
+        if (reviewStage == null) {
+            throw new BusinessException("This day is not currently awaiting review (stage: " + currentStage + ")");
+        }
+        String requiredRole = requiredRoleFor(reviewStage);
+        if (!"ADMIN".equalsIgnoreCase(role) && !requiredRole.equalsIgnoreCase(role)) {
+            throw new UnauthorizedAccessException(role + " cannot act at the " + reviewStage + " stage (owned by " + requiredRole + ")");
+        }
+        String actingStageLabel = "ADMIN".equalsIgnoreCase(role) ? reviewStage : requiredRoleReviewStage(role);
+
+        // The review-stage label a reviewer owns IS the resulting approval_stage value once
+        // they approve (PARTNER_REVIEW/MANAGER_REVIEW/ADMIN_VERIFIED name "this stage's
+        // review is done", per the V7/V8 pipeline - see the class javadoc).
+        workspace.setApprovalStage(reviewStage);
+        workspace.setUpdatedBy(approver.getId());
+        dayWorkspaceRepository.save(workspace);
+
+        saveDayApproval(workspace, approver, actingStageLabel, ACTION_APPROVE, request.getComment());
+        log.info("Day {} approved at {} stage by user {} ({}) - advanced to {}",
+                workspace.getId(), actingStageLabel, approver.getId(), role, reviewStage);
+    }
+
+    /**
+     * Closes the reflect cycle on specific RESUBMITTED tasks (Part 5's "review item",
+     * resolved) - never touches day_workspaces.approval_stage, since the day's own pipeline
+     * position already advanced past this long ago.
+     */
+    private void approveResubmittedTasks(DayWorkspace workspace, DayApprovalActionRequest request, User approver, String role) {
+        List<Task> dayTasks = taskRepository.findByDayWorkspaceId(workspace.getId());
+        for (Long taskId : request.getTaskIds()) {
+            Task task = dayTasks.stream().filter(t -> t.getId().equals(taskId)).findFirst()
+                    .orElseThrow(() -> new BusinessException("Task " + taskId + " does not belong to this day"));
+
+            if (!REFLECT_RESUBMITTED.equals(task.getReflectState())) {
+                throw new BusinessException("Task " + taskId + " is not currently awaiting re-review (reflect state: "
+                        + task.getReflectState() + ")");
+            }
+            if (!"ADMIN".equalsIgnoreCase(role) && !requiredRoleReviewStage(role).equals(task.getReflectStage())) {
+                throw new UnauthorizedAccessException(role + " cannot re-review a task flagged by " + task.getReflectStage());
+            }
+
+            task.setReflectState(null);
+            task.setReflectStage(null);
+            task.setReflectComment(null);
+            task.setReflectFlaggedAt(null);
+            task.setReflectFlaggedBy(null);
+            task.setReflectResubmittedAt(null);
+            task.setUpdatedBy(approver.getId());
+            taskRepository.save(task);
+
+            // No dedicated TaskAction for "re-review resolved" - reusing STATUS_CHANGED with
+            // null old/new (TaskService#formatActivityMessage renders this as a plain
+            // comment-driven line, not a misleading "changed status from null to null").
+            // Deliberately not introducing a brand-new TaskAction constant here: TaskStatus
+            // turned out to be guarded by a DB-level CHECK constraint not mirrored in this
+            // migrations folder (see V11) - a same-shaped surprise on task_activity.action
+            // is exactly the kind of risk not worth taking for one cosmetic activity line.
+            String note = "resolved the re-review" + (request.getComment() != null && !request.getComment().isBlank()
+                    ? " — " + request.getComment() : "");
+            TaskActivity activity = new TaskActivity(task, TaskAction.STATUS_CHANGED, null, null, approver, note);
+            activity.setCreatedBy(approver.getId());
+            taskActivityRepository.save(activity);
+        }
+        log.info("Day {} - {} resubmitted task(s) re-review resolved by {} ({})",
+                workspace.getId(), request.getTaskIds().size(), approver.getId(), role);
+    }
+
+    /**
+     * Sends specific task(s) back to REFLECT. Deliberately independent of the day's own
+     * approval_stage (Part 1) and never mutates it (Part 3) - only the listed tasks change.
+     */
+    private void sendBackTasks(DayWorkspace workspace, DayApprovalActionRequest request, User approver, String role) {
+        if (STAGE_EMPLOYEE.equals(workspace.getApprovalStage())) {
+            throw new BusinessException("Cannot send back a day that has not been submitted yet");
+        }
+        List<Long> taskIds = request.getTaskIds();
+        if (taskIds == null || taskIds.isEmpty()) {
+            // Explicit decision, not a silent default: sending back a day now only ever
+            // reopens the task(s) named - there is no "send back the whole day" mode any
+            // more (see the class javadoc and the report back to the team on this choice).
+            throw new BusinessException(
+                    "SEND_BACK requires at least one taskId - specify which task(s) need rework, not the whole day");
+        }
+
+        String actingStage = "ADMIN".equalsIgnoreCase(role) ? STAGE_ADMIN_VERIFIED : requiredRoleReviewStage(role);
+        if (actingStage == null) {
+            throw new UnauthorizedAccessException(role + " is not a review stage in this workflow");
+        }
+
+        List<Task> dayTasks = taskRepository.findByDayWorkspaceId(workspace.getId());
+        for (Long taskId : taskIds) {
+            Task task = dayTasks.stream().filter(t -> t.getId().equals(taskId)).findFirst()
+                    .orElseThrow(() -> new BusinessException("Task " + taskId + " does not belong to this day"));
+
+            TaskStatus oldStatus = task.getStatus();
+            task.setReflectPreviousStatus(oldStatus.name());
+            task.setStatus(TaskStatus.REFLECT);
+            task.setReflectState(REFLECT_FLAGGED);
+            task.setReflectStage(actingStage);
+            task.setReflectComment(request.getComment());
+            task.setReflectFlaggedAt(LocalDateTime.now());
+            task.setReflectFlaggedBy(approver);
+            task.setReflectResubmittedAt(null);
+            task.setUpdatedBy(approver.getId());
+            taskRepository.save(task);
+
+            TaskActivity activity = new TaskActivity(task, TaskAction.STATUS_CHANGED,
+                    oldStatus.name(), TaskStatus.REFLECT.name(), approver, request.getComment());
+            activity.setCreatedBy(approver.getId());
+            taskActivityRepository.save(activity);
+
+            // Also surfaced as a real comment on the task (not just the activity line), so
+            // it shows up where an employee naturally looks - the Comments tab (Part C2).
+            if (request.getComment() != null && !request.getComment().isBlank()) {
+                TaskComment comment = new TaskComment(task, request.getComment(), approver);
+                comment.setCreatedBy(approver.getId());
+                comment.setUpdatedBy(approver.getId());
+                taskCommentRepository.save(comment);
+
+                TaskActivity commentActivity = new TaskActivity(task, TaskAction.COMMENT_ADDED, null, null, approver);
+                commentActivity.setCreatedBy(approver.getId());
+                taskActivityRepository.save(commentActivity);
+            }
+        }
+
+        // Day-level audit trail entry either way (Part 3) - day_workspaces.approval_stage is
+        // untouched; day_approvals is purely the "who sent what back, when" record here.
+        saveDayApproval(workspace, approver, actingStage, ACTION_SEND_BACK, request.getComment());
+        log.info("Day {} - {} task(s) {} sent back by {} ({}) at {} stage",
+                workspace.getId(), taskIds.size(), taskIds, approver.getId(), role, actingStage);
+    }
+
+    private void saveDayApproval(DayWorkspace workspace, User approver, String stage, String action, String comment) {
+        DayApproval approval = new DayApproval();
+        approval.setDayWorkspace(workspace);
+        approval.setApprover(approver);
+        approval.setStage(stage);
+        approval.setAction(action);
+        approval.setComment(comment);
+        approval.setActedAt(LocalDateTime.now());
+        approval.setCreatedBy(approver.getId());
+        approval.setUpdatedBy(approver.getId());
+        dayApprovalRepository.save(approval);
+    }
+
+    // ==================== E3: approval history ====================
+
+    @Transactional(readOnly = true)
+    public List<DayApprovalResponse> getApprovalHistory(Long dayWorkspaceId) {
+        DayWorkspace workspace = dayWorkspaceRepository.findById(dayWorkspaceId)
+                .orElseThrow(() -> new BusinessException("Day workspace not found: " + dayWorkspaceId));
+
+        var currentUser = SecurityUtils.getCurrentUser();
+        boolean isReviewer = REVIEWER_ROLES.contains(currentUser.getRole() == null ? "" : currentUser.getRole().toUpperCase());
+        boolean isOwner = workspace.getEmployee() != null && currentUser.getUserId().equals(workspace.getEmployee().getId());
+        if (!isReviewer && !isOwner) {
+            throw new UnauthorizedAccessException("Cannot view approval history for another employee's day");
+        }
+
+        return dayApprovalRepository.findByDayWorkspaceIdOrderByActedAtAsc(dayWorkspaceId).stream()
+                .map(this::toDayApprovalResponse)
+                .collect(Collectors.toList());
+    }
+
+    private DayApprovalResponse toDayApprovalResponse(DayApproval approval) {
+        DayApprovalResponse response = new DayApprovalResponse();
+        response.setId(approval.getId());
+        response.setStage(approval.getStage());
+        response.setAction(approval.getAction());
+        response.setComment(approval.getComment());
+        response.setApproverId(approval.getApprover() != null ? approval.getApprover().getId() : null);
+        response.setApproverName(approval.getApprover() != null ? approval.getApprover().getFullName() : null);
+        response.setActedAt(approval.getActedAt());
+        return response;
+    }
+
+    /**
+     * Friendly label for a day's current approval_stage - one step in the pipeline documented
+     * on this class (EMPLOYEE -> COMPLETED -> PARTNER_REVIEW -> MANAGER_REVIEW ->
+     * ADMIN_VERIFIED). Used by EmployeeTreeService's admin day-detail panel to show progress
+     * as "Submitted" / "Branch Partner Review" / "Manager Review" / "Admin Reviewed - Complete"
+     * instead of the raw DB constant.
+     */
+    public static String stageLabel(String approvalStage) {
+        if (approvalStage == null) {
+            return "Not Submitted";
+        }
+        return switch (approvalStage) {
+            case STAGE_EMPLOYEE -> "Not Submitted";
+            case STAGE_COMPLETED -> "Submitted";
+            case STAGE_PARTNER_REVIEW -> "Branch Partner Review";
+            case STAGE_MANAGER_REVIEW -> "Manager Review";
+            case STAGE_ADMIN_VERIFIED -> "Admin Reviewed - Complete";
+            default -> approvalStage;
+        };
+    }
+
+    /** 1-based position of {@link #stageLabel} in the pipeline (0 = not yet submitted, 4 = fully verified). */
+    public static int stageNumber(String approvalStage) {
+        if (approvalStage == null) {
+            return 0;
+        }
+        return switch (approvalStage) {
+            case STAGE_EMPLOYEE -> 0;
+            case STAGE_COMPLETED -> 1;
+            case STAGE_PARTNER_REVIEW -> 2;
+            case STAGE_MANAGER_REVIEW -> 3;
+            case STAGE_ADMIN_VERIFIED -> 4;
+            default -> 0;
+        };
+    }
+
+    // ==================== Stage <-> role mapping ====================
+    // day_workspaces.approval_stage pipeline (V7/V8): EMPLOYEE -> COMPLETED -> PARTNER_REVIEW
+    // -> MANAGER_REVIEW -> ADMIN_VERIFIED. Each of the three review stages below is named
+    // after the role that OWNS it - "PARTNER_REVIEW" means "this is the Branch Partner's
+    // review", not "already partner-reviewed".
+
+    private Long requireBranch(CustomUserDetails currentUser) {
+        Long branchId = currentUser.getBranchId();
+        if (branchId == null) {
+            throw new BusinessException("User must be assigned to a branch to view the review queue");
+        }
+        return branchId;
+    }
+
+    /** Which review-stage label a role owns; used both for E1's stage param and E2's ownership check. */
+    private String resolveReviewStage(String role, String requestedStage) {
+        String ownStage = requiredRoleReviewStage(role);
+        if (requestedStage == null || requestedStage.isBlank()) {
+            return ownStage != null ? ownStage : STAGE_ADMIN_VERIFIED;
+        }
+        String normalized = requestedStage.trim().toUpperCase();
+        if (!"ADMIN".equalsIgnoreCase(role) && !normalized.equals(ownStage)) {
+            throw new UnauthorizedAccessException(role + " may only view the " + ownStage + " queue");
+        }
+        return normalized;
+    }
+
+    /** The review-stage label a role owns, or null if that role owns none of the three. */
+    private String requiredRoleReviewStage(String role) {
+        return switch (role == null ? "" : role.toUpperCase()) {
+            case "BRANCH_PARTNER" -> STAGE_PARTNER_REVIEW;
+            case "MANAGER" -> STAGE_MANAGER_REVIEW;
+            case "ADMIN" -> STAGE_ADMIN_VERIFIED;
+            default -> null;
+        };
+    }
+
+    /** The role required to act at a given review-stage label. */
+    private static String requiredRoleFor(String reviewStage) {
+        return switch (reviewStage) {
+            case STAGE_PARTNER_REVIEW -> "BRANCH_PARTNER";
+            case STAGE_MANAGER_REVIEW -> "MANAGER";
+            case STAGE_ADMIN_VERIFIED -> "ADMIN";
+            default -> throw new BusinessException("Unknown review stage: " + reviewStage);
+        };
+    }
+
+    /**
+     * Role that owns the next approve/send-back action for a day at this {@code approvalStage},
+     * or null if nothing is currently pending (not yet submitted - EMPLOYEE - or already fully
+     * verified - ADMIN_VERIFIED). Mirrors the exact gating {@link #approveDayLevel} enforces,
+     * so a UI can disable review buttons for anyone who isn't this role (ADMIN always may act
+     * too, same override as everywhere else in this class) instead of relying on the 403 to
+     * find out. See EmployeeTreeService#getDayDetail, which surfaces this on DayDetailResponse.
+     */
+    public static String nextActionRole(String approvalStage) {
+        String reviewStage = reviewStageOwningApprovalStage(approvalStage);
+        return reviewStage == null ? null : requiredRoleFor(reviewStage);
+    }
+
+    /** Which day_workspaces.approval_stage value a review-stage's first-time-review queue is filtered on. */
+    private String approvalStageAwaitingReviewStage(String reviewStage) {
+        return switch (reviewStage) {
+            case STAGE_PARTNER_REVIEW -> STAGE_COMPLETED;
+            case STAGE_MANAGER_REVIEW -> STAGE_PARTNER_REVIEW;
+            case STAGE_ADMIN_VERIFIED -> STAGE_MANAGER_REVIEW;
+            default -> throw new BusinessException("Unknown review stage: " + reviewStage);
+        };
+    }
+
+    /** Inverse of {@link #approvalStageAwaitingReviewStage}: which review-stage owns a given current approval_stage. */
+    private static String reviewStageOwningApprovalStage(String currentApprovalStage) {
+        return switch (currentApprovalStage) {
+            case STAGE_COMPLETED -> STAGE_PARTNER_REVIEW;
+            case STAGE_PARTNER_REVIEW -> STAGE_MANAGER_REVIEW;
+            case STAGE_MANAGER_REVIEW -> STAGE_ADMIN_VERIFIED;
+            default -> null; // EMPLOYEE (not submitted yet) or ADMIN_VERIFIED (already final)
+        };
+    }
+}

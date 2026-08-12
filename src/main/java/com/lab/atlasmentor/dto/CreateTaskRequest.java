@@ -7,6 +7,7 @@ import jakarta.validation.constraints.Size;
 import jakarta.validation.constraints.Future;
 import lombok.Data;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Data
 public class CreateTaskRequest {
@@ -22,6 +23,9 @@ public class CreateTaskRequest {
     @NotNull(message = "Due date is required")
     @Future(message = "Due date must be in future")
     private LocalDate dueDate;
+
+    /** Optional deadline timestamp, independent of dueDate - not required. */
+    private LocalDateTime dueTime;
 
     @NotNull(message = "Assigned to user ID is required")
     private Long assignedToId;

@@ -33,6 +33,10 @@ public class RefreshToken {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
+    /** When the original login that started this refresh-token chain happened; carried forward across rotations. */
+    @Column(name = "session_started_at")
+    private LocalDateTime sessionStartedAt;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

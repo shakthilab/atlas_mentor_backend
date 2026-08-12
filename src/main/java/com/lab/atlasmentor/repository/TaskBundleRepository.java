@@ -41,6 +41,12 @@ public interface TaskBundleRepository extends JpaRepository<TaskBundle, Long> {
      * Find all task bundles by status
      */
     List<TaskBundle> findByStatus(BundleStatus status);
+
+    /**
+     * Find non-deleted task bundles by status. Used by the nightly template instantiation
+     * job to fetch only ACTIVE role templates and skip DRAFT/INACTIVE ones entirely.
+     */
+    List<TaskBundle> findByStatusAndIsDeletedFalse(BundleStatus status);
     
     /**
      * Find task bundle by ID with role and schedule eagerly loaded.
@@ -104,6 +110,18 @@ public interface TaskBundleRepository extends JpaRepository<TaskBundle, Long> {
                                     @Param("status") String status,
                                     @Param("scheduleType") String scheduleType,
                                     @Param("keyword") String keyword);
+
+    /**
+     * Find task templates (task bundles) with role, branch, and status filters
+     */
+    @Query("SELECT tb FROM TaskBundle tb WHERE tb.isDeleted = false " +
+           "AND (:roleId IS NULL OR tb.role.id = :roleId) " +
+           "AND (:branchId IS NULL OR tb.branch.id = :branchId OR tb.branch.id IS NULL) " +
+           "AND (:status IS NULL OR tb.status = :status) " +
+           "ORDER BY tb.createdAt DESC")
+    List<TaskBundle> findTemplatesWithFilters(@Param("roleId") Long roleId,
+                                              @Param("branchId") Long branchId,
+                                              @Param("status") BundleStatus status);
 
     /**
      * Count non-deleted bundles by status

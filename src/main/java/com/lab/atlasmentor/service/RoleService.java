@@ -24,8 +24,32 @@ public class RoleService {
         return roleRepository.findByName(roleName)
                 .orElseGet(() -> {
                     Role newRole = new Role(roleName);
+                    newRole.setDisplayName(toDisplayName(roleName));
                     return roleRepository.save(newRole);
                 });
+    }
+
+    /**
+     * Derives a human-readable display name from an underscore-separated role
+     * code, e.g. "SENIOR_COUNSELLOR" -> "Senior Counsellor".
+     */
+    private String toDisplayName(String roleName) {
+        if (roleName == null || roleName.isBlank()) {
+            return roleName;
+        }
+        String[] words = roleName.split("_");
+        StringBuilder displayName = new StringBuilder();
+        for (String word : words) {
+            if (word.isEmpty()) {
+                continue;
+            }
+            if (displayName.length() > 0) {
+                displayName.append(' ');
+            }
+            displayName.append(word.substring(0, 1).toUpperCase())
+                    .append(word.substring(1).toLowerCase());
+        }
+        return displayName.toString();
     }
 
     public Role findRole(String roleName) {

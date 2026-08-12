@@ -13,5 +13,10 @@ public enum BundleStatus {
     /**
      * Bundle is inactive and will not generate tasks
      */
-    INACTIVE
+    INACTIVE,
+
+    /**
+     * Template/Bundle is a draft and not yet published
+     */
+    DRAFT
 }

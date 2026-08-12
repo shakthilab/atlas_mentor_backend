@@ -362,6 +362,7 @@ public class TaskBundleService {
             roleResponse.setId(taskBundle.getRole().getId());
             roleResponse.setName(taskBundle.getRole().getName());
             roleResponse.setDescription(taskBundle.getRole().getDescription());
+            roleResponse.setDisplayName(taskBundle.getRole().getDisplayName());
             response.setRole(roleResponse);
         }
 
@@ -513,6 +514,7 @@ public class TaskBundleService {
             roleResponse.setId(taskBundle.getRole().getId());
             roleResponse.setName(taskBundle.getRole().getName());
             roleResponse.setDescription(taskBundle.getRole().getDescription());
+            roleResponse.setDisplayName(taskBundle.getRole().getDisplayName());
             response.setRole(roleResponse);
         }
         

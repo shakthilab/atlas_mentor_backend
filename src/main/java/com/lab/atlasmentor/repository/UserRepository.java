@@ -207,4 +207,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("SELECT u FROM User u LEFT JOIN FETCH u.reportingManager WHERE u.id = :userId")
     java.util.Optional<User> findByIdWithManager(@Param("userId") Long userId);
 
+    /** Active employees assigned to a branch, for the Employee Tree (Part A1) - excludes non-employee roles. */
+    @Query("SELECT u FROM User u WHERE u.branch IS NOT NULL AND u.role.name NOT IN :excludedRoles AND u.status = 'ACTIVE' " +
+           "ORDER BY u.branch.id ASC, u.role.name ASC, u.firstName ASC")
+    List<User> findActiveEmployeesForTree(@Param("excludedRoles") List<String> excludedRoles);
+
 }

@@ -37,6 +37,9 @@ public class Task extends BaseEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "display_id", length = 20)
+    private String displayId;
+
     @Column(name = "title", nullable = false, length = 200)
     private String title;
 
@@ -106,6 +109,11 @@ public class Task extends BaseEntity {
     private TaskList taskList;
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "day_workspace_id", nullable = true)
+    @JsonIgnoreProperties({"tasks"})
+    private DayWorkspace dayWorkspace;
+
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "parent_task_id", nullable = true)
     @JsonIgnoreProperties({"subtasks", "parentTask"})
     private Task parentTask;
@@ -117,11 +125,46 @@ public class Task extends BaseEntity {
     @Column(name = "start_date")
     private LocalDate startDate;
 
-    @Column(name = "estimated_minutes")
-    private Integer estimatedMinutes;
+    /**
+     * Which {@link TemplateTask} this task was instantiated from, when it came from a
+     * Role Template day (null for manual/non-template tasks). Backs
+     * uk_tasks_day_workspace_source_template_task (V10 migration): the DB-level guard
+     * that keeps two racing instantiation triggers (cron, Publish, startup catch-up,
+     * periodic safety-net) from ever creating the same template task twice for the same
+     * employee's day.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "source_template_task_id", nullable = true)
+    @JsonIgnoreProperties({"templateDay"})
+    private TemplateTask sourceTemplateTask;
 
-    @Column(name = "actual_minutes")
-    private Integer actualMinutes;
+    // ---- Send-back / rework tracking (V12) - see DayApprovalService ----
+
+    /** Which review stage (PARTNER_REVIEW/MANAGER_REVIEW/ADMIN_VERIFIED) owns this task's current reflect cycle, if any. */
+    @Column(name = "reflect_stage", length = 20)
+    private String reflectStage;
+
+    /** FLAGGED (in REFLECT, employee must fix) or RESUBMITTED (fixed, awaiting reflectStage's re-review). Null outside a reflect cycle. */
+    @Column(name = "reflect_state", length = 20)
+    private String reflectState;
+
+    @Column(name = "reflect_comment", columnDefinition = "TEXT")
+    private String reflectComment;
+
+    @Column(name = "reflect_flagged_at")
+    private LocalDateTime reflectFlaggedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reflect_flagged_by")
+    @JsonIgnoreProperties({"reportingManager"})
+    private User reflectFlaggedBy;
+
+    @Column(name = "reflect_resubmitted_at")
+    private LocalDateTime reflectResubmittedAt;
+
+    /** The status to restore on resubmit - whatever this task's status was at the moment it got flagged. */
+    @Column(name = "reflect_previous_status", length = 20)
+    private String reflectPreviousStatus;
 
     public Task() {}
 

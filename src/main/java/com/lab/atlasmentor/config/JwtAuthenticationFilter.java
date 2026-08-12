@@ -75,9 +75,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 response.getWriter().write("{\"error\": \"Session timeout\", \"message\": \"Token has expired. Please login again.\"}");
                 return;
             } catch (io.jsonwebtoken.security.SignatureException e) {
-                // Invalid signature - return 403 error (forbidden)
+                // Invalid signature - return 401 error (unauthorized)
                 logger.error("JWT signature validation failed: " + e.getMessage());
-                response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                 response.setContentType("application/json");
                 response.getWriter().write("{\"error\": \"Invalid JWT signature\", \"message\": \"Token signature is invalid.\"}");
                 return;

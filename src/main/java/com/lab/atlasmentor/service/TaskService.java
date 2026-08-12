@@ -7,6 +7,7 @@ import com.lab.atlasmentor.enums.TaskStatus;
 import com.lab.atlasmentor.enums.Priority;
 import com.lab.atlasmentor.model.*;
 import com.lab.atlasmentor.repository.*;
+import com.lab.atlasmentor.security.AccessScopeService;
 import com.lab.atlasmentor.security.SecurityUtils;
 import com.lab.atlasmentor.exception.*;
 import lombok.RequiredArgsConstructor;
@@ -31,8 +32,11 @@ public class TaskService {
     private final TaskRepository taskRepository;
     private final TaskCommentRepository taskCommentRepository;
     private final TaskActivityRepository taskActivityRepository;
+    private final TaskAttachmentRepository taskAttachmentRepository;
     private final UserRepository userRepository;
     private final BranchRepository branchRepository;
+    private final TaskDisplayIdService taskDisplayIdService;
+    private final AccessScopeService accessScopeService;
 
     public TaskResponse createTask(CreateTaskRequest request, Long createdByUserId) {
         log.info("Creating new task with title: {}", request.getTitle());
@@ -78,6 +82,8 @@ public class TaskService {
 
         task.setReferenceType(request.getReferenceType());
         task.setReferenceId(request.getReferenceId());
+        task.setDueTime(request.getDueTime());
+        task.setDisplayId(taskDisplayIdService.nextDisplayId(assignedTo.getRole()));
         task.setCreatedBy(createdBy.getId());
         task.setUpdatedBy(createdBy.getId());
 
@@ -115,6 +121,23 @@ public class TaskService {
         String userRole = updatedBy.getRole() != null ? updatedBy.getRole().getName() : null;
         validateStatusTransition(oldStatus, newStatus, userRole);
 
+        // Leaving REFLECT via this generic path (normally only possible for ADMIN, which
+        // bypasses validateStatusTransition's REFLECT -> IN_PROGRESS-only rule above) must
+        // clear the reflect-cycle fields alongside it. Otherwise reflect_state/reflect_stage
+        // are left stamped from the old cycle - status reads DONE everywhere, but
+        // DayApprovalService#approveResubmittedTasks still sees reflect_state = FLAGGED and
+        // rejects it, with no way for a reviewer to tell why from the task's visible status.
+        // resubmitTask() is the only other path off REFLECT and manages these fields itself.
+        if (oldStatus == TaskStatus.REFLECT && newStatus != TaskStatus.REFLECT) {
+            task.setReflectState(null);
+            task.setReflectStage(null);
+            task.setReflectComment(null);
+            task.setReflectFlaggedAt(null);
+            task.setReflectFlaggedBy(null);
+            task.setReflectResubmittedAt(null);
+            task.setReflectPreviousStatus(null);
+        }
+
         task.setStatus(newStatus);
         task.setUpdatedBy(updatedBy.getId());
 
@@ -133,6 +156,69 @@ public class TaskService {
 
         log.info("Task {} status updated successfully", taskId);
         return convertToTaskResponse(savedTask);
+    }
+
+    /**
+     * Employee resubmits a REFLECT task once they've fixed it (Part 5 of the send-back /
+     * rework spec). Restores whatever status the task had immediately before it was
+     * flagged, and marks it RESUBMITTED against the same stage that flagged it (Part 4 -
+     * Option A: routes back to that one stage, not a restart of Partner -> Manager ->
+     * Admin) so it surfaces in that stage's re-review queue (GET /api/approvals/pending).
+     * Touches only this one task - no other task or the day's own approval_stage is
+     * affected.
+     */
+    public TaskResponse resubmitTask(Long taskId, Long currentUserId) {
+        log.info("Resubmitting task {} by user {}", taskId, currentUserId);
+
+        Task task = taskRepository.findActiveTaskById(taskId)
+                .orElseThrow(() -> new RuntimeException("Task not found"));
+
+        if (task.getStatus() != TaskStatus.REFLECT) {
+            throw new BusinessException("Task " + taskId + " is not currently in REFLECT status (current: " + task.getStatus() + ")");
+        }
+
+        User currentUser = userRepository.findById(currentUserId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        Long assignedToId = task.getAssignedTo() != null ? task.getAssignedTo().getId() : null;
+        boolean isAdmin = "ADMIN".equalsIgnoreCase(currentUser.getRole() != null ? currentUser.getRole().getName() : null);
+        if (!isAdmin && !currentUserId.equals(assignedToId)) {
+            throw new UnauthorizedAccessException("Only the assignee can resubmit their own task");
+        }
+
+        TaskStatus restoredStatus = parseTaskStatusOrDefault(task.getReflectPreviousStatus(), TaskStatus.IN_PROGRESS);
+        String owningStage = task.getReflectStage();
+
+        task.setStatus(restoredStatus);
+        task.setReflectState("RESUBMITTED");
+        task.setReflectResubmittedAt(LocalDateTime.now());
+        task.setReflectPreviousStatus(null);
+        // reflectStage / reflectComment / reflectFlaggedAt / reflectFlaggedBy are kept as-is
+        // so the reviewing stage still has the original send-back context when they re-check it.
+        task.setUpdatedBy(currentUserId);
+        Task savedTask = taskRepository.save(task);
+
+        String stageLabel = owningStage != null ? owningStage.replace('_', ' ') : "the reviewer";
+        TaskActivity activity = new TaskActivity(savedTask, TaskAction.STATUS_CHANGED,
+                TaskStatus.REFLECT.name(), restoredStatus.name(), currentUser,
+                "Resubmitted for " + stageLabel + " re-review");
+        activity.setCreatedBy(currentUserId);
+        taskActivityRepository.save(activity);
+
+        log.info("Task {} resubmitted - restored to {}, awaiting {} re-review", taskId, restoredStatus, owningStage);
+        return convertToTaskResponse(savedTask);
+    }
+
+    private TaskStatus parseTaskStatusOrDefault(String value, TaskStatus fallback) {
+        if (value == null) {
+            return fallback;
+        }
+        try {
+            return TaskStatus.valueOf(value);
+        } catch (IllegalArgumentException e) {
+            log.warn("Could not parse stored reflectPreviousStatus '{}', defaulting to {}", value, fallback);
+            return fallback;
+        }
     }
 
     public TaskResponse assignTask(Long taskId, Long assignedToUserId, Long assignedByUserId) {
@@ -186,6 +272,14 @@ public class TaskService {
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         TaskComment comment = new TaskComment(task, request.getComment(), commentedBy);
+        if (request.getParentCommentId() != null) {
+            TaskComment parent = taskCommentRepository.findById(request.getParentCommentId())
+                    .orElseThrow(() -> new RuntimeException("Parent comment not found"));
+            if (!parent.getTask().getId().equals(taskId)) {
+                throw new BusinessException("Parent comment does not belong to this task");
+            }
+            comment.setParentComment(parent);
+        }
         comment.setCreatedBy(commentedBy.getId());
         comment.setUpdatedBy(commentedBy.getId());
 
@@ -269,6 +363,39 @@ public class TaskService {
         taskActivityRepository.save(activity);
 
         log.info("Task {} due date updated successfully", taskId);
+        return convertToTaskResponse(savedTask);
+    }
+
+    public TaskResponse updateTaskDueTime(Long taskId, LocalDateTime newDueTime, Long updatedByUserId) {
+        log.info("Updating task {} due time to {}", taskId, newDueTime);
+
+        Task task = taskRepository.findActiveTaskById(taskId)
+                .orElseThrow(() -> new RuntimeException("Task not found"));
+
+        User updatedBy = userRepository.findById(updatedByUserId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // Validate update permissions based on roles
+        validateTaskUpdate(updatedBy, task);
+
+        LocalDateTime oldDueTime = task.getDueTime();
+        task.setDueTime(newDueTime);
+        task.setUpdatedBy(updatedBy.getId());
+
+        Task savedTask = taskRepository.save(task);
+
+        // Create activity log
+        TaskActivity activity = new TaskActivity(
+                savedTask,
+                TaskAction.DUE_TIME_UPDATED,
+                oldDueTime != null ? oldDueTime.toString() : null,
+                newDueTime != null ? newDueTime.toString() : null,
+                updatedBy
+        );
+        activity.setCreatedBy(updatedBy.getId());
+        taskActivityRepository.save(activity);
+
+        log.info("Task {} due time updated successfully", taskId);
         return convertToTaskResponse(savedTask);
     }
 
@@ -815,31 +942,110 @@ public class TaskService {
         log.info("Getting task details for ID: {}", taskId);
         Task task = taskRepository.findActiveTaskById(taskId)
                 .orElseThrow(() -> new RuntimeException("Task not found"));
+        accessScopeService.requireTaskVisible(task.getBranchId(), task.getAssignedTo() != null ? task.getAssignedTo().getId() : null);
         return convertToTaskResponse(task);
     }
 
     @Transactional(readOnly = true)
     public List<TaskCommentResponse> getTaskComments(Long taskId) {
         log.info("Getting comments for task {}", taskId);
-        
-        // Verify task exists
-        taskRepository.findActiveTaskById(taskId)
+
+        Task task = taskRepository.findActiveTaskById(taskId)
                 .orElseThrow(() -> new RuntimeException("Task not found"));
-        
+        accessScopeService.requireTaskVisible(task.getBranchId(), task.getAssignedTo() != null ? task.getAssignedTo().getId() : null);
+
         List<TaskComment> comments = taskCommentRepository.findByTaskIdOrderByCreatedAtDesc(taskId);
+        return buildCommentTree(comments);
+    }
+
+    /**
+     * Groups a flat list of comments (as stored - parent_comment_id already in schema)
+     * into root comments with their replies nested underneath, newest-first at every level.
+     */
+    private List<TaskCommentResponse> buildCommentTree(List<TaskComment> comments) {
+        java.util.Map<Long, List<TaskComment>> repliesByParentId = comments.stream()
+                .filter(c -> c.getParentComment() != null)
+                .collect(Collectors.groupingBy(c -> c.getParentComment().getId()));
+
         return comments.stream()
-                .map(this::convertToTaskCommentResponse)
+                .filter(c -> c.getParentComment() == null)
+                .map(root -> convertToTaskCommentResponseWithReplies(root, repliesByParentId))
                 .collect(Collectors.toList());
+    }
+
+    private TaskCommentResponse convertToTaskCommentResponseWithReplies(TaskComment comment,
+            java.util.Map<Long, List<TaskComment>> repliesByParentId) {
+        TaskCommentResponse response = convertToTaskCommentResponse(comment);
+        List<TaskComment> replies = repliesByParentId.getOrDefault(comment.getId(), List.of());
+        response.setReplies(replies.stream()
+                .map(reply -> convertToTaskCommentResponseWithReplies(reply, repliesByParentId))
+                .collect(Collectors.toList()));
+        return response;
+    }
+
+    @Transactional(readOnly = true)
+    public List<TaskAttachmentResponse> getTaskAttachments(Long taskId) {
+        log.info("Getting attachments for task {}", taskId);
+
+        Task task = taskRepository.findActiveTaskById(taskId)
+                .orElseThrow(() -> new RuntimeException("Task not found"));
+        accessScopeService.requireTaskVisible(task.getBranchId(), task.getAssignedTo() != null ? task.getAssignedTo().getId() : null);
+
+        return taskAttachmentRepository.findByTaskIdWithUploader(taskId).stream()
+                .map(this::convertToTaskAttachmentResponse)
+                .collect(Collectors.toList());
+    }
+
+    public TaskAttachmentResponse addAttachment(Long taskId, AddAttachmentRequest request, Long uploadedByUserId) {
+        log.info("Adding attachment to task {}", taskId);
+
+        Task task = taskRepository.findActiveTaskById(taskId)
+                .orElseThrow(() -> new RuntimeException("Task not found"));
+
+        User uploadedBy = userRepository.findById(uploadedByUserId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        TaskAttachment attachment = new TaskAttachment(task, request.getFileName(), request.getFileUrl(),
+                request.getFileSize(), uploadedBy);
+
+        if (request.getCommentId() != null) {
+            TaskComment comment = taskCommentRepository.findById(request.getCommentId())
+                    .orElseThrow(() -> new RuntimeException("Comment not found"));
+            if (!comment.getTask().getId().equals(taskId)) {
+                throw new BusinessException("Comment does not belong to this task");
+            }
+            attachment.setComment(comment);
+        }
+
+        attachment.setCreatedBy(uploadedBy.getId());
+        attachment.setUpdatedBy(uploadedBy.getId());
+
+        TaskAttachment savedAttachment = taskAttachmentRepository.save(attachment);
+
+        // Create activity log - so this shows up in the Activity tab automatically,
+        // same as comments/status changes (see TaskAction.ATTACHMENT_ADDED).
+        TaskActivity activity = new TaskActivity(
+                task,
+                TaskAction.ATTACHMENT_ADDED,
+                null,
+                request.getFileName(),
+                uploadedBy
+        );
+        activity.setCreatedBy(uploadedBy.getId());
+        taskActivityRepository.save(activity);
+
+        log.info("Attachment added successfully to task {}", taskId);
+        return convertToTaskAttachmentResponse(savedAttachment);
     }
 
     @Transactional(readOnly = true)
     public List<ActivityResponse> getTaskActivities(Long taskId) {
         log.info("Getting activities for task {}", taskId);
-        
-        // Verify Task exists
-        taskRepository.findActiveTaskById(taskId)
+
+        Task task = taskRepository.findActiveTaskById(taskId)
                 .orElseThrow(() -> new RuntimeException("Task not found"));
-        
+        accessScopeService.requireTaskVisible(task.getBranchId(), task.getAssignedTo() != null ? task.getAssignedTo().getId() : null);
+
         List<TaskActivity> activities = taskActivityRepository.findByTaskIdOrderByCreatedAtDesc(taskId);
         return activities.stream()
                 .map(this::convertToActivityResponse)
@@ -852,7 +1058,8 @@ public class TaskService {
         
         Task task = taskRepository.findActiveTaskById(taskId)
                 .orElseThrow(() -> new RuntimeException("Task not found"));
-        
+        accessScopeService.requireTaskVisible(task.getBranchId(), task.getAssignedTo() != null ? task.getAssignedTo().getId() : null);
+
         List<TaskComment> comments = taskCommentRepository.findByTaskIdOrderByCreatedAtDesc(taskId);
         List<TaskActivity> activities = taskActivityRepository.findByTaskIdOrderByCreatedAtDesc(taskId);
 
@@ -879,11 +1086,30 @@ public class TaskService {
         response.setAssigneeName(task.getAssignedTo() != null ? task.getAssignedTo().getFullName() : null);
         response.setAssignerName(task.getAssignedBy() != null ? task.getAssignedBy().getFullName() : null);
         response.setDueDate(task.getDueDate());
+        response.setDueTime(task.getDueTime());
+        response.setExecutionDate(task.getExecutionDate());
+        response.setSourceType(task.getSourceType());
         response.setBranchName(task.getBranch() != null ? task.getBranch().getName() : null);
         response.setReferenceType(task.getReferenceType());
         response.setReferenceId(task.getReferenceId());
         response.setCreatedAt(task.getCreatedAt());
         response.setUpdatedAt(task.getUpdatedAt());
+        response.setCreatedBy(task.getCreatedBy());
+        response.setCreatedByName(task.getCreatedByUser() != null ? task.getCreatedByUser().getFullName() : null);
+        response.setUpdatedBy(task.getUpdatedBy());
+        response.setAssignedToId(task.getAssignedTo() != null ? task.getAssignedTo().getId() : null);
+        response.setAssignedById(task.getAssignedBy() != null ? task.getAssignedBy().getId() : null);
+        response.setDisplayId(task.getDisplayId());
+        response.setIsDeleted(task.getIsDeleted());
+        response.setBranchId(task.getBranchId());
+        response.setTaskBundleId(task.getTaskBundleId());
+        response.setTaskBundleName(task.getTaskBundle() != null ? task.getTaskBundle().getName() : null);
+        response.setReflectStage(task.getReflectStage());
+        response.setReflectState(task.getReflectState());
+        response.setReflectComment(task.getReflectComment());
+        response.setReflectFlaggedByName(task.getReflectFlaggedBy() != null ? task.getReflectFlaggedBy().getFullName() : null);
+        response.setReflectFlaggedAt(task.getReflectFlaggedAt());
+        response.setReflectResubmittedAt(task.getReflectResubmittedAt());
         return response;
     }
 
@@ -891,9 +1117,39 @@ public class TaskService {
         TaskCommentResponse response = new TaskCommentResponse();
         response.setId(comment.getId());
         response.setComment(comment.getComment());
+        response.setCommentedById(comment.getCommentedBy() != null ? comment.getCommentedBy().getId() : null);
         response.setCommentedByName(comment.getCommentedBy() != null ? comment.getCommentedBy().getFullName() : null);
+        response.setParentCommentId(comment.getParentComment() != null ? comment.getParentComment().getId() : null);
         response.setCreatedAt(comment.getCreatedAt());
         return response;
+    }
+
+    private TaskAttachmentResponse convertToTaskAttachmentResponse(TaskAttachment attachment) {
+        TaskAttachmentResponse response = new TaskAttachmentResponse();
+        response.setId(attachment.getId());
+        response.setTaskId(attachment.getTask() != null ? attachment.getTask().getId() : null);
+        response.setFileName(attachment.getFileName());
+        response.setFileUrl(attachment.getFileUrl());
+        response.setFileSize(attachment.getFileSize());
+        response.setFileSizeFormatted(formatFileSize(attachment.getFileSize()));
+        response.setUploadedById(attachment.getUploadedBy() != null ? attachment.getUploadedBy().getId() : null);
+        response.setUploadedByName(attachment.getUploadedBy() != null ? attachment.getUploadedBy().getFullName() : null);
+        response.setUploadedAt(attachment.getUploadedAt());
+        response.setCreatedAt(attachment.getCreatedAt());
+        return response;
+    }
+
+    private String formatFileSize(Long bytes) {
+        if (bytes == null) {
+            return null;
+        }
+        if (bytes < 1024) {
+            return bytes + " B";
+        }
+        if (bytes < 1024 * 1024) {
+            return String.format("%.1f KB", bytes / 1024.0);
+        }
+        return String.format("%.1f MB", bytes / (1024.0 * 1024.0));
     }
 
     private ActivityResponse convertToActivityResponse(TaskActivity activity) {
@@ -902,6 +1158,7 @@ public class TaskService {
         response.setAction(activity.getAction());
         response.setOldValue(activity.getOldValue());
         response.setNewValue(activity.getNewValue());
+        response.setComment(activity.getComment());
         response.setDoneByName(activity.getDoneBy() != null ? activity.getDoneBy().getFullName() : null);
         response.setCreatedAt(activity.getCreatedAt());
         response.setMessage(formatActivityMessage(activity));
@@ -915,7 +1172,18 @@ public class TaskService {
             case CREATED:
                 return actorName + " created this task";
             case STATUS_CHANGED:
-                return actorName + " changed status from " + activity.getOldValue() + " to " + activity.getNewValue();
+                // oldValue/newValue both null marks a status-adjacent event that isn't itself
+                // a status transition (e.g. a reviewer resolving a re-review) - render just
+                // the comment rather than the misleading "changed status from null to null".
+                if (activity.getOldValue() == null && activity.getNewValue() == null) {
+                    return activity.getComment() != null && !activity.getComment().isBlank()
+                            ? actorName + " " + activity.getComment()
+                            : actorName + " updated this task";
+                }
+                String base = actorName + " changed status from " + activity.getOldValue() + " to " + activity.getNewValue();
+                return activity.getComment() != null && !activity.getComment().isBlank()
+                        ? base + " — " + activity.getComment()
+                        : base;
             case PRIORITY_CHANGED:
                 return actorName + " changed priority from " + activity.getOldValue() + " to " + activity.getNewValue();
             case ASSIGNED:
@@ -924,6 +1192,11 @@ public class TaskService {
                 return actorName + " added a comment";
             case DUE_DATE_UPDATED:
                 return actorName + " changed due date from " + (activity.getOldValue() != null ? activity.getOldValue() : "Not set") + " to " + activity.getNewValue();
+            case ATTACHMENT_ADDED:
+                return actorName + " attached " + activity.getNewValue();
+            case MARKED_OVERDUE:
+                return actorName + " changed status from " + activity.getOldValue() + " to " + activity.getNewValue()
+                        + " — automatically changed due to passed due date";
             default:
                 return actorName + " performed " + activity.getAction();
         }
@@ -1007,13 +1280,21 @@ public class TaskService {
                 break;
                 
             case "JUNIOR_COUNSELLOR":
-                // Junior Counsellor can update tasks WHERE branchId = user.branchId AND assignedTo = user.id
+            case "VIDEO_EDITOR":
+            case "GRAPHIC_DESIGNER":
+            case "WEB_DEV":
+            case "WEB_DEVELOPER":
+                // Individual-contributor employee roles (Employee Tree's non-counsellor
+                // branches, e.g. "Video Editors") can update tasks WHERE branchId =
+                // user.branchId AND assignedTo = user.id - same self-only rule as Junior
+                // Counsellor. Without this, Part D1 (employee changes their own task's
+                // status) throws "cannot update tasks" for every non-counsellor employee.
                 if (!userId.equals(assignedToId)) {
-                    throw new UnauthorizedAccessException("JUNIOR_COUNSELLOR can only update their own tasks");
+                    throw new UnauthorizedAccessException(userRole + " can only update their own tasks");
                 }
-                log.info("JUNIOR_COUNSELLOR user ID {} updating their own task {}", updatedBy.getId(), task.getId());
+                log.info("{} user ID {} updating their own task {}", userRole, updatedBy.getId(), task.getId());
                 break;
-                
+
             default:
                 // Other roles cannot update tasks
                 throw new UnauthorizedAccessException(userRole + " cannot update tasks");
@@ -1021,15 +1302,24 @@ public class TaskService {
     }
 
     /**
-     * Validates status transition control with enforced workflow rules
-     * 
-     * Valid Status Flow:
-     * PENDING → IN_PROGRESS → COMPLETED
+     * Validates status transition control with enforced workflow rules.
+     *
+     * Valid Status Flow (day-workspace / template-generated tasks - the flow actually
+     * used in production, see TemplateInstantiationService which seeds every task at
+     * TODO): TODO → IN_PROGRESS → DONE, with OVERDUE reachable from TODO/IN_PROGRESS by
+     * the overdue scheduler and still resumable by the employee, and REFLECT reachable
+     * only via the Day Approval Workflow's SEND_BACK action (DayApprovalService), never
+     * directly through this employee-facing endpoint - REFLECT is resumed back to
+     * IN_PROGRESS once the employee has addressed the reviewer's comment.
+     *
+     * The legacy PENDING → IN_PROGRESS → COMPLETED flow (older/manual tasks created via
+     * TaskService#createTask, which still defaults new tasks to PENDING) is kept working
+     * unchanged alongside it.
      *
      * Rules:
-     * - Cannot move COMPLETED → IN_PROGRESS (except ADMIN)
-     * - Cannot skip flow randomly
-     * - ADMIN can override
+     * - Terminal states (DONE/COMPLETED) cannot be modified by non-admins.
+     * - REFLECT cannot be set directly by an employee - only by the approval workflow.
+     * - ADMIN can override any transition.
      */
     private void validateStatusTransition(TaskStatus oldStatus, TaskStatus newStatus, String userRole) {
         log.info("Validating status transition: {} → {} by user role: {}", oldStatus, newStatus, userRole);
@@ -1045,7 +1335,14 @@ public class TaskService {
             return;
         }
 
-        // Define valid transitions
+        // REFLECT is only ever entered via the Day Approval Workflow's SEND_BACK action
+        // (see DayApprovalService), which bypasses this method entirely and writes the
+        // status directly - never as a target an employee can PATCH to themselves.
+        if (newStatus == TaskStatus.REFLECT) {
+            throw new InvalidStatusTransitionException(
+                    "REFLECT can only be set by a reviewer sending a day back for rework, not directly by an employee");
+        }
+
         switch (oldStatus) {
             case PENDING:
                 if (newStatus != TaskStatus.IN_PROGRESS) {
@@ -1053,20 +1350,45 @@ public class TaskService {
                 }
                 break;
 
+            case TODO:
+                // Employee can pick the task up, or mark it straight to done without
+                // passing through IN_PROGRESS.
+                if (newStatus != TaskStatus.IN_PROGRESS && newStatus != TaskStatus.DONE && newStatus != TaskStatus.COMPLETED) {
+                    throw new InvalidStatusTransitionException("TODO tasks can only transition to IN_PROGRESS or DONE");
+                }
+                break;
+
             case IN_PROGRESS:
-                if (newStatus != TaskStatus.COMPLETED) {
-                    throw new InvalidStatusTransitionException("IN_PROGRESS tasks can only transition to COMPLETED");
+                if (newStatus != TaskStatus.COMPLETED && newStatus != TaskStatus.DONE) {
+                    throw new InvalidStatusTransitionException("IN_PROGRESS tasks can only transition to DONE");
+                }
+                break;
+
+            case OVERDUE:
+                // Still resumable: the employee can pick an overdue task back up and carry
+                // on, or mark it straight to done.
+                if (newStatus != TaskStatus.IN_PROGRESS && newStatus != TaskStatus.DONE && newStatus != TaskStatus.COMPLETED) {
+                    throw new InvalidStatusTransitionException("OVERDUE tasks can only transition to IN_PROGRESS or DONE");
+                }
+                break;
+
+            case REFLECT:
+                // Employee addresses the reviewer's comment and resumes work, or marks it
+                // straight to done without passing back through IN_PROGRESS first.
+                if (newStatus != TaskStatus.IN_PROGRESS && newStatus != TaskStatus.DONE && newStatus != TaskStatus.COMPLETED) {
+                    throw new InvalidStatusTransitionException("REFLECT tasks can only transition to IN_PROGRESS or DONE");
                 }
                 break;
 
             case COMPLETED:
-                // COMPLETED should not transition back (except ADMIN which is handled above)
-                throw new InvalidStatusTransitionException("COMPLETED tasks cannot be modified (only ADMIN can override)");
+            case DONE:
+                // Terminal states should not transition back (except ADMIN, handled above)
+                throw new InvalidStatusTransitionException(oldStatus + " tasks cannot be modified (only ADMIN can override)");
 
             default:
                 throw new InvalidStatusTransitionException("Unknown status: " + oldStatus);
         }
-        
+
         log.info("Status transition validated: {} → {}", oldStatus, newStatus);
     }
 

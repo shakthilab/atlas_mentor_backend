@@ -25,18 +25,22 @@ public class AdminInitializer implements CommandLineRunner {
     @Override
     public void run(String... args) throws Exception {
         // Check if admin user already exists
-        if (!userRepository.existsByEmail("Jitesh.gupta@atlasmentor.com")) {
+        if (!userRepository.existsByEmail("admin@yopmail.com")) {
             User admin = new User();
             admin.setFirstName("Jitesh");
             admin.setLastName("Kumar");
-            admin.setEmail("Jitesh.gupta@atlasmentor.com");
+//            admin.setEmail("Jitesh.gupta@atlasmentor.com");
+            admin.setEmail("admin@yopmail.com");
+
             admin.setPassword(passwordEncoder.encode("admin123"));
             admin.setIsVerified(true);
+            admin.setPhone("9876543210");
             
             // Get or create ADMIN role
             Role adminRole = roleRepository.findByName("ADMIN")
                 .orElseGet(() -> {
                     Role role = new Role("ADMIN", "System Administrator", true);
+                    role.setDisplayName("Admin");
                     return roleRepository.save(role);
                 });
             admin.setRole(adminRole);

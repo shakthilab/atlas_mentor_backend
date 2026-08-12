@@ -31,6 +31,7 @@ public class TaskGenerationService {
     private final UserRepository userRepository;
     private final TaskRepository taskRepository;
     private final TaskActivityRepository taskActivityRepository;
+    private final TaskDisplayIdService taskDisplayIdService;
     
     // Admin user ID for auto-generated tasks
     private static final Long ADMIN_USER_ID = 1L;
@@ -127,6 +128,7 @@ public class TaskGenerationService {
         task.setSourceType(TaskSource.TASK_BUNDLE);
         task.setExecutionDate(executionDate);
         task.setIsDeleted(false);
+        task.setDisplayId(taskDisplayIdService.nextDisplayId(bundle.getRole()));
         
         // Set due date: use defaultDueDays if configured, otherwise fall back to execution date
         if (bundleTask.getDefaultDueDays() != null && bundleTask.getDefaultDueDays() > 0) {

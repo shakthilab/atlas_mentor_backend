@@ -44,6 +44,11 @@ public class TaskAttachment extends BaseEntity {
     @Column(name = "uploaded_at")
     private LocalDateTime uploadedAt;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "comment_id")
+    @JsonIgnoreProperties({"attachments", "replies", "parentComment"})
+    private TaskComment comment;
+
     @PrePersist
     @Override
     protected void onCreate() {

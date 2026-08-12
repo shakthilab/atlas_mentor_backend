@@ -12,5 +12,5 @@ public class AtlasmentorApplication {
 		SpringApplication.run(AtlasmentorApplication.class, args);
 	}
 
-}
 
+}

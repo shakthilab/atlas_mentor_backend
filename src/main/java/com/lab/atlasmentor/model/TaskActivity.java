@@ -37,6 +37,10 @@ public class TaskActivity extends BaseEntity {
     @Column(name = "new_value", length = 500)
     private String newValue;
 
+    /** Free-text detail attached directly to this activity entry - e.g. a reviewer's send-back comment. */
+    @Column(name = "comment", columnDefinition = "TEXT")
+    private String comment;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "done_by", nullable = false)
     @JsonIgnoreProperties({"activities", "taskActivities"})
@@ -50,5 +54,10 @@ public class TaskActivity extends BaseEntity {
         this.oldValue = oldValue;
         this.newValue = newValue;
         this.doneBy = doneBy;
+    }
+
+    public TaskActivity(Task task, TaskAction action, String oldValue, String newValue, User doneBy, String comment) {
+        this(task, action, oldValue, newValue, doneBy);
+        this.comment = comment;
     }
 }

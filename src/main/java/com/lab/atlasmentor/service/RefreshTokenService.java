@@ -22,6 +22,9 @@ public class RefreshTokenService {
     @Value("${jwt.refresh-expiration:604800}")
     private long refreshExpirationSeconds;
 
+    @Value("${jwt.refresh-absolute-max-days:30}")
+    private long absoluteMaxDays;
+
     @Autowired
     private RefreshTokenRepository refreshTokenRepository;
 
@@ -30,15 +33,22 @@ public class RefreshTokenService {
 
     public record TokenPair(String accessToken, String refreshToken) {}
 
-    /** Creates a new refresh token for the user and returns the raw (unhashed) value. */
+    /** Creates a new refresh token for a fresh login and returns the raw (unhashed) value. */
     @Transactional
     public String createRefreshToken(User user) {
+        return createRefreshToken(user, LocalDateTime.now());
+    }
+
+    /** Creates a new refresh token, anchoring the absolute session lifetime to sessionStartedAt. */
+    @Transactional
+    public String createRefreshToken(User user, LocalDateTime sessionStartedAt) {
         String rawToken = UUID.randomUUID().toString();
 
         RefreshToken entity = new RefreshToken();
         entity.setTokenHash(hash(rawToken));
         entity.setUser(user);
         entity.setExpiresAt(LocalDateTime.now().plusSeconds(refreshExpirationSeconds));
+        entity.setSessionStartedAt(sessionStartedAt);
         refreshTokenRepository.save(entity);
 
         return rawToken;
@@ -60,9 +70,15 @@ public class RefreshTokenService {
         }
 
         if (stored.getExpiresAt().isBefore(LocalDateTime.now())) {
-            stored.setRevoked(true);
-            refreshTokenRepository.save(stored);
+            refreshTokenRepository.revokeById(stored.getId());
             throw new BusinessException("Refresh token has expired. Please log in again.");
+        }
+
+        LocalDateTime sessionStartedAt = stored.getSessionStartedAt() != null
+                ? stored.getSessionStartedAt() : stored.getCreatedAt();
+        if (sessionStartedAt.plusDays(absoluteMaxDays).isBefore(LocalDateTime.now())) {
+            refreshTokenRepository.revokeById(stored.getId());
+            throw new BusinessException("Session has expired. Please log in again.");
         }
 
         // Rotate: revoke old, issue new pair
@@ -72,7 +88,7 @@ public class RefreshTokenService {
         String newAccessToken = jwtService.generateToken(
                 user.getEmail(), user.getId(),
                 user.getRole().getName(), user.getBranchId());
-        String newRawRefreshToken = createRefreshToken(user);
+        String newRawRefreshToken = createRefreshToken(user, sessionStartedAt);
 
         return new TokenPair(newAccessToken, newRawRefreshToken);
     }

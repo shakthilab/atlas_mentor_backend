@@ -570,6 +570,10 @@ public class StudentService {
         return studentRepository.findByEmail(email).orElse(null);
     }
 
+    private String normalizeEmail(String email) {
+        return (email == null || email.trim().isEmpty()) ? null : email.trim();
+    }
+
     @Transactional
     public Student createOrUpdateStudent(StudentOnboardingRequest request) {
         var currentUserDetails = SecurityUtils.getCurrentUser();
@@ -620,7 +624,7 @@ public class StudentService {
             User user = new User();
             user.setFirstName(request.getFirstName());
             user.setLastName(request.getLastName());
-            user.setEmail(request.getEmail()); // Can be null
+            user.setEmail(normalizeEmail(request.getEmail())); // Can be null
             user.setPhone(request.getPhone());
             user.setPassword(passwordEncoder.encode(generatedPassword));
             user.setCreatedBy(currentUser.getId());
@@ -641,7 +645,7 @@ public class StudentService {
         // Create student record
         Student student = new Student();
         student.setUser(user);
-        student.setEmail(request.getEmail());
+        student.setEmail(normalizeEmail(request.getEmail()));
         student.setStatus(StudentStatus.LEAD);
         student.setCreatedBy(currentUser.getId());
         
@@ -714,9 +718,17 @@ public class StudentService {
             }
         }
         
-        // Email sending moved to status change API to handle nullable emails
-        // Password will be generated and sent when student status is changed
-        
+        // Send login credentials if an email was provided at creation
+        String createdStudentEmail = normalizeEmail(request.getEmail());
+        if (createdStudentEmail != null) {
+            try {
+                emailService.sendLoginCredentials(createdStudentEmail, generatedPassword);
+            } catch (Exception e) {
+                // Log error but don't fail the student creation
+                System.err.println("Failed to send login credentials email: " + e.getMessage());
+            }
+        }
+
         return student;
         
         } catch (DataIntegrityViolationException e) {
@@ -736,34 +748,47 @@ public class StudentService {
     }
 
     private Student updateStudentData(Student student, StudentOnboardingRequest request, User currentUser) {
+        String newEmail = normalizeEmail(request.getEmail());
+        String credentialsEmail = null;
+        String credentialsPassword = null;
+
         // Update user information if user exists
         if (student.getUser() != null) {
             User user = student.getUser();
-            
+
             // Check if phone number is being changed and if new phone already exists (exclude current user)
             if (request.getPhone() != null && !request.getPhone().equals(user.getPhone())) {
                 if (userRepository.existsByPhoneExcludingUser(request.getPhone(), user.getId())) {
                     throw new BusinessException("Phone number already exists");
                 }
             }
-            
+
+            // Email being added or changed - generate fresh login credentials to send
+            boolean emailAddedOrChanged = newEmail != null && !newEmail.equalsIgnoreCase(user.getEmail());
+
             user.setFirstName(request.getFirstName());
             user.setLastName(request.getLastName());
-            user.setEmail(request.getEmail());
+            user.setEmail(newEmail);
             user.setPhone(request.getPhone());
-            
+
             // Update mobile country code if provided
             if (request.getMobileCountryCodeId() != null) {
                 MobileCountryCode mobileCountryCode = mobileCountryCodeRepository.findById(request.getMobileCountryCodeId())
                     .orElseThrow(() -> new RuntimeException("Mobile country code not found"));
                 user.setMobileCountryCode(mobileCountryCode);
             }
-            
+
+            if (emailAddedOrChanged) {
+                credentialsPassword = generateRandomPassword();
+                user.setPassword(passwordEncoder.encode(credentialsPassword));
+                credentialsEmail = newEmail;
+            }
+
             userRepository.save(user);
         }
-        
+
         // Update student information
-        student.setEmail(request.getEmail());
+        student.setEmail(newEmail);
         
         if (request.getBranchId() != null) {
             Branch branch = branchRepository.findById(request.getBranchId())
@@ -812,7 +837,19 @@ public class StudentService {
             }
         }
         
-        return studentRepository.save(student);
+        Student savedStudent = studentRepository.save(student);
+
+        // Send fresh login credentials now that the email change is persisted
+        if (credentialsEmail != null) {
+            try {
+                emailService.sendLoginCredentials(credentialsEmail, credentialsPassword);
+            } catch (Exception e) {
+                // Log error but don't fail the update
+                System.err.println("Failed to send login credentials email: " + e.getMessage());
+            }
+        }
+
+        return savedStudent;
     }
 
     private String generateRandomPassword() {

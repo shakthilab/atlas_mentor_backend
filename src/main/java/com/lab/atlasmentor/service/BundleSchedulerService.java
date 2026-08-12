@@ -219,6 +219,7 @@ public class BundleSchedulerService {
                     roleResponse.setId(bundle.getRole().getId());
                     roleResponse.setName(bundle.getRole().getName());
                     roleResponse.setDescription(bundle.getRole().getDescription());
+                    roleResponse.setDisplayName(bundle.getRole().getDisplayName());
                     bundleResponse.setRole(roleResponse);
                 }
                 
@@ -262,6 +263,7 @@ public class BundleSchedulerService {
                 roleResponse.setId(bundle.getRole().getId());
                 roleResponse.setName(bundle.getRole().getName());
                 roleResponse.setDescription(bundle.getRole().getDescription());
+                roleResponse.setDisplayName(bundle.getRole().getDisplayName());
                 bundleResponse.setRole(roleResponse);
             }
             

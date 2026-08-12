@@ -19,10 +19,16 @@ public class Role extends BaseEntity {
     
     @Column(name = "description", length = 200)
     private String description;
-    
+
+    @Column(name = "display_name", length = 100)
+    private String displayName;
+
     @Column(name = "is_employee", nullable = false)
     private Boolean isEmployee = false;
-    
+
+    @Column(name = "code", length = 10)
+    private String code;
+
     public Role() {}
     
     public Role(String name) {

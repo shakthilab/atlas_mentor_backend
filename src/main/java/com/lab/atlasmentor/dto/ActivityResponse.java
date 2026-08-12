@@ -11,6 +11,7 @@ public class ActivityResponse {
     private String message;
     private String oldValue;
     private String newValue;
+    private String comment;
     private String doneByName;
     private LocalDateTime createdAt;
 }
