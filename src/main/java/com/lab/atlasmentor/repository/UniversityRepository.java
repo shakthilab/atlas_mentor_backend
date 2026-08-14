@@ -21,6 +21,10 @@ public interface UniversityRepository extends JpaRepository<University, Long> {
     List<University> findByCountryIdAndActiveOrderByName(Long countryId, Boolean active);
     
     Optional<University> findByNameAndCountryId(String name, Long countryId);
+
+    /** Case-insensitive, not scoped to a country — used by LeadImportService to resolve a
+     * sheet's free-text "Target University" cell to a University id. */
+    Optional<University> findByNameIgnoreCase(String name);
     
     Optional<University> findByNameAndCountryIdAndActive(String name, Long countryId, Boolean active);
     

@@ -14,7 +14,11 @@ public interface CountryRepository extends JpaRepository<Country, Long> {
     Optional<Country> findByCode(String code);
     
     Optional<Country> findByName(String name);
-    
+
+    /** Case-insensitive name lookup — used by LeadImportService to resolve a sheet's free-text
+     * "Destination Country" cell to a Country id without requiring an exact-case match. */
+    Optional<Country> findByNameIgnoreCase(String name);
+
     Optional<Country> findByCodeAndActive(String code, Boolean active);
     
     Optional<Country> findByNameAndActive(String name, Boolean active);

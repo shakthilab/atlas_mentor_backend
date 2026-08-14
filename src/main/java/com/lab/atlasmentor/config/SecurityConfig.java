@@ -140,6 +140,13 @@ public class SecurityConfig {
                         .hasAnyRole("ADMIN", "MANAGER", "EMPLOYEE", "REFERRAL",
                                 "COMPANY", "SENIOR_COUNSELLOR", "JUNIOR_COUNSELLOR", "BRANCH_PARTNER", "ADMINISTRATIVE_ASSISTANT")
 
+                        // Lead import (LeadImportController) - same access as /api/students/**,
+                        // since every imported lead lands in the Student table via the same
+                        // onboarding creation logic.
+                        .requestMatchers("/api/leads/**")
+                        .hasAnyRole("ADMIN", "MANAGER", "EMPLOYEE", "REFERRAL",
+                                "COMPANY", "SENIOR_COUNSELLOR", "JUNIOR_COUNSELLOR", "BRANCH_PARTNER", "ADMINISTRATIVE_ASSISTANT")
+
                         .requestMatchers("/api/student/**")
                         .hasAnyRole("ADMIN", "MANAGER", "EMPLOYEE", "STUDENT", "BRANCH_PARTNER", "ADMINISTRATIVE_ASSISTANT")
 

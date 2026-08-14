@@ -125,6 +125,25 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+
+		<!-- Lead import (Part 1/2): server-generated .xlsx template + Excel/CSV parsing.
+		     Same POI library used for both the template generator and the import parser,
+		     so the two can never read/write incompatible formats. -->
+		<dependency>
+			<groupId>org.apache.poi</groupId>
+			<artifactId>poi</artifactId>
+			<version>5.3.0</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.poi</groupId>
+			<artifactId>poi-ooxml</artifactId>
+			<version>5.3.0</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-csv</artifactId>
+			<version>1.11.0</version>
+		</dependency>
     </dependencies>
 
 	<build>

@@ -908,7 +908,7 @@ public class StudentService {
         record.setQualification(qualification);
         record.setInstitutionName(entry.getInstitution());
         record.setPassingYear(entry.getYear());
-        record.setScore(entry.getScore() != null ? String.valueOf(entry.getScore()) : null);
+        record.setScore(entry.getScore());
         record.setCreatedBy(createdBy);
         studentAcademicHistoryRepository.save(record);
     }

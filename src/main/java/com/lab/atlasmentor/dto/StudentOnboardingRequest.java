@@ -106,7 +106,10 @@ public class StudentOnboardingRequest {
     public static class AcademicEntry {
         private String institution;
         private Integer year;
-        private Integer score;
+        // Free text on purpose — StudentAcademicHistory#score is a String(50) column (percentages,
+        // CGPA, grades all pass through as-is); an Integer type here would reject anything but a
+        // whole number.
+        private String score;
 
         public String getInstitution() { return institution; }
         public void setInstitution(String institution) { this.institution = institution; }
@@ -114,8 +117,8 @@ public class StudentOnboardingRequest {
         public Integer getYear() { return year; }
         public void setYear(Integer year) { this.year = year; }
 
-        public Integer getScore() { return score; }
-        public void setScore(Integer score) { this.score = score; }
+        public String getScore() { return score; }
+        public void setScore(String score) { this.score = score; }
     }
 
     public static class AcademicHistoryWrapper {
