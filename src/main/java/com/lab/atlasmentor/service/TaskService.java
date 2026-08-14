@@ -86,6 +86,9 @@ public class TaskService {
         task.setDisplayId(taskDisplayIdService.nextDisplayId(assignedTo.getRole()));
         task.setCreatedBy(createdBy.getId());
         task.setUpdatedBy(createdBy.getId());
+        // current_step/next_step (V18) - null/null here since this manual-creation path never
+        // attaches a day workspace; see DayApprovalService#applyStepLabels.
+        DayApprovalService.applyStepLabels(task);
 
         Task savedTask = taskRepository.save(task);
 
@@ -136,6 +139,10 @@ public class TaskService {
             task.setReflectFlaggedBy(null);
             task.setReflectResubmittedAt(null);
             task.setReflectPreviousStatus(null);
+            // Reflect cycle just closed via this (ADMIN-only) path too - recompute
+            // current_step/next_step from the day's own approval_stage, same as the
+            // approval-workflow path (DayApprovalService#approveResubmittedTasks).
+            DayApprovalService.applyStepLabels(task);
         }
 
         task.setStatus(newStatus);
@@ -196,6 +203,7 @@ public class TaskService {
         // reflectStage / reflectComment / reflectFlaggedAt / reflectFlaggedBy are kept as-is
         // so the reviewing stage still has the original send-back context when they re-check it.
         task.setUpdatedBy(currentUserId);
+        DayApprovalService.applyStepLabels(task);
         Task savedTask = taskRepository.save(task);
 
         String stageLabel = owningStage != null ? owningStage.replace('_', ' ') : "the reviewer";
@@ -1110,6 +1118,8 @@ public class TaskService {
         response.setReflectFlaggedByName(task.getReflectFlaggedBy() != null ? task.getReflectFlaggedBy().getFullName() : null);
         response.setReflectFlaggedAt(task.getReflectFlaggedAt());
         response.setReflectResubmittedAt(task.getReflectResubmittedAt());
+        response.setCurrentStep(task.getCurrentStep());
+        response.setNextStep(task.getNextStep());
         return response;
     }
 
@@ -1317,8 +1327,10 @@ public class TaskService {
      * unchanged alongside it.
      *
      * Rules:
-     * - Terminal states (DONE/COMPLETED) cannot be modified by non-admins.
+     * - Terminal states (DONE/COMPLETED/VERIFIED) cannot be modified by non-admins.
      * - REFLECT cannot be set directly by an employee - only by the approval workflow.
+     * - VERIFIED cannot be set directly by anyone through this method (ADMIN override
+     *   aside) - only DayApprovalService#approveDayLevel stamps it.
      * - ADMIN can override any transition.
      */
     private void validateStatusTransition(TaskStatus oldStatus, TaskStatus newStatus, String userRole) {
@@ -1382,7 +1394,12 @@ public class TaskService {
 
             case COMPLETED:
             case DONE:
-                // Terminal states should not transition back (except ADMIN, handled above)
+            case VERIFIED:
+                // Terminal states should not transition back (except ADMIN, handled above).
+                // VERIFIED is never a valid newStatus from any other case above either, so an
+                // employee can never PATCH their way into it directly - only
+                // DayApprovalService#approveDayLevel sets it, once the day reaches
+                // ADMIN_VERIFIED and the task isn't mid re-review.
                 throw new InvalidStatusTransitionException(oldStatus + " tasks cannot be modified (only ADMIN can override)");
 
             default:

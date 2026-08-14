@@ -111,7 +111,8 @@ public class SecurityConfig {
 
                         // Role-based APIs
                         .requestMatchers("/api/admin/dashboard/**")
-                        .hasAnyRole("ADMIN", "MANAGER", "BRANCH_PARTNER", "ADMINISTRATIVE_ASSISTANT")
+                        .hasAnyRole("ADMIN", "MANAGER", "BRANCH_PARTNER", "ADMINISTRATIVE_ASSISTANT",
+                                "SENIOR_COUNSELLOR", "JUNIOR_COUNSELLOR")
 
                         // Employee Tree (EmployeeTreeController) - kept in sync with its
                         // @PreAuthorize; must be listed before the generic /api/admin/** rule

@@ -37,7 +37,7 @@ public class EmployeeTreeService {
 
     /** Same convention used across the rest of the app (e.g. TaskRepository dashboard queries). */
     private static final List<String> NON_EMPLOYEE_ROLES = List.of("ADMIN", "STUDENT", "REFERRAL", "COMPANY");
-    private static final Set<TaskStatus> DONE_STATUSES = EnumSet.of(TaskStatus.DONE, TaskStatus.COMPLETED);
+    private static final Set<TaskStatus> DONE_STATUSES = EnumSet.of(TaskStatus.DONE, TaskStatus.COMPLETED, TaskStatus.VERIFIED);
 
     private final UserRepository userRepository;
     private final DayWorkspaceRepository dayWorkspaceRepository;
@@ -233,6 +233,8 @@ public class EmployeeTreeService {
         summary.setTitle(task.getTitle());
         summary.setPriority(task.getPriority());
         summary.setStatus(task.getStatus());
+        summary.setCurrentStep(task.getCurrentStep());
+        summary.setNextStep(task.getNextStep());
 
         List<TaskComment> comments = taskCommentRepository.findByTaskIdOrderByCreatedAtDesc(task.getId());
         if (!comments.isEmpty()) {

@@ -47,4 +47,10 @@ public class TaskResponse {
     private String reflectFlaggedByName;
     private LocalDateTime reflectFlaggedAt;
     private LocalDateTime reflectResubmittedAt;
+
+    // Day Approval Workflow position (V18) - see DayApprovalService#applyStepLabels.
+    /** Where this task is right now, e.g. "Not Submitted" / "Branch Partner Review" / "Reflect". */
+    private String currentStep;
+    /** What comes after {@link #currentStep}, or null if nothing does (Verified, or awaiting re-review). */
+    private String nextStep;
 }

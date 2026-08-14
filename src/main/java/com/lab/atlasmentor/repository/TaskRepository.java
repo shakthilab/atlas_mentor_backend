@@ -198,10 +198,10 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
     // REFLECT excluded alongside the terminal statuses: a task sent back for rework is
     // already in a review-managed state (see DayApprovalService#sendBackTasks) - the cron
     // shouldn't overwrite that with OVERDUE just because its original due date has passed.
-    @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.dueDate < :currentDate AND t.status NOT IN ('OVERDUE', 'COMPLETED', 'DONE', 'REFLECT')")
+    @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.dueDate < :currentDate AND t.status NOT IN ('OVERDUE', 'COMPLETED', 'DONE', 'REFLECT', 'VERIFIED')")
     List<Task> findTasksToMarkOverdue(@Param("currentDate") LocalDate currentDate);
 
-    @Query("SELECT COUNT(t) FROM Task t WHERE t.isDeleted = false AND t.dueDate < :currentDate AND t.status NOT IN ('OVERDUE', 'COMPLETED', 'DONE', 'REFLECT')")
+    @Query("SELECT COUNT(t) FROM Task t WHERE t.isDeleted = false AND t.dueDate < :currentDate AND t.status NOT IN ('OVERDUE', 'COMPLETED', 'DONE', 'REFLECT', 'VERIFIED')")
     Long countTasksToMarkOverdue(@Param("currentDate") LocalDate currentDate);
     
     @Query("SELECT COUNT(t) FROM Task t WHERE t.isDeleted = false AND t.dueDate < :currentDate AND t.status != 'OVERDUE'")
@@ -326,10 +326,12 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
     /**
      * Overall day-workspace task completion per employee (Employee Tree completion % badge,
      * Part A1) - total vs. done count across every day-workspace-driven task they've ever had.
-     * DONE/COMPLETED are both counted as "done" since template-generated tasks use DONE while
-     * older manual-flow tasks still use COMPLETED (see TaskService#validateStatusTransition).
+     * DONE/COMPLETED/VERIFIED are all counted as "done": template-generated tasks use DONE
+     * while older manual-flow tasks still use COMPLETED (see
+     * TaskService#validateStatusTransition), and VERIFIED is DONE that's since been fully
+     * approved (see DayApprovalService#verifyEligibleTasks) - still "done" either way.
      */
-    @Query("SELECT t.assignedTo.id, COUNT(t), SUM(CASE WHEN t.status IN ('DONE','COMPLETED') THEN 1 ELSE 0 END) " +
+    @Query("SELECT t.assignedTo.id, COUNT(t), SUM(CASE WHEN t.status IN ('DONE','COMPLETED','VERIFIED') THEN 1 ELSE 0 END) " +
            "FROM Task t WHERE t.isDeleted = false AND t.dayWorkspace IS NOT NULL AND t.assignedTo.id IN :employeeIds " +
            "GROUP BY t.assignedTo.id")
     List<Object[]> countDayWorkspaceTaskCompletionByAssignee(@Param("employeeIds") List<Long> employeeIds);

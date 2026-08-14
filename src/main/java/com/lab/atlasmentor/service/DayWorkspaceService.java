@@ -82,7 +82,8 @@ public class DayWorkspaceService {
         }
 
         boolean hasCompletedTask = tasks.stream()
-                .anyMatch(t -> t.getStatus() == TaskStatus.DONE || t.getStatus() == TaskStatus.COMPLETED);
+                .anyMatch(t -> t.getStatus() == TaskStatus.DONE || t.getStatus() == TaskStatus.COMPLETED
+                        || t.getStatus() == TaskStatus.VERIFIED);
         if (!tasks.isEmpty() && !hasCompletedTask) {
             throw new BusinessException("Cannot submit day: at least one task must be completed (Done) before submitting.");
         }
@@ -90,6 +91,13 @@ public class DayWorkspaceService {
         workspace.setApprovalStage(STAGE_COMPLETED);
         workspace.setUpdatedBy(currentUserId);
         dayWorkspaceRepository.save(workspace);
+
+        // current_step/next_step (V18) mirrors approval_stage for every task not mid its own
+        // reflect cycle - none can be yet, since send-back requires a day already submitted.
+        for (Task task : tasks) {
+            DayApprovalService.applyStepLabels(task);
+        }
+        taskRepository.saveAll(tasks);
 
         log.info("Employee {} submitted day {} ({}) - now awaiting Branch Partner review", employeeId, workspace.getId(), date);
 

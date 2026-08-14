@@ -7,10 +7,12 @@ public enum TaskStatus {
     DONE,
     COMPLETED,
     OVERDUE,
-    REFLECT
+    REFLECT,
+    /**
+     * Terminal, employee-immutable state stamped once every reviewer has signed off
+     * (day reaches ADMIN_VERIFIED - see DayApprovalService#approveDayLevel). DONE is
+     * the employee's own "I'm finished" claim and stays mutable/re-flaggable; VERIFIED
+     * means the whole review chain is done and there should be no more changes.
+     */
+    VERIFIED
 }
-
-//
-//❯ no change that to done
-//
-//  if a tasj is in reflect allow change to Done not  return we

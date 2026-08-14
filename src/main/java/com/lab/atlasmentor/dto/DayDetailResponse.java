@@ -65,5 +65,8 @@ public class DayDetailResponse {
         private Priority priority;
         private TaskStatus status;
         private String latestCommentPreview;
+        /** This task's own Day Approval Workflow position - see DayApprovalService#applyStepLabels. */
+        private String currentStep;
+        private String nextStep;
     }
 }

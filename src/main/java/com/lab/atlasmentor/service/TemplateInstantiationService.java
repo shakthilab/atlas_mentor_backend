@@ -178,6 +178,9 @@ public class TemplateInstantiationService {
                     task.setDueDate(today);
                     task.setDayWorkspace(workspace);
                     task.setIsDeleted(false);
+                    // current_step/next_step (V18) - workspace is freshly created at EMPLOYEE,
+                    // so this stamps "Not Submitted" / "Submitted".
+                    DayApprovalService.applyStepLabels(task);
                     if (employee.getBranch() != null) {
                         task.setBranch(employee.getBranch());
                     }

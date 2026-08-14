@@ -129,6 +129,9 @@ public class TaskGenerationService {
         task.setExecutionDate(executionDate);
         task.setIsDeleted(false);
         task.setDisplayId(taskDisplayIdService.nextDisplayId(bundle.getRole()));
+        // current_step/next_step (V18) - this legacy path never attaches a day workspace,
+        // so both stay null; see DayApprovalService#applyStepLabels.
+        DayApprovalService.applyStepLabels(task);
         
         // Set due date: use defaultDueDays if configured, otherwise fall back to execution date
         if (bundleTask.getDefaultDueDays() != null && bundleTask.getDefaultDueDays() > 0) {

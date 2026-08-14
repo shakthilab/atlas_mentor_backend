@@ -166,6 +166,22 @@ public class Task extends BaseEntity {
     @Column(name = "reflect_previous_status", length = 20)
     private String reflectPreviousStatus;
 
+    // ---- Per-task Day Approval Workflow step (V18) - see DayApprovalService#applyStepLabels ----
+
+    /**
+     * Friendly label for where this task sits right now: mirrors its day workspace's
+     * approval_stage ("Not Submitted"/"Submitted"/"Branch Partner Review"/"Manager
+     * Review"/"Verified"), or "Reflect"/"Awaiting &lt;stage&gt; Review" while it has its
+     * own open send-back cycle (reflect_stage/reflect_state, V12). Null for tasks not
+     * tied to a day workspace.
+     */
+    @Column(name = "current_step", length = 40)
+    private String currentStep;
+
+    /** What comes after {@link #currentStep} in the pipeline, or null when nothing follows (Verified, or awaiting re-review). */
+    @Column(name = "next_step", length = 40)
+    private String nextStep;
+
     public Task() {}
 
     public Task(String title, String description, User assignedTo, User assignedBy, User createdByUser, Priority priority, LocalDate dueDate, Branch branch) {

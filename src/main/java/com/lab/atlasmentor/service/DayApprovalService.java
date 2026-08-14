@@ -70,6 +70,10 @@ public class DayApprovalService {
     private static final String REFLECT_FLAGGED = "FLAGGED";
     private static final String REFLECT_RESUBMITTED = "RESUBMITTED";
 
+    private static final String REVIEW_LABEL_PARTNER = "Branch Partner Review";
+    private static final String REVIEW_LABEL_MANAGER = "Manager Review";
+    private static final String REVIEW_LABEL_ADMIN = "Admin Review";
+
     /** The only roles with a formal stage in this fixed Branch Partner → Branch Manager → Admin workflow. */
     private static final List<String> REVIEWER_ROLES = List.of("ADMIN", "MANAGER", "BRANCH_PARTNER");
 
@@ -222,10 +226,42 @@ public class DayApprovalService {
         workspace.setApprovalStage(reviewStage);
         workspace.setUpdatedBy(approver.getId());
         dayWorkspaceRepository.save(workspace);
+        refreshStepLabelsForDay(workspace);
 
         saveDayApproval(workspace, approver, actingStageLabel, ACTION_APPROVE, request.getComment());
         log.info("Day {} approved at {} stage by user {} ({}) - advanced to {}",
                 workspace.getId(), actingStageLabel, approver.getId(), role, reviewStage);
+
+        // Final stage: the whole review chain (Partner -> Manager -> Admin) has now signed
+        // off on this day. Every task that's DONE/COMPLETED and not sitting mid its own
+        // separate re-review cycle (reflectState != null - see sendBackTasks/resubmitTask,
+        // V12) graduates to VERIFIED, the terminal "no more changes" state - see
+        // TaskStatus#VERIFIED. Tasks still awaiting re-review are left as-is; they'll be
+        // picked up the next time a day of theirs reaches ADMIN_VERIFIED, or individually
+        // once approveResubmittedTasks resolves them (that path doesn't touch status).
+        if (STAGE_ADMIN_VERIFIED.equals(reviewStage)) {
+            verifyEligibleTasks(workspace, approver);
+        }
+    }
+
+    private void verifyEligibleTasks(DayWorkspace workspace, User approver) {
+        List<Task> dayTasks = taskRepository.findByDayWorkspaceId(workspace.getId());
+        for (Task task : dayTasks) {
+            boolean isDone = task.getStatus() == TaskStatus.DONE || task.getStatus() == TaskStatus.COMPLETED;
+            if (!isDone || task.getReflectState() != null) {
+                continue;
+            }
+            TaskStatus oldStatus = task.getStatus();
+            task.setStatus(TaskStatus.VERIFIED);
+            task.setUpdatedBy(approver.getId());
+            taskRepository.save(task);
+
+            TaskActivity activity = new TaskActivity(task, TaskAction.STATUS_CHANGED,
+                    oldStatus.name(), TaskStatus.VERIFIED.name(), approver,
+                    "Verified - day fully approved through Admin");
+            activity.setCreatedBy(approver.getId());
+            taskActivityRepository.save(activity);
+        }
     }
 
     /**
@@ -254,6 +290,22 @@ public class DayApprovalService {
             task.setReflectFlaggedBy(null);
             task.setReflectResubmittedAt(null);
             task.setUpdatedBy(approver.getId());
+
+            // This task's own reflect cycle is now the only thing standing between it and
+            // VERIFIED. verifyEligibleTasks (approveDayLevel reaching ADMIN_VERIFIED) already
+            // swept every OTHER task on this day the day it happened - but skipped this one
+            // because reflectState wasn't null yet. If the day's pipeline had already finished
+            // (the SEND_BACK/resubmit cycle is deliberately independent of it - see class
+            // javadoc), that sweep will never run again for this day, so promote it here
+            // instead of leaving it stuck at DONE forever.
+            boolean isDone = task.getStatus() == TaskStatus.DONE || task.getStatus() == TaskStatus.COMPLETED;
+            boolean dayFullyApproved = STAGE_ADMIN_VERIFIED.equals(workspace.getApprovalStage());
+            if (isDone && dayFullyApproved) {
+                task.setStatus(TaskStatus.VERIFIED);
+            }
+            // Reflect cycle is closed (reflect fields cleared above) - fall back to wherever
+            // the day's own pipeline currently stands.
+            applyStepLabels(task);
             taskRepository.save(task);
 
             // No dedicated TaskAction for "re-review resolved" - reusing STATUS_CHANGED with
@@ -263,7 +315,8 @@ public class DayApprovalService {
             // turned out to be guarded by a DB-level CHECK constraint not mirrored in this
             // migrations folder (see V11) - a same-shaped surprise on task_activity.action
             // is exactly the kind of risk not worth taking for one cosmetic activity line.
-            String note = "resolved the re-review" + (request.getComment() != null && !request.getComment().isBlank()
+            String note = "resolved the re-review" + (isDone && dayFullyApproved ? " - Verified" : "")
+                    + (request.getComment() != null && !request.getComment().isBlank()
                     ? " — " + request.getComment() : "");
             TaskActivity activity = new TaskActivity(task, TaskAction.STATUS_CHANGED, null, null, approver, note);
             activity.setCreatedBy(approver.getId());
@@ -310,6 +363,7 @@ public class DayApprovalService {
             task.setReflectFlaggedBy(approver);
             task.setReflectResubmittedAt(null);
             task.setUpdatedBy(approver.getId());
+            applyStepLabels(task);
             taskRepository.save(task);
 
             TaskActivity activity = new TaskActivity(task, TaskAction.STATUS_CHANGED,
@@ -416,6 +470,104 @@ public class DayApprovalService {
             case STAGE_ADMIN_VERIFIED -> 4;
             default -> 0;
         };
+    }
+
+    // ==================== Part-task current_step / next_step (V18) ====================
+
+    /**
+     * Recomputes and stamps a task's {@code current_step}/{@code next_step} (V18) from its
+     * own reflect cycle if it has one open, otherwise from its day workspace's
+     * approval_stage. Callers still need to {@code taskRepository.save(task)} themselves -
+     * this only mutates the in-memory entity, same convention as the rest of this class.
+     *
+     * <p>Call this any time either input could have changed: task creation, the day's
+     * approval_stage advancing (submit / partner-manager-admin approve), a task being sent
+     * back, resubmitted, or its reflect cycle being resolved.
+     */
+    public static void applyStepLabels(Task task) {
+        String reflectState = task.getReflectState();
+        String reflectStage = task.getReflectStage();
+
+        if (REFLECT_FLAGGED.equals(reflectState)) {
+            // Employee's turn: fix it, then it goes to whichever stage flagged it.
+            task.setCurrentStep("Reflect");
+            task.setNextStep(reviewLabel(reflectStage));
+            return;
+        }
+        if (REFLECT_RESUBMITTED.equals(reflectState)) {
+            // Reviewer's turn: outcome (approved / sent back again) isn't known yet, so
+            // there's no single "next" to name.
+            task.setCurrentStep("Awaiting " + reviewLabel(reflectStage));
+            task.setNextStep(null);
+            return;
+        }
+
+        DayWorkspace workspace = task.getDayWorkspace();
+        if (workspace == null) {
+            // Not part of the Day Approval Workflow at all (e.g. a manual/legacy task never
+            // attached to a day) - the concept doesn't apply.
+            task.setCurrentStep(null);
+            task.setNextStep(null);
+            return;
+        }
+
+        String approvalStage = workspace.getApprovalStage();
+        switch (approvalStage == null ? STAGE_EMPLOYEE : approvalStage) {
+            case STAGE_EMPLOYEE -> {
+                task.setCurrentStep("Not Submitted");
+                task.setNextStep("Submitted");
+            }
+            case STAGE_COMPLETED -> {
+                task.setCurrentStep("Submitted");
+                task.setNextStep(REVIEW_LABEL_PARTNER);
+            }
+            case STAGE_PARTNER_REVIEW -> {
+                task.setCurrentStep(REVIEW_LABEL_PARTNER);
+                task.setNextStep(REVIEW_LABEL_MANAGER);
+            }
+            case STAGE_MANAGER_REVIEW -> {
+                task.setCurrentStep(REVIEW_LABEL_MANAGER);
+                task.setNextStep(REVIEW_LABEL_ADMIN);
+            }
+            case STAGE_ADMIN_VERIFIED -> {
+                task.setCurrentStep("Verified");
+                task.setNextStep(null);
+            }
+            default -> {
+                task.setCurrentStep("Not Submitted");
+                task.setNextStep("Submitted");
+            }
+        }
+    }
+
+    /** The reviewer-facing label for a review-stage constant, used as a "next step" / "awaiting" value. */
+    private static String reviewLabel(String stage) {
+        if (stage == null) {
+            return "Review";
+        }
+        return switch (stage) {
+            case STAGE_PARTNER_REVIEW -> REVIEW_LABEL_PARTNER;
+            case STAGE_MANAGER_REVIEW -> REVIEW_LABEL_MANAGER;
+            case STAGE_ADMIN_VERIFIED -> REVIEW_LABEL_ADMIN;
+            default -> stage;
+        };
+    }
+
+    /**
+     * Bulk-refreshes current_step/next_step for every task on a day whose own approval_stage
+     * just moved, skipping any task mid its own independent reflect cycle (V12) - that task's
+     * step stays Reflect/Awaiting-review-based until that cycle resolves, regardless of where
+     * the day's pipeline itself is.
+     */
+    private void refreshStepLabelsForDay(DayWorkspace workspace) {
+        List<Task> dayTasks = taskRepository.findByDayWorkspaceId(workspace.getId());
+        for (Task task : dayTasks) {
+            if (task.getReflectState() != null) {
+                continue;
+            }
+            applyStepLabels(task);
+            taskRepository.save(task);
+        }
     }
 
     // ==================== Stage <-> role mapping ====================
