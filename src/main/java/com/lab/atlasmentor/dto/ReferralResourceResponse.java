@@ -1,6 +1,5 @@
 package com.lab.atlasmentor.dto;
 
-import com.lab.atlasmentor.model.ReferralResource.OwnerType;
 import com.lab.atlasmentor.model.ReferralResource.ResourceType;
 import com.lab.atlasmentor.model.ReferralResource.StorageType;
 import lombok.Data;
@@ -14,7 +13,7 @@ public class ReferralResourceResponse {
     private Long id;
     private List<Long> ownerIds;
     private List<String> ownerNames;
-    private OwnerType ownerType;
+    private String ownerType;
     private Long uploadedById;
     private String uploadedByName;
     private StorageType storageType;

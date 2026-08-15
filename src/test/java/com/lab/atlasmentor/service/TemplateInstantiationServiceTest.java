@@ -249,4 +249,5 @@ class TemplateInstantiationServiceTest {
 
         assertEquals(TemplateInstantiationService.InstantiationResult.Outcome.ALREADY_INSTANTIATED, result.getOutcome());
     }
+
 }

@@ -1,15 +1,17 @@
 package com.lab.atlasmentor.dto;
 
+import java.util.List;
 import java.util.Map;
 
 public class StudentOnboardingRequest {
 
     private PersonalInfo personalInfo;
     private DestinationDetails destinationDetails;
-    private AcademicHistoryWrapper academicHistory;
+    private List<AcademicEntry> academicHistory;
     private Map<String, String> documents;
     private String notes;
     private String referralCode;
+    private String source;
 
     // ── Convenience getters used by StudentService ────────────────────────────
 
@@ -35,8 +37,8 @@ public class StudentOnboardingRequest {
     public DestinationDetails getDestinationDetails() { return destinationDetails; }
     public void setDestinationDetails(DestinationDetails destinationDetails) { this.destinationDetails = destinationDetails; }
 
-    public AcademicHistoryWrapper getAcademicHistory() { return academicHistory; }
-    public void setAcademicHistory(AcademicHistoryWrapper academicHistory) { this.academicHistory = academicHistory; }
+    public List<AcademicEntry> getAcademicHistory() { return academicHistory; }
+    public void setAcademicHistory(List<AcademicEntry> academicHistory) { this.academicHistory = academicHistory; }
 
     public Map<String, String> getDocuments() { return documents; }
     public void setDocuments(Map<String, String> documents) { this.documents = documents; }
@@ -46,6 +48,9 @@ public class StudentOnboardingRequest {
 
     public String getReferralCode() { return referralCode; }
     public void setReferralCode(String referralCode) { this.referralCode = referralCode; }
+
+    public String getSource() { return source; }
+    public void setSource(String source) { this.source = source; }
 
     // ── Inner classes ─────────────────────────────────────────────────────────
 
@@ -103,32 +108,44 @@ public class StudentOnboardingRequest {
         public void setIntake(String intake) { this.intake = intake; }
     }
 
+    /**
+     * One academic history record. The frontend sends {@code academicHistory} as a flat JSON
+     * array of these (one per qualification - 10th, 12th, Bachelor's, ...), not a fixed
+     * tenth/twelfth pair, so the shape here must stay a list of open-ended entries.
+     * {@code id} is accepted so a future update could target a specific existing row, but the
+     * current save logic (see StudentService#updateStudentData) still replaces the whole set.
+     */
     public static class AcademicEntry {
-        private String institution;
-        private Integer year;
+        private Long id;
+        private String qualification;
+        private String institutionName;
+        private String boardUniversity;
+        private Integer passingYear;
         // Free text on purpose — StudentAcademicHistory#score is a String(50) column (percentages,
         // CGPA, grades all pass through as-is); an Integer type here would reject anything but a
         // whole number.
         private String score;
+        private String stream;
 
-        public String getInstitution() { return institution; }
-        public void setInstitution(String institution) { this.institution = institution; }
+        public Long getId() { return id; }
+        public void setId(Long id) { this.id = id; }
 
-        public Integer getYear() { return year; }
-        public void setYear(Integer year) { this.year = year; }
+        public String getQualification() { return qualification; }
+        public void setQualification(String qualification) { this.qualification = qualification; }
+
+        public String getInstitutionName() { return institutionName; }
+        public void setInstitutionName(String institutionName) { this.institutionName = institutionName; }
+
+        public String getBoardUniversity() { return boardUniversity; }
+        public void setBoardUniversity(String boardUniversity) { this.boardUniversity = boardUniversity; }
+
+        public Integer getPassingYear() { return passingYear; }
+        public void setPassingYear(Integer passingYear) { this.passingYear = passingYear; }
 
         public String getScore() { return score; }
         public void setScore(String score) { this.score = score; }
-    }
 
-    public static class AcademicHistoryWrapper {
-        private AcademicEntry tenth;
-        private AcademicEntry twelfth;
-
-        public AcademicEntry getTenth() { return tenth; }
-        public void setTenth(AcademicEntry tenth) { this.tenth = tenth; }
-
-        public AcademicEntry getTwelfth() { return twelfth; }
-        public void setTwelfth(AcademicEntry twelfth) { this.twelfth = twelfth; }
+        public String getStream() { return stream; }
+        public void setStream(String stream) { this.stream = stream; }
     }
 }

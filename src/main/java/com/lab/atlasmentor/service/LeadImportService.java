@@ -28,8 +28,8 @@ import java.util.regex.Pattern;
  *
  * Row creation reuses {@code StudentService#createOrUpdateStudent} — the exact method
  * behind POST /api/students/onboarding — rather than parallel insert logic. The request
- * built per row carries personalInfo, destinationDetails, and academicHistory (all 15
- * columns from {@link LeadImportField}); documents are never part of an import row.
+ * built per row carries personalInfo, destinationDetails, academicHistory, and source (all
+ * 16 columns from {@link LeadImportField}); documents are never part of an import row.
  *
  * One deliberate deviation from a byte-for-byte "just call the shared method for every
  * row": createOrUpdateStudent's own duplicate branch (email-then-phone match) doesn't skip
@@ -206,10 +206,13 @@ public class LeadImportService {
         personalInfo.setBranchId(branchId);
         personalInfo.setCounsellor(counsellorId);
 
+        String source = raw.values().get(LeadImportField.SOURCE);
+
         StudentOnboardingRequest request = new StudentOnboardingRequest();
         request.setPersonalInfo(personalInfo);
         request.setDestinationDetails(buildDestinationDetails(raw));
         request.setAcademicHistory(buildAcademicHistory(raw));
+        request.setSource(isBlank(source) ? null : source.trim());
         return request;
     }
 
@@ -243,25 +246,25 @@ public class LeadImportService {
         return details;
     }
 
-    private StudentOnboardingRequest.AcademicHistoryWrapper buildAcademicHistory(LeadImportRawRow raw) {
-        StudentOnboardingRequest.AcademicEntry tenth = buildAcademicEntry(raw,
+    private List<StudentOnboardingRequest.AcademicEntry> buildAcademicHistory(LeadImportRawRow raw) {
+        StudentOnboardingRequest.AcademicEntry tenth = buildAcademicEntry(raw, "10th",
                 LeadImportField.TENTH_INSTITUTION, LeadImportField.TENTH_PASSING_YEAR, LeadImportField.TENTH_SCORE);
-        StudentOnboardingRequest.AcademicEntry twelfth = buildAcademicEntry(raw,
+        StudentOnboardingRequest.AcademicEntry twelfth = buildAcademicEntry(raw, "12th",
                 LeadImportField.TWELFTH_INSTITUTION, LeadImportField.TWELFTH_PASSING_YEAR, LeadImportField.TWELFTH_SCORE);
         if (tenth == null && twelfth == null) {
             return null;
         }
-        StudentOnboardingRequest.AcademicHistoryWrapper wrapper = new StudentOnboardingRequest.AcademicHistoryWrapper();
-        wrapper.setTenth(tenth);
-        wrapper.setTwelfth(twelfth);
-        return wrapper;
+        List<StudentOnboardingRequest.AcademicEntry> entries = new ArrayList<>();
+        if (tenth != null) entries.add(tenth);
+        if (twelfth != null) entries.add(twelfth);
+        return entries;
     }
 
     /** Institution and Score/CGPA are free text, stored exactly as provided — no validation
      * beyond basic presence. Passing Year is the one sub-field with a real type constraint
      * underneath (an Integer column); an unparseable year is left null rather than failing
      * the row, same soft-fail principle as the country/university lookups above. */
-    private StudentOnboardingRequest.AcademicEntry buildAcademicEntry(LeadImportRawRow raw,
+    private StudentOnboardingRequest.AcademicEntry buildAcademicEntry(LeadImportRawRow raw, String qualification,
             LeadImportField institutionField, LeadImportField yearField, LeadImportField scoreField) {
         String institution = raw.values().get(institutionField);
         String yearRaw = raw.values().get(yearField);
@@ -271,8 +274,9 @@ public class LeadImportService {
         }
 
         StudentOnboardingRequest.AcademicEntry entry = new StudentOnboardingRequest.AcademicEntry();
-        entry.setInstitution(isBlank(institution) ? null : institution.trim());
-        entry.setYear(parseYear(yearRaw));
+        entry.setQualification(qualification);
+        entry.setInstitutionName(isBlank(institution) ? null : institution.trim());
+        entry.setPassingYear(parseYear(yearRaw));
         entry.setScore(isBlank(score) ? null : score.trim());
         return entry;
     }

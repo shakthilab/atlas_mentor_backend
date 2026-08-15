@@ -121,6 +121,12 @@ public class SecurityConfig {
                         .requestMatchers("/api/admin/employee-tree", "/api/admin/employees/**")
                         .hasAnyRole("ADMIN", "ADMINISTRATIVE_ASSISTANT", "MANAGER", "BRANCH_PARTNER")
 
+                        // Cross-employee Weekly Accountability response read
+                        // (WeeklyAccountabilityAdminController) - same pitfall as Employee Tree
+                        // above: must precede the generic /api/admin/** rule.
+                        .requestMatchers("/api/admin/weekly-accountability/**")
+                        .hasAnyRole("ADMIN", "ADMINISTRATIVE_ASSISTANT", "MANAGER", "BRANCH_PARTNER")
+
                         .requestMatchers("/api/admin/**")
                         .hasAnyRole("ADMIN", "SENIOR_COUNSELLOR")
 

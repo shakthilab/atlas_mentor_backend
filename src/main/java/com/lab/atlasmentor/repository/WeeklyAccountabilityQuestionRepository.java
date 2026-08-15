@@ -8,5 +8,5 @@ import java.util.List;
 
 @Repository
 public interface WeeklyAccountabilityQuestionRepository extends JpaRepository<WeeklyAccountabilityQuestion, Long> {
-    List<WeeklyAccountabilityQuestion> findByRoleScope(String roleScope);
+    List<WeeklyAccountabilityQuestion> findByWeekIdOrderByDisplayOrderAsc(Long weekId);
 }

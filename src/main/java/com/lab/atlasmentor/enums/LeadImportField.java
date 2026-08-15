@@ -11,8 +11,8 @@ import java.util.List;
  *
  * This is the corrected field list matching the real lead-creation schema (the same one
  * {@code POST /api/students/onboarding} accepts) — see each constant's "maps to" javadoc.
- * There is no generic "Source" or "Notes" column: neither maps to anything on {@code Student},
- * and inventing a new home for them is a product decision, not something to guess at here.
+ * There is no generic "Notes" column: it doesn't map to anything on {@code Student}, and
+ * inventing a new home for it is a product decision, not something to guess at here.
  *
  * Declaration order is also template column order (see {@link #ordered()}).
  */
@@ -97,7 +97,13 @@ public enum LeadImportField {
     /** -> academicHistory.twelfth.score */
     TWELFTH_SCORE("12th Score/CGPA", false,
             List.of("12th score/cgpa", "12th score", "12th cgpa", "twelfth score", "twelfth score/cgpa"),
-            "Optional. Free text — percentage or CGPA, stored exactly as provided.");
+            "Optional. Free text — percentage or CGPA, stored exactly as provided."),
+
+    /** -> source (top-level on StudentOnboardingRequest, students.source) */
+    SOURCE("Source", false,
+            List.of("source", "lead source"),
+            "Optional. Where the lead came from: Instagram, Youtube, AD, Website, a referring "
+                    + "person's name, or any other free text. Stored exactly as provided — see LeadSource.");
 
     private final String header;
     private final boolean required;

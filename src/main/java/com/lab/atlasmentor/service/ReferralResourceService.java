@@ -33,6 +33,9 @@ public class ReferralResourceService {
     @Autowired
     private ReferralAssignmentRepository referralAssignmentRepository;
 
+    @Autowired
+    private RoleCacheService roleCacheService;
+
     @Transactional
     public ReferralResourceResponse createResource(ReferralResourceRequest request) {
         CustomUserDetails currentUser = SecurityUtils.getCurrentUser();
@@ -283,12 +286,25 @@ public class ReferralResourceService {
         return owner.getId().equals(user.getUserId());
     }
 
+    private String resolveOwnerTypeDisplayName(OwnerType ownerType) {
+        if (ownerType == null) {
+            return null;
+        }
+        try {
+            String displayName = roleCacheService.getRoleByName(ownerType.name()).getDisplayName();
+            return displayName != null && !displayName.isBlank() ? displayName : ownerType.name();
+        } catch (RuntimeException e) {
+            // No matching role record (e.g. REFERRAL/COMPANY are owner-type-only values) - fall back to the raw enum name.
+            return ownerType.name();
+        }
+    }
+
     private ReferralResourceResponse convertToResponse(ReferralResource resource) {
         ReferralResourceResponse response = new ReferralResourceResponse();
         response.setId(resource.getId());
         response.setOwnerIds(resource.getOwners().stream().map(User::getId).collect(Collectors.toList()));
         response.setOwnerNames(resource.getOwners().stream().map(User::getFullName).collect(Collectors.toList()));
-        response.setOwnerType(resource.getOwnerType());
+        response.setOwnerType(resolveOwnerTypeDisplayName(resource.getOwnerType()));
         response.setUploadedById(resource.getUploadedById());
         response.setUploadedByName(resource.getUploadedBy() != null ? resource.getUploadedBy().getFullName() : "Unknown");
         response.setStorageType(resource.getStorageType());

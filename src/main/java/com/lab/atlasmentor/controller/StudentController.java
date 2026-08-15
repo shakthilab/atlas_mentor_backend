@@ -9,13 +9,19 @@ import com.lab.atlasmentor.service.StudentService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import com.lab.atlasmentor.enums.StudentStatus;
+import com.lab.atlasmentor.enums.LeadSource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/students")
@@ -78,6 +84,24 @@ public class StudentController {
         PageResponse<StudentResponse> students = studentService.getAllStudents(status, search, pageable);
         String message = students.isEmpty() ? "No data found" : "Students retrieved successfully";
         ApiResponse<PageResponse<StudentResponse>> response = ApiResponse.success(message, students);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/statuses")
+    public ResponseEntity<ApiResponse<List<StudentStatusResponse>>> getStudentStatuses() {
+        List<StudentStatusResponse> statuses = Arrays.stream(StudentStatus.values())
+                .map(StudentStatusResponse::fromStatus)
+                .collect(Collectors.toList());
+        ApiResponse<List<StudentStatusResponse>> response = ApiResponse.success("Student statuses retrieved successfully", statuses);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/lead-sources")
+    public ResponseEntity<ApiResponse<List<LeadSourceResponse>>> getLeadSources() {
+        List<LeadSourceResponse> sources = Arrays.stream(LeadSource.values())
+                .map(LeadSourceResponse::fromSource)
+                .collect(Collectors.toList());
+        ApiResponse<List<LeadSourceResponse>> response = ApiResponse.success("Lead sources retrieved successfully", sources);
         return ResponseEntity.ok(response);
     }
 
@@ -234,6 +258,63 @@ public class StudentController {
         } catch (BusinessException e) {
             ApiResponse<java.util.List<com.lab.atlasmentor.model.StudentActivity>> response = ApiResponse.error(e.getMessage());
             return ResponseEntity.badRequest().body(response);
+        }
+    }
+
+    /**
+     * Fetches one document's file bytes on demand, e.g. when the frontend's download button
+     * for a specific document in GET /api/students/{id}'s "documents" list is clicked. That
+     * list only carries id/name/type - no base64 content - so this is the only request that
+     * pulls the file itself; loading a student never eagerly fetches every document's bytes.
+     *
+     * Returns the file base64-encoded inside the standard ApiResponse envelope (rather than as
+     * a raw binary body) so the frontend can decode it client-side, e.g. build a data URL from
+     * `fileType` + `content` to preview/render the file inline instead of only downloading it.
+     */
+    @GetMapping("/documents/{documentId}/download")
+    public ResponseEntity<ApiResponse<DocumentDownloadResponse>> downloadStudentDocument(@PathVariable Long documentId) {
+        try {
+            DocumentDownload download = studentService.downloadDocument(documentId);
+
+            String fileType = download.getFileType();
+            if (fileType == null || fileType.isBlank()) {
+                fileType = MediaType.APPLICATION_OCTET_STREAM_VALUE;
+            }
+
+            String base64Content = java.util.Base64.getEncoder().encodeToString(download.getContent());
+            DocumentDownloadResponse responseBody = new DocumentDownloadResponse(
+                    download.getFileName(), fileType, base64Content);
+
+            ApiResponse<DocumentDownloadResponse> response =
+                    ApiResponse.success("Document retrieved successfully", responseBody);
+            return ResponseEntity.ok(response);
+        } catch (BusinessException e) {
+            ApiResponse<DocumentDownloadResponse> response = ApiResponse.notFound(e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+        }
+    }
+
+    /**
+     * Fetches every document for a student in one call, each with its content base64-encoded
+     * the same way {@link #downloadStudentDocument} returns a single one. A document with no
+     * (or corrupt) stored file content comes back with `content: null` - and `fileType: null` -
+     * instead of failing the whole list, since one bad row shouldn't block the rest.
+     */
+    @GetMapping("/{studentId}/documents")
+    public ResponseEntity<ApiResponse<List<StudentDocumentResponse>>> getStudentDocuments(@PathVariable Long studentId) {
+        try {
+            List<StudentDocumentResponse> documents = studentService.getStudentDocuments(studentId);
+            for (StudentDocumentResponse document : documents) {
+                if (document.getContent() != null && (document.getFileType() == null || document.getFileType().isBlank())) {
+                    document.setFileType(MediaType.APPLICATION_OCTET_STREAM_VALUE);
+                }
+            }
+            ApiResponse<List<StudentDocumentResponse>> response =
+                    ApiResponse.success("Documents retrieved successfully", documents);
+            return ResponseEntity.ok(response);
+        } catch (BusinessException e) {
+            ApiResponse<List<StudentDocumentResponse>> response = ApiResponse.notFound(e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
         }
     }
 

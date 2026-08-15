@@ -65,6 +65,13 @@ public class Student extends BaseEntity {
     
     @Column(name = "intake_period", length = 100)
     private String intakePeriod;
+
+    // Where the lead came from. Free text on purpose — for LeadSource.PERSON/OTHER the UI
+    // collects a typed value (a referrer's name, or anything else) and that's what lands
+    // here as-is; for the fixed channels (Instagram/Youtube/AD/Website) the display label
+    // is stored directly. Not an @Enumerated column for exactly that reason.
+    @Column(name = "source", length = 255)
+    private String source;
     
     // Additional branch fields for API convenience
     @Transient

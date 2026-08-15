@@ -12,6 +12,7 @@ public class StudentNonRegisteredResponse {
     private String notes;
     private String courseName;
     private String intakePeriod;
+    private String source;
     private String status;
     
     // Branch information

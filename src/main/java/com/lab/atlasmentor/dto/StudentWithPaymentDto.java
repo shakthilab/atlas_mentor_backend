@@ -57,4 +57,8 @@ public class StudentWithPaymentDto {
         this.paymentCreatedAt = paymentCreatedAt;
         this.approvedBy = approvedBy;
     }
+
+    public String getStatusDisplayName() {
+        return status != null ? status.getDisplayName() : null;
+    }
 }

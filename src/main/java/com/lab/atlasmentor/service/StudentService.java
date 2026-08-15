@@ -156,17 +156,203 @@ public class StudentService {
 
     public StudentResponse getStudentByIdAsResponse(Long id) {
         Student student = getStudentById(id);
-        
+
         StudentResponse response = StudentResponse.fromEntity(student);
-        
+
         // Populate created by name
         if (student.getCreatedBy() != null) {
             userRepository.findById(student.getCreatedBy()).ifPresent(createdByUser -> {
                 response.setCreatedByName(createdByUser.getFullName());
             });
         }
-        
+
+        // Document metadata only (id, name, type) - keeps this load cheap; the actual file
+        // bytes are fetched separately, on demand, via downloadDocument(documentId).
+        List<DocumentResponse> documents = documentRepository.findByStudentId(id).stream()
+                .map(DocumentResponse::fromEntity)
+                .collect(java.util.stream.Collectors.toList());
+        response.setDocuments(documents);
+
+        // Academic history (10th/12th/Bachelor's/etc.)
+        List<AcademicHistoryResponse> academicHistory = studentAcademicHistoryRepository.findByStudentId(id).stream()
+                .map(AcademicHistoryResponse::fromEntity)
+                .collect(java.util.stream.Collectors.toList());
+        response.setAcademicHistory(academicHistory);
+
         return response;
+    }
+
+    private static final Map<String, String> DOCUMENT_MIME_TO_EXTENSION = Map.ofEntries(
+            Map.entry("application/pdf", ".pdf"),
+            Map.entry("image/jpeg", ".jpg"),
+            Map.entry("image/jpg", ".jpg"),
+            Map.entry("image/png", ".png"),
+            Map.entry("image/webp", ".webp"),
+            Map.entry("image/gif", ".gif"),
+            Map.entry("application/msword", ".doc"),
+            Map.entry("application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".docx"),
+            Map.entry("application/vnd.ms-excel", ".xls"),
+            Map.entry("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ".xlsx")
+    );
+
+    /**
+     * Saves an onboarding request's documentType -> content map as Document rows. The map
+     * carries no original filename, only a base64 string that's often a data URI
+     * ("data:<mime>;base64,<data>") - when it is, the mime type is pulled out and stored as
+     * fileType, and used to give documentName a real extension (e.g. "10th_marksheet.pdf")
+     * instead of a bare key. Without an extension the frontend has no way to know what kind of
+     * file it just downloaded, so it saves/opens as an unrecognized file.
+     */
+    private void saveDocuments(Student student, Map<String, String> documents, Long userId) {
+        for (Map.Entry<String, String> entry : documents.entrySet()) {
+            String documentTypeKey = entry.getKey();
+            String content = entry.getValue();
+            String mimeType = extractDataUriMimeType(content);
+            String extension = mimeType != null ? DOCUMENT_MIME_TO_EXTENSION.get(mimeType.toLowerCase()) : null;
+            String fileName = documentTypeKey + (extension != null ? extension : "");
+
+            Document document = new Document();
+            document.setStudent(student);
+            document.setDocumentType(documentTypeKey);
+            document.setDocumentName(fileName);
+            document.setFileType(mimeType);
+            document.setBase64Content(content);
+            document.setCreatedBy(userId);
+            documentRepository.save(document);
+        }
+    }
+
+    private String extractDataUriMimeType(String content) {
+        if (content == null || !content.startsWith("data:")) {
+            return null;
+        }
+        int colonIndex = content.indexOf(':');
+        int semicolonIndex = content.indexOf(';');
+        if (semicolonIndex == -1 || semicolonIndex <= colonIndex) {
+            return null;
+        }
+        return content.substring(colonIndex + 1, semicolonIndex);
+    }
+
+    /**
+     * Fetches a single document's file bytes for download, decoding the stored base64
+     * content on demand. Kept out of {@link #getStudentByIdAsResponse(Long)} so loading a
+     * student never pulls every document's bytes - only the one the user clicks download on.
+     */
+    public DocumentDownload downloadDocument(Long documentId) {
+        Document document = documentRepository.findById(documentId)
+                .orElseThrow(() -> new BusinessException("Document not found with id: " + documentId));
+
+        if (document.getBase64Content() == null || document.getBase64Content().isBlank()) {
+            throw new BusinessException("Document has no file content: " + documentId);
+        }
+
+        byte[] bytes = decodeDocumentContent(document.getBase64Content());
+        if (bytes == null) {
+            throw new BusinessException("Document content is not valid base64: " + documentId);
+        }
+
+        String mimeType = resolveMimeType(document, bytes);
+        String fileName = resolveFileName(document, mimeType);
+
+        return new DocumentDownload(fileName, mimeType, bytes);
+    }
+
+    /**
+     * Fetches every document for a student with its content base64-encoded - the list form of
+     * {@link #downloadDocument(Long)}, used by GET /api/students/{studentId}/documents so the
+     * frontend can render/download all of a student's documents in one call. Unlike
+     * downloadDocument, a document with missing or corrupt stored content doesn't fail the
+     * whole request: it comes back with `content: null` instead of an error.
+     */
+    public List<StudentDocumentResponse> getStudentDocuments(Long studentId) {
+        if (!studentRepository.existsById(studentId)) {
+            throw new BusinessException("Student not found with id: " + studentId);
+        }
+        return documentRepository.findByStudentId(studentId).stream()
+                .map(this::toStudentDocumentResponse)
+                .collect(java.util.stream.Collectors.toList());
+    }
+
+    private StudentDocumentResponse toStudentDocumentResponse(Document document) {
+        byte[] bytes = decodeDocumentContent(document.getBase64Content());
+        String mimeType = resolveMimeType(document, bytes);
+        String fileName = resolveFileName(document, mimeType);
+        String content = bytes != null ? java.util.Base64.getEncoder().encodeToString(bytes) : null;
+        return new StudentDocumentResponse(document.getId(), document.getDocumentType(), fileName, mimeType, content);
+    }
+
+    /**
+     * Decodes a document's stored base64 (raw or data-URI form) into bytes, or null if the
+     * content is missing/blank/not valid base64 - callers decide whether that's fatal.
+     */
+    private byte[] decodeDocumentContent(String base64Content) {
+        if (base64Content == null || base64Content.isBlank()) {
+            return null;
+        }
+        // Uploads may be stored as a raw base64 string or a data URI
+        // (e.g. "data:application/pdf;base64,JVBERi0..."); strip the prefix if present.
+        String rawBase64 = base64Content;
+        int commaIndex = base64Content.indexOf(',');
+        if (base64Content.startsWith("data:") && commaIndex != -1) {
+            rawBase64 = base64Content.substring(commaIndex + 1);
+        }
+        try {
+            return java.util.Base64.getDecoder().decode(rawBase64);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    // Older documents (saved before fileType/documentName were captured on upload) have
+    // neither column populated - fall back to the data URI prefix, then to sniffing the
+    // decoded bytes' signature, so downloads still come back with a real content type and a
+    // filename extension the OS/frontend can recognize instead of e.g. "10th_marksheet" with
+    // no extension at all.
+    private String resolveMimeType(Document document, byte[] bytes) {
+        String mimeType = document.getFileType();
+        if (mimeType == null || mimeType.isBlank()) {
+            mimeType = extractDataUriMimeType(document.getBase64Content());
+        }
+        if ((mimeType == null || mimeType.isBlank()) && bytes != null) {
+            mimeType = sniffMimeType(bytes);
+        }
+        return mimeType;
+    }
+
+    private String resolveFileName(Document document, String mimeType) {
+        String fileName = document.getDocumentName() != null && !document.getDocumentName().isBlank()
+                ? document.getDocumentName()
+                : (document.getDocumentType() != null ? document.getDocumentType() : ("document-" + document.getId()));
+        if (!hasFileExtension(fileName) && mimeType != null) {
+            String extension = DOCUMENT_MIME_TO_EXTENSION.get(mimeType.toLowerCase());
+            if (extension != null) {
+                fileName = fileName + extension;
+            }
+        }
+        return fileName;
+    }
+
+    private boolean hasFileExtension(String fileName) {
+        int dotIndex = fileName.lastIndexOf('.');
+        return dotIndex > 0 && dotIndex < fileName.length() - 1;
+    }
+
+    /** Identifies a file type from its magic bytes when no fileType/data-URI mime is stored. */
+    private String sniffMimeType(byte[] bytes) {
+        if (bytes.length >= 4 && bytes[0] == 0x25 && bytes[1] == 0x50 && bytes[2] == 0x44 && bytes[3] == 0x46) {
+            return "application/pdf"; // "%PDF"
+        }
+        if (bytes.length >= 4 && (bytes[0] & 0xFF) == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47) {
+            return "image/png";
+        }
+        if (bytes.length >= 3 && (bytes[0] & 0xFF) == 0xFF && (bytes[1] & 0xFF) == 0xD8 && (bytes[2] & 0xFF) == 0xFF) {
+            return "image/jpeg";
+        }
+        if (bytes.length >= 4 && bytes[0] == 'G' && bytes[1] == 'I' && bytes[2] == 'F' && bytes[3] == '8') {
+            return "image/gif";
+        }
+        return null;
     }
 
     @Transactional
@@ -434,6 +620,7 @@ public class StudentService {
             response.setNotes(student.getNotes());
             response.setCourseName(student.getCourseName());
             response.setIntakePeriod(student.getIntakePeriod());
+            response.setSource(student.getSource());
             response.setStatus(student.getStatus().name());
             response.setCreatedAt(student.getCreatedAt() != null ? student.getCreatedAt().toString() : null);
             response.setCreatedBy(student.getCreatedBy());
@@ -670,7 +857,8 @@ public class StudentService {
         student.setNotes(request.getNotes());
         student.setCourseName(request.getCourseName());
         student.setIntakePeriod(request.getIntakePeriod());
-        
+        student.setSource(request.getSource());
+
         // Save student first
         student = studentRepository.save(student);
         
@@ -687,14 +875,7 @@ public class StudentService {
 
         // Save documents
         if (request.getDocuments() != null && !request.getDocuments().isEmpty()) {
-            for (Map.Entry<String, String> entry : request.getDocuments().entrySet()) {
-                Document document = new Document();
-                document.setStudent(student);
-                document.setDocumentType(entry.getKey());
-                document.setBase64Content(entry.getValue());
-                document.setCreatedBy(currentUser.getId());
-                documentRepository.save(document);
-            }
+            saveDocuments(student, request.getDocuments(), currentUser.getId());
         }
         
         // Auto-create payment record for REFERRAL and COMPANY roles
@@ -811,6 +992,7 @@ public class StudentService {
         student.setNotes(request.getNotes());
         student.setCourseName(request.getCourseName());
         student.setIntakePeriod(request.getIntakePeriod());
+        student.setSource(request.getSource());
         student.setUpdatedBy(currentUser.getId());
         
         // Handle assignedToId if provided
@@ -820,21 +1002,20 @@ public class StudentService {
             student.setAssignedBy(assignedToUser);
         }
         
-        // Update academic history - remove existing and add new
-        studentAcademicHistoryRepository.deleteByStudentId(student.getId());
-        saveAcademicHistory(student, request.getAcademicHistory(), currentUser.getId());
-        
-        // Update documents - remove existing and add new
-        documentRepository.deleteByStudentId(student.getId());
-        if (request.getDocuments() != null && !request.getDocuments().isEmpty()) {
-            for (Map.Entry<String, String> entry : request.getDocuments().entrySet()) {
-                Document document = new Document();
-                document.setStudent(student);
-                document.setDocumentType(entry.getKey());
-                document.setBase64Content(entry.getValue());
-                document.setCreatedBy(currentUser.getId());
-                documentRepository.save(document);
-            }
+        // Update academic history - only touch it when the caller actually sends
+        // academicHistory; omitting it from an update payload (e.g. a status-only or
+        // documents-only edit) must not wipe out history saved by an earlier request.
+        if (request.getAcademicHistory() != null) {
+            studentAcademicHistoryRepository.deleteByStudentId(student.getId());
+            saveAcademicHistory(student, request.getAcademicHistory(), currentUser.getId());
+        }
+
+        // Update documents - same rule: only replace them when the request explicitly
+        // carries a documents map. Previously this deleted unconditionally on every update,
+        // so any edit that didn't resend documents silently deleted them for good.
+        if (request.getDocuments() != null) {
+            documentRepository.deleteByStudentId(student.getId());
+            saveDocuments(student, request.getDocuments(), currentUser.getId());
         }
         
         Student savedStudent = studentRepository.save(student);
@@ -890,25 +1071,25 @@ public class StudentService {
     }
 
     private void saveAcademicHistory(Student student,
-                                     StudentOnboardingRequest.AcademicHistoryWrapper wrapper,
+                                     List<StudentOnboardingRequest.AcademicEntry> entries,
                                      Long createdBy) {
-        if (wrapper == null) return;
-        if (wrapper.getTenth() != null) {
-            saveAcademicEntry(student, "10th", wrapper.getTenth(), createdBy);
-        }
-        if (wrapper.getTwelfth() != null) {
-            saveAcademicEntry(student, "12th", wrapper.getTwelfth(), createdBy);
+        if (entries == null) return;
+        for (StudentOnboardingRequest.AcademicEntry entry : entries) {
+            if (entry == null) continue;
+            saveAcademicEntry(student, entry, createdBy);
         }
     }
 
-    private void saveAcademicEntry(Student student, String qualification,
+    private void saveAcademicEntry(Student student,
                                    StudentOnboardingRequest.AcademicEntry entry, Long createdBy) {
         StudentAcademicHistory record = new StudentAcademicHistory();
         record.setStudent(student);
-        record.setQualification(qualification);
-        record.setInstitutionName(entry.getInstitution());
-        record.setPassingYear(entry.getYear());
+        record.setQualification(entry.getQualification());
+        record.setInstitutionName(entry.getInstitutionName());
+        record.setBoardUniversity(entry.getBoardUniversity());
+        record.setPassingYear(entry.getPassingYear());
         record.setScore(entry.getScore());
+        record.setStream(entry.getStream());
         record.setCreatedBy(createdBy);
         studentAcademicHistoryRepository.save(record);
     }

@@ -70,4 +70,8 @@ public class StudentWithStudentPaymentDto {
         this.paymentCreatedAt = paymentCreatedAt;
         this.approvalStatus = approvalStatus;
     }
+
+    public String getStatusDisplayName() {
+        return status != null ? status.getDisplayName() : null;
+    }
 }

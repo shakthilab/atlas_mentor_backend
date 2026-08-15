@@ -6,6 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @NoArgsConstructor
@@ -21,8 +22,10 @@ public class StudentResponse {
     private String notes;
     private String courseName;
     private String intakePeriod;
+    private String source;
     private StudentStatus status;
-    
+    private String statusDisplayName;
+
     // Branch information - simplified to avoid circular references
     private Long branchId;
     private String branchName;
@@ -53,14 +56,22 @@ public class StudentResponse {
     // Assigned by information
     private Long assignedById;
     private String assignedByName;
-    
+
+    // Document metadata (id, name, type) - no file bytes; use the download endpoint per doc
+    private List<DocumentResponse> documents;
+
+    // Academic history (10th/12th/Bachelor's/etc.)
+    private List<AcademicHistoryResponse> academicHistory;
+
     public static StudentResponse fromEntity(com.lab.atlasmentor.model.Student student) {
         StudentResponse response = new StudentResponse();
         response.setId(student.getId());
         response.setCourseName(student.getCourseName());
         response.setIntakePeriod(student.getIntakePeriod());
+        response.setSource(student.getSource());
         response.setNotes(student.getNotes());
         response.setStatus(student.getStatus());
+        response.setStatusDisplayName(student.getStatus() != null ? student.getStatus().getDisplayName() : null);
         response.setCreatedAt(student.getCreatedAt());
         response.setUpdatedAt(student.getUpdatedAt());
         response.setCreatedBy(student.getCreatedBy());
