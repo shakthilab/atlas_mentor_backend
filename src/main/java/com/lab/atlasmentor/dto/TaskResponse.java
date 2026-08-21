@@ -19,6 +19,8 @@ public class TaskResponse {
     private String assignerName;
     private LocalDate dueDate;
     private LocalDateTime dueTime;
+    /** When this task was actually marked DONE (V23) - independent of dueDate, which never changes. Null until then. */
+    private LocalDateTime completedAt;
     private LocalDate executionDate;
     private TaskSource sourceType;
     private String branchName;

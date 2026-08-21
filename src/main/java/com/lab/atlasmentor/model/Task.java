@@ -182,6 +182,18 @@ public class Task extends BaseEntity {
     @Column(name = "next_step", length = 40)
     private String nextStep;
 
+    // ---- Overdue rollover / completion tracking (V23) ----
+
+    /**
+     * The exact moment this task's status became DONE - set once, in
+     * {@link com.lab.atlasmentor.service.TaskService#updateTaskStatus}, regardless of how many
+     * days past {@link #dueDate} that happens. Independent of dueDate/dayWorkspace (neither of
+     * which ever change once a task is created) - this is purely "when was it actually
+     * finished," e.g. "originally due Aug 16, actually completed Aug 18." Null until then.
+     */
+    @Column(name = "completed_at")
+    private LocalDateTime completedAt;
+
     public Task() {}
 
     public Task(String title, String description, User assignedTo, User assignedBy, User createdByUser, Priority priority, LocalDate dueDate, Branch branch) {

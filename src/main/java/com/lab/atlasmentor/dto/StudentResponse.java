@@ -1,6 +1,9 @@
 package com.lab.atlasmentor.dto;
 
 import com.lab.atlasmentor.enums.StudentStatus;
+import com.lab.atlasmentor.enums.LeadPriority;
+import com.lab.atlasmentor.enums.LeadPrioritySubCategory;
+import com.lab.atlasmentor.enums.LeadBackground;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
@@ -63,6 +66,14 @@ public class StudentResponse {
     // Academic history (10th/12th/Bachelor's/etc.)
     private List<AcademicHistoryResponse> academicHistory;
 
+    // Lead priority classification (framework doc) - all optional
+    private LeadPriority priority;
+    private String priorityDisplayName;
+    private LeadPrioritySubCategory prioritySubCategory;
+    private String prioritySubCategoryDisplayName;
+    private LeadBackground background;
+    private String backgroundDisplayName;
+
     public static StudentResponse fromEntity(com.lab.atlasmentor.model.Student student) {
         StudentResponse response = new StudentResponse();
         response.setId(student.getId());
@@ -76,7 +87,14 @@ public class StudentResponse {
         response.setUpdatedAt(student.getUpdatedAt());
         response.setCreatedBy(student.getCreatedBy());
         response.setUpdatedBy(student.getUpdatedBy());
-        
+        response.setPriority(student.getPriority());
+        response.setPriorityDisplayName(student.getPriority() != null ? student.getPriority().getDisplayLabel() : null);
+        response.setPrioritySubCategory(student.getPrioritySubCategory());
+        response.setPrioritySubCategoryDisplayName(
+                student.getPrioritySubCategory() != null ? student.getPrioritySubCategory().getLabel() : null);
+        response.setBackground(student.getBackground());
+        response.setBackgroundDisplayName(student.getBackground() != null ? student.getBackground().getDisplayLabel() : null);
+
         // User information
         if (student.getUser() != null) {
             response.setUserId(student.getUser().getId());

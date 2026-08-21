@@ -148,6 +148,19 @@ public class TaskService {
         task.setStatus(newStatus);
         task.setUpdatedBy(updatedBy.getId());
 
+        // completed_at (V23, Overdue Task Rollover spec): a direct, queryable "when was this
+        // actually done" - independent of due_date, which never moves. Stamped the moment
+        // status first becomes DONE/COMPLETED, however many days past due_date that is;
+        // cleared if an ADMIN override later moves it back off a completed state (the only
+        // way that's reachable - validateStatusTransition blocks it for everyone else).
+        boolean wasDone = oldStatus == TaskStatus.DONE || oldStatus == TaskStatus.COMPLETED;
+        boolean isDone = newStatus == TaskStatus.DONE || newStatus == TaskStatus.COMPLETED;
+        if (isDone && !wasDone) {
+            task.setCompletedAt(LocalDateTime.now());
+        } else if (wasDone && !isDone) {
+            task.setCompletedAt(null);
+        }
+
         Task savedTask = taskRepository.save(task);
 
         // Create activity log
@@ -195,6 +208,14 @@ public class TaskService {
 
         TaskStatus restoredStatus = parseTaskStatusOrDefault(task.getReflectPreviousStatus(), TaskStatus.IN_PROGRESS);
         String owningStage = task.getReflectStage();
+
+        // completed_at (V23): the employee is re-claiming "done" right now, having just fixed
+        // what the reviewer flagged - restoredStatus can legitimately be DONE/COMPLETED
+        // (sendBackTasks captures whatever status the task was in when flagged). Mirrors
+        // updateTaskStatus's own stamping of this column.
+        if (restoredStatus == TaskStatus.DONE || restoredStatus == TaskStatus.COMPLETED) {
+            task.setCompletedAt(LocalDateTime.now());
+        }
 
         task.setStatus(restoredStatus);
         task.setReflectState("RESUBMITTED");
@@ -1095,6 +1116,7 @@ public class TaskService {
         response.setAssignerName(task.getAssignedBy() != null ? task.getAssignedBy().getFullName() : null);
         response.setDueDate(task.getDueDate());
         response.setDueTime(task.getDueTime());
+        response.setCompletedAt(task.getCompletedAt());
         response.setExecutionDate(task.getExecutionDate());
         response.setSourceType(task.getSourceType());
         response.setBranchName(task.getBranch() != null ? task.getBranch().getName() : null);
@@ -1329,21 +1351,36 @@ public class TaskService {
      * Rules:
      * - Terminal states (DONE/COMPLETED/VERIFIED) cannot be modified by non-admins.
      * - REFLECT cannot be set directly by an employee - only by the approval workflow.
-     * - VERIFIED cannot be set directly by anyone through this method (ADMIN override
-     *   aside) - only DayApprovalService#approveDayLevel stamps it.
-     * - ADMIN can override any transition.
+     * - VERIFIED cannot be set directly through this method by ANYONE, including ADMIN -
+     *   only DayApprovalService#approveDayLevel's cascade stamps it, and only once the day
+     *   itself has reached ADMIN_VERIFIED. No override here, unlike every other rule below -
+     *   otherwise ADMIN's blanket bypass would let this endpoint verify a task whose day was
+     *   never reviewed at all.
+     * - ADMIN can override any other transition.
      */
     private void validateStatusTransition(TaskStatus oldStatus, TaskStatus newStatus, String userRole) {
         log.info("Validating status transition: {} → {} by user role: {}", oldStatus, newStatus, userRole);
 
-        // Admin can override any transition
-        if ("ADMIN".equals(userRole.toUpperCase())) {
-            log.info("ADMIN overriding status transition: {} → {}", oldStatus, newStatus);
+        // Allow same status (no change) - checked first, before the VERIFIED guard below, so
+        // an idempotent PATCH re-affirming an already-VERIFIED task's current status stays a
+        // harmless no-op rather than tripping it.
+        if (oldStatus == newStatus) {
             return;
         }
 
-        // Allow same status (no change)
-        if (oldStatus == newStatus) {
+        // VERIFIED has exactly one door - DayApprovalService#approveDayLevel's cascade, run
+        // only once the day itself reaches ADMIN_VERIFIED - and no exceptions, not even
+        // ADMIN's usual override below. Checked before that override so it can never be
+        // skipped: without this, ADMIN could stamp VERIFIED on any DONE task through this
+        // employee-facing endpoint regardless of whether the day was ever reviewed.
+        if (newStatus == TaskStatus.VERIFIED) {
+            throw new InvalidStatusTransitionException(
+                    "VERIFIED can only be stamped by the day-approval cascade when Admin approves the day, not set directly");
+        }
+
+        // Admin can override any other transition
+        if ("ADMIN".equals(userRole.toUpperCase())) {
+            log.info("ADMIN overriding status transition: {} → {}", oldStatus, newStatus);
             return;
         }
 

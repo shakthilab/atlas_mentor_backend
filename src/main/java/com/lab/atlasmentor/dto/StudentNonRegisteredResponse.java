@@ -1,5 +1,8 @@
 package com.lab.atlasmentor.dto;
 
+import com.lab.atlasmentor.enums.LeadPriority;
+import com.lab.atlasmentor.enums.LeadPrioritySubCategory;
+import com.lab.atlasmentor.enums.LeadBackground;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
@@ -14,7 +17,15 @@ public class StudentNonRegisteredResponse {
     private String intakePeriod;
     private String source;
     private String status;
-    
+
+    // Lead priority classification (framework doc) - all optional
+    private LeadPriority priority;
+    private String priorityDisplayName;
+    private LeadPrioritySubCategory prioritySubCategory;
+    private String prioritySubCategoryDisplayName;
+    private LeadBackground background;
+    private String backgroundDisplayName;
+
     // Branch information
     private Long branchId;
     private String branchName;

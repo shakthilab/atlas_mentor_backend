@@ -13,6 +13,7 @@ import com.lab.atlasmentor.enums.SourceType;
 import com.lab.atlasmentor.enums.StudentPaymentStatus;
 import com.lab.atlasmentor.enums.ApprovalStatus;
 import com.lab.atlasmentor.enums.ClientPayoutStatus;
+import com.lab.atlasmentor.enums.LeadPrioritySubCategory;
 import com.lab.atlasmentor.security.SecurityUtils;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -625,7 +626,14 @@ public class StudentService {
             response.setCreatedAt(student.getCreatedAt() != null ? student.getCreatedAt().toString() : null);
             response.setCreatedBy(student.getCreatedBy());
             response.setUpdatedBy(student.getUpdatedBy());
-            
+            response.setPriority(student.getPriority());
+            response.setPriorityDisplayName(student.getPriority() != null ? student.getPriority().getDisplayLabel() : null);
+            response.setPrioritySubCategory(student.getPrioritySubCategory());
+            response.setPrioritySubCategoryDisplayName(
+                    student.getPrioritySubCategory() != null ? student.getPrioritySubCategory().getLabel() : null);
+            response.setBackground(student.getBackground());
+            response.setBackgroundDisplayName(student.getBackground() != null ? student.getBackground().getDisplayLabel() : null);
+
             // Mobile country code (get from user since it's now stored in User entity)
             if (student.getUser() != null && student.getUser().getMobileCountryCode() != null) {
                 response.setMobileCountryCode(new MobileCountryCodeDto(
@@ -800,9 +808,27 @@ public class StudentService {
         return updateStudentData(student, request, currentUser);
     }
 
+    /**
+     * priority/prioritySubCategory/background are all optional — a lead can be created or
+     * edited without being classified. The one rule enforced here: when prioritySubCategory
+     * is set, it must belong to the priority tier submitted alongside it (e.g. priority=P1
+     * with prioritySubCategory=WARM_LEADS, which is a P2 subcategory, is rejected). The
+     * tier/subcategory mapping itself lives in LeadPrioritySubCategory — this is the one call
+     * site for the manual create/edit path; LeadImportService applies the same check
+     * (LeadPrioritySubCategory.requireBelongsToTier) to each import row.
+     */
+    private void validateLeadClassification(StudentOnboardingRequest request) {
+        try {
+            LeadPrioritySubCategory.requireBelongsToTier(request.getPrioritySubCategory(), request.getPriority());
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(e.getMessage());
+        }
+    }
+
     private Student createNewStudent(StudentOnboardingRequest request, User currentUser, CustomUserDetails currentUserDetails) {
         // No email validation for student creation - users with rights can create students without email
-        
+        validateLeadClassification(request);
+
         // Generate random password
         String generatedPassword = generateRandomPassword();
         
@@ -858,6 +884,9 @@ public class StudentService {
         student.setCourseName(request.getCourseName());
         student.setIntakePeriod(request.getIntakePeriod());
         student.setSource(request.getSource());
+        student.setPriority(request.getPriority());
+        student.setPrioritySubCategory(request.getPrioritySubCategory());
+        student.setBackground(request.getBackground());
 
         // Save student first
         student = studentRepository.save(student);
@@ -929,6 +958,7 @@ public class StudentService {
     }
 
     private Student updateStudentData(Student student, StudentOnboardingRequest request, User currentUser) {
+        validateLeadClassification(request);
         String newEmail = normalizeEmail(request.getEmail());
         String credentialsEmail = null;
         String credentialsPassword = null;
@@ -993,6 +1023,9 @@ public class StudentService {
         student.setCourseName(request.getCourseName());
         student.setIntakePeriod(request.getIntakePeriod());
         student.setSource(request.getSource());
+        student.setPriority(request.getPriority());
+        student.setPrioritySubCategory(request.getPrioritySubCategory());
+        student.setBackground(request.getBackground());
         student.setUpdatedBy(currentUser.getId());
         
         // Handle assignedToId if provided

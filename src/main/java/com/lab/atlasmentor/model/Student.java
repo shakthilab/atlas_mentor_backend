@@ -7,6 +7,9 @@ import lombok.EqualsAndHashCode;
 import com.lab.atlasmentor.enums.StudentStatus;
 import com.lab.atlasmentor.enums.StudentStatusEnhanced;
 import com.lab.atlasmentor.enums.SourceType;
+import com.lab.atlasmentor.enums.LeadPriority;
+import com.lab.atlasmentor.enums.LeadPrioritySubCategory;
+import com.lab.atlasmentor.enums.LeadBackground;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import java.time.LocalDateTime;
@@ -19,7 +22,8 @@ import java.time.LocalDateTime;
            @Index(name = "idx_students_assigned_by_id", columnList = "assignedBy_id"),
            @Index(name = "idx_students_status", columnList = "status"),
            @Index(name = "idx_students_enhanced_status", columnList = "enhanced_status"),
-           @Index(name = "idx_students_source", columnList = "source_type, source_id")
+           @Index(name = "idx_students_source", columnList = "source_type, source_id"),
+           @Index(name = "idx_students_priority", columnList = "priority")
        })
 @Data
 @EqualsAndHashCode(callSuper = true)
@@ -108,7 +112,23 @@ public class Student extends BaseEntity {
 
     @Column(name = "lost_reason", columnDefinition = "TEXT")
     private String lostReason;
-    
+
+    // Lead priority classification (framework doc: P1/P2/P3 tier + tier-specific subcategory)
+    // and background (Educated/Less Educated). All optional — a lead can exist without being
+    // classified yet. See LeadPriority/LeadPrioritySubCategory/LeadBackground for the shared
+    // field definitions used here, in validation, the import template, and both import parsers.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "priority")
+    private LeadPriority priority;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "priority_sub_category")
+    private LeadPrioritySubCategory prioritySubCategory;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "background")
+    private LeadBackground background;
+
     public Student() {}
 
     

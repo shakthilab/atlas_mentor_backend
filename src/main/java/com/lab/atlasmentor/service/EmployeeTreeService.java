@@ -195,6 +195,24 @@ public class EmployeeTreeService {
         User employee = workspace.getEmployee();
         List<Task> dayTasks = taskRepository.findByDayWorkspaceId(workspace.getId());
 
+        // Overdue Task Rollover (V23): "today's" task list is the UNION of this day's own
+        // tasks with every still-open OVERDUE task for this employee, regardless of which
+        // earlier day it actually belongs to - so a task keeps showing up day after day until
+        // it's completed, without ever touching its due_date/day_workspace_id. Only applied
+        // when the requested day IS today: browsing a past day in the Employee Tree should
+        // still show exactly that day's own historical tasks, not retroactively pick up
+        // carry-forward tasks that only started rolling after the fact.
+        List<Task> displayTasks = dayTasks;
+        if (date.equals(LocalDate.now())) {
+            List<Task> carriedOver = taskRepository.findCarriedOverOverdueByAssignee(employeeId).stream()
+                    .filter(t -> t.getDayWorkspace() == null || !t.getDayWorkspace().getId().equals(workspace.getId()))
+                    .toList();
+            if (!carriedOver.isEmpty()) {
+                displayTasks = new ArrayList<>(dayTasks);
+                displayTasks.addAll(carriedOver);
+            }
+        }
+
         LocalDate weekStart = date.with(DayOfWeek.MONDAY);
         LocalDate weekEnd = date.with(DayOfWeek.SUNDAY);
         LocalDate monthStart = date.withDayOfMonth(1);
@@ -216,17 +234,22 @@ public class EmployeeTreeService {
         String nextActionRole = DayApprovalService.nextActionRole(workspace.getApprovalStage());
         response.setNextActionRole(nextActionRole);
         String currentUserRole = SecurityUtils.getCurrentUserRole();
-        boolean canAct = nextActionRole != null
-                && ("ADMIN".equalsIgnoreCase(currentUserRole) || nextActionRole.equalsIgnoreCase(currentUserRole));
+        // Not just "does currentUserRole match nextActionRole" - Branch Partner review is
+        // optional, so a day at COMPLETED is actionable by BOTH BRANCH_PARTNER and MANAGER
+        // (see DayApprovalService#canRoleAct), which a single nextActionRole string can't
+        // express on its own.
+        boolean canAct = DayApprovalService.canRoleAct(workspace.getApprovalStage(), currentUserRole);
         response.setCanCurrentUserAct(canAct);
         response.setDailyCompletionPct(computeCompletionPct(dayTasks));
         response.setWeeklyCompletionPct(computeCompletionPctForRange(employeeId, weekStart, weekEnd));
         response.setMonthlyCompletionPct(computeCompletionPctForRange(employeeId, monthStart, monthEnd));
-        response.setTasks(dayTasks.stream().map(this::toDayTaskSummary).collect(Collectors.toList()));
+        response.setTasks(displayTasks.stream()
+                .map(t -> toDayTaskSummary(t, workspace.getId()))
+                .collect(Collectors.toList()));
         return response;
     }
 
-    private DayDetailResponse.DayTaskSummaryResponse toDayTaskSummary(Task task) {
+    private DayDetailResponse.DayTaskSummaryResponse toDayTaskSummary(Task task, Long requestedWorkspaceId) {
         DayDetailResponse.DayTaskSummaryResponse summary = new DayDetailResponse.DayTaskSummaryResponse();
         summary.setId(task.getId());
         summary.setDisplayId(task.getDisplayId());
@@ -235,6 +258,16 @@ public class EmployeeTreeService {
         summary.setStatus(task.getStatus());
         summary.setCurrentStep(task.getCurrentStep());
         summary.setNextStep(task.getNextStep());
+        summary.setDueDate(task.getDueDate());
+        summary.setCompletedAt(task.getCompletedAt());
+
+        DayWorkspace taskWorkspace = task.getDayWorkspace();
+        boolean carriedOver = taskWorkspace == null || !taskWorkspace.getId().equals(requestedWorkspaceId);
+        summary.setCarriedOver(carriedOver);
+        if (taskWorkspace != null) {
+            summary.setOriginalWorkDate(taskWorkspace.getWorkDate());
+            summary.setOriginalDayNumber(taskWorkspace.getDayNumberInMonth());
+        }
 
         List<TaskComment> comments = taskCommentRepository.findByTaskIdOrderByCreatedAtDesc(task.getId());
         if (!comments.isEmpty()) {

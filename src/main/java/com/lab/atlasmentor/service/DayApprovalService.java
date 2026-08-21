@@ -22,20 +22,28 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Part E - the three-stage Day Approval Workflow: Branch Partner → Branch Manager → Admin,
- * fixed order, enforced by day_workspaces.approval_stage (see V7/V8 migrations, which already
- * define the pipeline this class implements):
+ * Part E - the Day Approval Workflow: Branch Partner (optional) → Branch Manager (mandatory) →
+ * Admin (mandatory), enforced by day_workspaces.approval_stage (see V7/V8 migrations, which
+ * already define the pipeline this class implements):
  *
  * <pre>
  * EMPLOYEE --(Submit Day, DayWorkspaceService)--&gt; COMPLETED
- *   COMPLETED        --(Branch Partner APPROVE)--&gt; PARTNER_REVIEW
+ *   COMPLETED        --(Branch Partner APPROVE, optional)--&gt; PARTNER_REVIEW
+ *   COMPLETED        --(Branch Manager APPROVE, Partner skipped)--&gt; MANAGER_REVIEW
  *   PARTNER_REVIEW    --(Branch Manager APPROVE)--&gt; MANAGER_REVIEW
  *   MANAGER_REVIEW     --(Admin APPROVE)--&gt;         ADMIN_VERIFIED   (final / "Verified")
  * </pre>
  *
- * Each of those three approve transitions is gated by exactly one role (stage ownership -
- * see {@link #requiredRoleFor}); ADMIN may additionally act at any non-terminal stage as an
- * override, consistent with the ADMIN-override pattern already used in TaskService.
+ * Branch Partner review is optional: they may approve a day sitting at COMPLETED (advancing it
+ * to PARTNER_REVIEW), or do nothing at all. Either way Branch Manager approval is mandatory -
+ * Manager is authorized to act on a day at COMPLETED (Partner skipped) or PARTNER_REVIEW
+ * (Partner already acted); both land the day at MANAGER_REVIEW (see {@link #isAuthorizedEntryRole}
+ * for the entry-stage ownership this widens). Whether Branch Partner actually reviewed a given
+ * day is always recoverable after the fact from day_approvals - simply check whether a
+ * PARTNER_REVIEW-stage entry exists in that day's trail (see {@link #getApprovalHistory}); no
+ * separate flag is needed. Admin remains mandatory and final, unchanged; ADMIN may additionally
+ * act at any non-terminal stage as an override, consistent with the ADMIN-override pattern
+ * already used in TaskService.
  *
  * <p><b>Send-back / rework (V12)</b> is a deliberately separate concern from the day-level
  * pipeline above. A day already sitting at ADMIN_VERIFIED from yesterday must still be
@@ -91,14 +99,14 @@ public class DayApprovalService {
         var currentUser = SecurityUtils.getCurrentUser();
         String role = currentUser.getRole();
         String reviewStage = resolveReviewStage(role, requestedStage);
-        String targetApprovalStage = approvalStageAwaitingReviewStage(reviewStage);
+        List<String> targetApprovalStages = approvalStagesAwaitingReviewStage(reviewStage);
 
         List<DayWorkspace> pending;
         if ("ADMIN".equalsIgnoreCase(role)) {
-            pending = dayWorkspaceRepository.findByApprovalStageOrderByWorkDateAsc(targetApprovalStage);
+            pending = dayWorkspaceRepository.findByApprovalStageInOrderByWorkDateAsc(targetApprovalStages);
         } else {
             Long branchId = requireBranch(currentUser);
-            pending = dayWorkspaceRepository.findByApprovalStageAndBranchIdOrderByWorkDateAsc(targetApprovalStage, branchId);
+            pending = dayWorkspaceRepository.findByApprovalStageInAndBranchIdOrderByWorkDateAsc(targetApprovalStages, branchId);
         }
 
         return pending.stream().map(this::toPendingApprovalResponse).collect(Collectors.toList());
@@ -207,43 +215,79 @@ public class DayApprovalService {
         }
     }
 
-    /** The normal day-level pipeline advance (Part E) - strict current-stage ownership, unchanged. */
+    /**
+     * The normal day-level pipeline advance (Part E). Stage ownership: Branch Partner review is
+     * optional, so COMPLETED accepts either BRANCH_PARTNER or MANAGER (see
+     * {@link #isAuthorizedEntryRole}); the resulting approval_stage is always the acting role's
+     * own review stage - not necessarily "the stage that owns the current one" - so a Manager
+     * acting on COMPLETED (Partner skipped) lands the day on MANAGER_REVIEW directly, same
+     * destination as when they act on PARTNER_REVIEW (Partner already approved).
+     */
     private void approveDayLevel(DayWorkspace workspace, DayApprovalActionRequest request, User approver, String role) {
         String currentStage = workspace.getApprovalStage();
+        boolean isAdmin = "ADMIN".equalsIgnoreCase(role);
+
+        // Re-approval of an already-fully-approved day: a no-op stage-wise, but re-runs the
+        // verification sweep below. This is the ONLY way a task's status ever moves from
+        // DONE to VERIFIED (see verifyEligibleTasks) - so a task that turned DONE, or had its
+        // reflect cycle resolved (see approveResubmittedTasks), after the day already reached
+        // ADMIN_VERIFIED stays parked at DONE until ADMIN re-approves the day to pick it up.
+        // ADMIN-only: non-admins have no standing stage left to act from once the day is final.
+        if (isAdmin && STAGE_ADMIN_VERIFIED.equals(currentStage)) {
+            workspace.setUpdatedBy(approver.getId());
+            dayWorkspaceRepository.save(workspace);
+            saveDayApproval(workspace, approver, STAGE_ADMIN_VERIFIED, ACTION_APPROVE, request.getComment());
+            verifyEligibleTasks(workspace, approver);
+            log.info("Day {} re-approved at ADMIN_VERIFIED by user {} - re-swept tasks for late completions",
+                    workspace.getId(), approver.getId());
+            return;
+        }
+
         String reviewStage = reviewStageOwningApprovalStage(currentStage);
         if (reviewStage == null) {
             throw new BusinessException("This day is not currently awaiting review (stage: " + currentStage + ")");
         }
-        String requiredRole = requiredRoleFor(reviewStage);
-        if (!"ADMIN".equalsIgnoreCase(role) && !requiredRole.equalsIgnoreCase(role)) {
+        if (!isAdmin && !isAuthorizedEntryRole(currentStage, role)) {
+            String requiredRole = requiredRoleFor(reviewStage);
             throw new UnauthorizedAccessException(role + " cannot act at the " + reviewStage + " stage (owned by " + requiredRole + ")");
         }
-        String actingStageLabel = "ADMIN".equalsIgnoreCase(role) ? reviewStage : requiredRoleReviewStage(role);
+        // ADMIN overriding takes the same destination the normal owner of this currentStage
+        // would have produced; a non-ADMIN acting always lands on their own review stage
+        // (which is what makes Manager-from-COMPLETED and Manager-from-PARTNER_REVIEW both
+        // resolve to MANAGER_REVIEW).
+        String actingStageLabel = isAdmin ? reviewStage : requiredRoleReviewStage(role);
 
-        // The review-stage label a reviewer owns IS the resulting approval_stage value once
-        // they approve (PARTNER_REVIEW/MANAGER_REVIEW/ADMIN_VERIFIED name "this stage's
-        // review is done", per the V7/V8 pipeline - see the class javadoc).
-        workspace.setApprovalStage(reviewStage);
+        workspace.setApprovalStage(actingStageLabel);
         workspace.setUpdatedBy(approver.getId());
         dayWorkspaceRepository.save(workspace);
         refreshStepLabelsForDay(workspace);
 
         saveDayApproval(workspace, approver, actingStageLabel, ACTION_APPROVE, request.getComment());
         log.info("Day {} approved at {} stage by user {} ({}) - advanced to {}",
-                workspace.getId(), actingStageLabel, approver.getId(), role, reviewStage);
+                workspace.getId(), actingStageLabel, approver.getId(), role, actingStageLabel);
 
-        // Final stage: the whole review chain (Partner -> Manager -> Admin) has now signed
-        // off on this day. Every task that's DONE/COMPLETED and not sitting mid its own
-        // separate re-review cycle (reflectState != null - see sendBackTasks/resubmitTask,
-        // V12) graduates to VERIFIED, the terminal "no more changes" state - see
-        // TaskStatus#VERIFIED. Tasks still awaiting re-review are left as-is; they'll be
-        // picked up the next time a day of theirs reaches ADMIN_VERIFIED, or individually
-        // once approveResubmittedTasks resolves them (that path doesn't touch status).
-        if (STAGE_ADMIN_VERIFIED.equals(reviewStage)) {
+        // Final stage: the whole review chain (Partner (if it happened) -> Manager -> Admin)
+        // has now signed off on this day. Every task that's DONE/COMPLETED and not sitting mid
+        // its own separate re-review cycle (reflectState != null - see sendBackTasks/
+        // resubmitTask, V12) graduates to VERIFIED, the terminal "no more changes" state (see
+        // TaskStatus#VERIFIED). A task still awaiting re-review is deliberately left at DONE -
+        // Admin's day-level approval is not a substitute for the flagging reviewer actually
+        // re-checking the fix. It's picked up once that reviewer resolves the reflect cycle
+        // (approveResubmittedTasks) and ADMIN re-approves the day (see approveDayLevel).
+        if (STAGE_ADMIN_VERIFIED.equals(actingStageLabel)) {
             verifyEligibleTasks(workspace, approver);
         }
     }
 
+    /**
+     * DONE/COMPLETED -> VERIFIED is a one-way door, and this is its only door: no other code
+     * path in the app may set TaskStatus.VERIFIED. Skips anything still mid its own reflect
+     * cycle (reflectState != null) - that task needs its flagging reviewer to resolve the
+     * cycle first (approveResubmittedTasks), then ADMIN to re-approve the day to pick it up
+     * here. Runs once when the day first reaches ADMIN_VERIFIED, and again any time ADMIN
+     * re-approves an already-verified day (see approveDayLevel) - the latter is what catches a
+     * task whose reflect cycle just closed, or simply wasn't DONE yet, on some earlier pass.
+     */
     private void verifyEligibleTasks(DayWorkspace workspace, User approver) {
         List<Task> dayTasks = taskRepository.findByDayWorkspaceId(workspace.getId());
         for (Task task : dayTasks) {
@@ -265,9 +309,16 @@ public class DayApprovalService {
     }
 
     /**
-     * Closes the reflect cycle on specific RESUBMITTED tasks (Part 5's "review item",
-     * resolved) - never touches day_workspaces.approval_stage, since the day's own pipeline
-     * position already advanced past this long ago.
+     * Closes the reflect cycle on specific RESUBMITTED tasks (Part 5's "review item", resolved
+     * by whichever stage originally flagged it). Only ever clears the reflect fields - never
+     * touches {@code task.status}. DONE -> VERIFIED has exactly one door, {@link
+     * #verifyEligibleTasks} (run from {@link #approveDayLevel} when ADMIN approves, or
+     * re-approves, the day) - so a task resolved here on a day that's already ADMIN_VERIFIED
+     * stays at DONE until ADMIN re-approves the day to sweep it up. (Previously this method
+     * also had a separate "late completion" branch that set VERIFIED directly for a task that
+     * simply wasn't DONE yet when the day's sweep ran; that's now redundant with - and would
+     * have violated - the single-door rule, since re-approving the day is a strictly simpler
+     * way to catch the exact same task up.)
      */
     private void approveResubmittedTasks(DayWorkspace workspace, DayApprovalActionRequest request, User approver, String role) {
         List<Task> dayTasks = taskRepository.findByDayWorkspaceId(workspace.getId());
@@ -291,22 +342,13 @@ public class DayApprovalService {
             task.setReflectResubmittedAt(null);
             task.setUpdatedBy(approver.getId());
 
-            // This task's own reflect cycle is now the only thing standing between it and
-            // VERIFIED. verifyEligibleTasks (approveDayLevel reaching ADMIN_VERIFIED) already
-            // swept every OTHER task on this day the day it happened - but skipped this one
-            // because reflectState wasn't null yet. If the day's pipeline had already finished
-            // (the SEND_BACK/resubmit cycle is deliberately independent of it - see class
-            // javadoc), that sweep will never run again for this day, so promote it here
-            // instead of leaving it stuck at DONE forever.
-            boolean isDone = task.getStatus() == TaskStatus.DONE || task.getStatus() == TaskStatus.COMPLETED;
-            boolean dayFullyApproved = STAGE_ADMIN_VERIFIED.equals(workspace.getApprovalStage());
-            if (isDone && dayFullyApproved) {
-                task.setStatus(TaskStatus.VERIFIED);
-            }
-            // Reflect cycle is closed (reflect fields cleared above) - fall back to wherever
-            // the day's own pipeline currently stands.
+            // Reflect cycle is closed - fall back to wherever the day's own pipeline currently
+            // stands (status itself is untouched; see javadoc above).
             applyStepLabels(task);
             taskRepository.save(task);
+
+            boolean dayFullyApproved = STAGE_ADMIN_VERIFIED.equals(workspace.getApprovalStage());
+            boolean isDone = task.getStatus() == TaskStatus.DONE || task.getStatus() == TaskStatus.COMPLETED;
 
             // No dedicated TaskAction for "re-review resolved" - reusing STATUS_CHANGED with
             // null old/new (TaskService#formatActivityMessage renders this as a plain
@@ -315,7 +357,8 @@ public class DayApprovalService {
             // turned out to be guarded by a DB-level CHECK constraint not mirrored in this
             // migrations folder (see V11) - a same-shaped surprise on task_activity.action
             // is exactly the kind of risk not worth taking for one cosmetic activity line.
-            String note = "resolved the re-review" + (isDone && dayFullyApproved ? " - Verified" : "")
+            String note = "resolved the re-review"
+                    + (isDone && dayFullyApproved ? " - awaiting Admin re-approval of the day to verify" : "")
                     + (request.getComment() != null && !request.getComment().isBlank()
                     ? " — " + request.getComment() : "");
             TaskActivity activity = new TaskActivity(task, TaskAction.STATUS_CHANGED, null, null, approver, note);
@@ -355,6 +398,11 @@ public class DayApprovalService {
 
             TaskStatus oldStatus = task.getStatus();
             task.setReflectPreviousStatus(oldStatus.name());
+            // completed_at (V23): flagged back to REFLECT means it's no longer actually done -
+            // resubmitTask restamps this once the employee fixes it and it's DONE again.
+            if (oldStatus == TaskStatus.DONE || oldStatus == TaskStatus.COMPLETED) {
+                task.setCompletedAt(null);
+            }
             task.setStatus(TaskStatus.REFLECT);
             task.setReflectState(REFLECT_FLAGGED);
             task.setReflectStage(actingStage);
@@ -618,6 +666,42 @@ public class DayApprovalService {
     }
 
     /**
+     * Non-ADMIN roles authorized to approve/send-back a day currently at
+     * {@code currentApprovalStage} - the stage-ownership check {@link #approveDayLevel} enforces.
+     * Branch Partner review is optional (see class javadoc): COMPLETED accepts BOTH
+     * BRANCH_PARTNER (the normal path) and MANAGER (Branch Partner skipped). PARTNER_REVIEW
+     * still requires MANAGER either way - Manager approval is always mandatory. MANAGER_REVIEW
+     * has no non-ADMIN owner (Admin's mandatory, final stage - reached only via the ADMIN
+     * override every stage already gets). ADMIN itself is handled by the caller before this is
+     * consulted, not listed here.
+     */
+    private static boolean isAuthorizedEntryRole(String currentApprovalStage, String role) {
+        return switch (currentApprovalStage) {
+            case STAGE_COMPLETED -> "BRANCH_PARTNER".equalsIgnoreCase(role) || "MANAGER".equalsIgnoreCase(role);
+            case STAGE_PARTNER_REVIEW -> "MANAGER".equalsIgnoreCase(role);
+            default -> false;
+        };
+    }
+
+    /**
+     * Whether {@code role} (ADMIN always may, as an override) is currently authorized to
+     * approve/send-back a day at {@code approvalStage} - mirrors the exact gating
+     * {@link #approveDayLevel} enforces, so callers like EmployeeTreeService#getDayDetail can
+     * size a "can I act on this" UI flag without duplicating the stage-ownership rules (and now
+     * that COMPLETED accepts either BRANCH_PARTNER or MANAGER, a single {@link #nextActionRole}
+     * string is no longer enough to answer this on its own).
+     */
+    public static boolean canRoleAct(String approvalStage, String role) {
+        if (approvalStage == null) {
+            return false;
+        }
+        if ("ADMIN".equalsIgnoreCase(role)) {
+            return reviewStageOwningApprovalStage(approvalStage) != null;
+        }
+        return isAuthorizedEntryRole(approvalStage, role);
+    }
+
+    /**
      * Role that owns the next approve/send-back action for a day at this {@code approvalStage},
      * or null if nothing is currently pending (not yet submitted - EMPLOYEE - or already fully
      * verified - ADMIN_VERIFIED). Mirrors the exact gating {@link #approveDayLevel} enforces,
@@ -630,17 +714,25 @@ public class DayApprovalService {
         return reviewStage == null ? null : requiredRoleFor(reviewStage);
     }
 
-    /** Which day_workspaces.approval_stage value a review-stage's first-time-review queue is filtered on. */
-    private String approvalStageAwaitingReviewStage(String reviewStage) {
+    /**
+     * Which day_workspaces.approval_stage value(s) a review-stage's first-time-review queue is
+     * filtered on. Branch Partner's queue is unchanged (COMPLETED only - what they may
+     * optionally review). Manager's queue now covers BOTH COMPLETED (Branch Partner hasn't
+     * acted - Manager may act directly, Partner review being optional) and PARTNER_REVIEW
+     * (Branch Partner already approved) - Manager needs visibility into everything they're
+     * authorized to act on, mirroring {@link #isAuthorizedEntryRole}. Admin's queue is
+     * unchanged (MANAGER_REVIEW only).
+     */
+    private List<String> approvalStagesAwaitingReviewStage(String reviewStage) {
         return switch (reviewStage) {
-            case STAGE_PARTNER_REVIEW -> STAGE_COMPLETED;
-            case STAGE_MANAGER_REVIEW -> STAGE_PARTNER_REVIEW;
-            case STAGE_ADMIN_VERIFIED -> STAGE_MANAGER_REVIEW;
+            case STAGE_PARTNER_REVIEW -> List.of(STAGE_COMPLETED);
+            case STAGE_MANAGER_REVIEW -> List.of(STAGE_COMPLETED, STAGE_PARTNER_REVIEW);
+            case STAGE_ADMIN_VERIFIED -> List.of(STAGE_MANAGER_REVIEW);
             default -> throw new BusinessException("Unknown review stage: " + reviewStage);
         };
     }
 
-    /** Inverse of {@link #approvalStageAwaitingReviewStage}: which review-stage owns a given current approval_stage. */
+    /** Inverse of {@link #approvalStagesAwaitingReviewStage}: which review-stage owns a given current approval_stage. */
     private static String reviewStageOwningApprovalStage(String currentApprovalStage) {
         return switch (currentApprovalStage) {
             case STAGE_COMPLETED -> STAGE_PARTNER_REVIEW;

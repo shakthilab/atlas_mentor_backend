@@ -103,7 +103,29 @@ public enum LeadImportField {
     SOURCE("Source", false,
             List.of("source", "lead source"),
             "Optional. Where the lead came from: Instagram, Youtube, AD, Website, a referring "
-                    + "person's name, or any other free text. Stored exactly as provided — see LeadSource.");
+                    + "person's name, or any other free text. Stored exactly as provided — see LeadSource."),
+
+    /** -> leadClassification.priority. Matched case-insensitively against LeadPriority (the
+     * P1/P2/P3 tier code or its High/Medium/Low display label) — see LeadPriority#fromText. */
+    PRIORITY("Priority", false,
+            List.of("priority", "priority tier", "lead priority"),
+            "Optional. P1, P2, or P3 (High/Medium/Low are also accepted). See the Instructions "
+                    + "below for each tier's subcategory list."),
+
+    /** -> leadClassification.prioritySubCategory. Matched case-insensitively against
+     * LeadPrioritySubCategory and must belong to the tier given in the Priority column —
+     * a subcategory from a different tier fails the row (see LeadImportService). */
+    PRIORITY_SUB_CATEGORY("Priority Subcategory", false,
+            List.of("priority subcategory", "priority sub category", "priority sub-category",
+                    "subcategory", "sub category"),
+            "Optional. Must be one of the Priority column's tier's subcategories (see the list "
+                    + "below) — matched case-insensitively. Requires Priority to also be filled in; "
+                    + "a subcategory belonging to a different tier fails the row."),
+
+    /** -> leadClassification.background. Matched case-insensitively against LeadBackground. */
+    BACKGROUND("Background", false,
+            List.of("background", "lead background", "education background"),
+            "Optional. Educated or Less Educated.");
 
     private final String header;
     private final boolean required;

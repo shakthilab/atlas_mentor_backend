@@ -315,6 +315,18 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
     @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.dayWorkspace.id = :dayWorkspaceId ORDER BY t.createdAt ASC")
     List<Task> findByDayWorkspaceId(@Param("dayWorkspaceId") Long dayWorkspaceId);
 
+    /**
+     * Every still-open overdue task for one employee, regardless of which day's day_workspace
+     * it actually belongs to - the Overdue Task Rollover carry-forward (V23): union this into
+     * "today's" task list (EmployeeTreeService#getDayDetail) so a task keeps appearing day after
+     * day until it's DONE, with due_date/day_workspace_id never touched. OVERDUE and DONE are
+     * mutually exclusive statuses, so filtering on status = OVERDUE already means "not yet DONE" -
+     * no separate not-done check needed. Naturally drops off this list the moment a task leaves
+     * OVERDUE (completed, or otherwise transitioned) - no separate cleanup required.
+     */
+    @Query("SELECT t FROM Task t WHERE t.isDeleted = false AND t.assignedTo.id = :employeeId AND t.status = 'OVERDUE' ORDER BY t.dueDate ASC")
+    List<Task> findCarriedOverOverdueByAssignee(@Param("employeeId") Long employeeId);
+
     /** All (non-deleted) day-workspace-driven tasks for one employee across a date range - used to
      *  compute daily/weekly/monthly completion % (Part B) without relying on the not-reliably-maintained
      *  DayWorkspace.dailyCompletionPct column. */

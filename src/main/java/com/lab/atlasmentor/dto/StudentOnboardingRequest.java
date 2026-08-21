@@ -1,5 +1,9 @@
 package com.lab.atlasmentor.dto;
 
+import com.lab.atlasmentor.enums.LeadBackground;
+import com.lab.atlasmentor.enums.LeadPriority;
+import com.lab.atlasmentor.enums.LeadPrioritySubCategory;
+
 import java.util.List;
 import java.util.Map;
 
@@ -12,6 +16,7 @@ public class StudentOnboardingRequest {
     private String notes;
     private String referralCode;
     private String source;
+    private LeadClassification leadClassification;
 
     // ── Convenience getters used by StudentService ────────────────────────────
 
@@ -28,6 +33,12 @@ public class StudentOnboardingRequest {
     public Long   getTargetUniversityId()   { return destinationDetails != null ? destinationDetails.getUniversityId() : null; }
     public String getCourseName()           { return destinationDetails != null ? destinationDetails.getCourse()       : null; }
     public String getIntakePeriod()         { return destinationDetails != null ? destinationDetails.getIntake()       : null; }
+
+    public LeadPriority getPriority() { return leadClassification != null ? leadClassification.getPriority() : null; }
+    public LeadPrioritySubCategory getPrioritySubCategory() {
+        return leadClassification != null ? leadClassification.getPrioritySubCategory() : null;
+    }
+    public LeadBackground getBackground() { return leadClassification != null ? leadClassification.getBackground() : null; }
 
     // ── Top-level field getters/setters ───────────────────────────────────────
 
@@ -51,6 +62,9 @@ public class StudentOnboardingRequest {
 
     public String getSource() { return source; }
     public void setSource(String source) { this.source = source; }
+
+    public LeadClassification getLeadClassification() { return leadClassification; }
+    public void setLeadClassification(LeadClassification leadClassification) { this.leadClassification = leadClassification; }
 
     // ── Inner classes ─────────────────────────────────────────────────────────
 
@@ -147,5 +161,27 @@ public class StudentOnboardingRequest {
 
         public String getStream() { return stream; }
         public void setStream(String stream) { this.stream = stream; }
+    }
+
+    /**
+     * A lead's priority/background classification, per the priority framework doc. A sibling
+     * of personalInfo/destinationDetails rather than fields crammed into personalInfo — all
+     * three fields here are optional, and prioritySubCategory (when set) must belong to the
+     * tier set in priority; see StudentService for that cross-field check, and
+     * LeadPriority/LeadPrioritySubCategory/LeadBackground for the shared allowed-value lists.
+     */
+    public static class LeadClassification {
+        private LeadPriority priority;
+        private LeadPrioritySubCategory prioritySubCategory;
+        private LeadBackground background;
+
+        public LeadPriority getPriority() { return priority; }
+        public void setPriority(LeadPriority priority) { this.priority = priority; }
+
+        public LeadPrioritySubCategory getPrioritySubCategory() { return prioritySubCategory; }
+        public void setPrioritySubCategory(LeadPrioritySubCategory prioritySubCategory) { this.prioritySubCategory = prioritySubCategory; }
+
+        public LeadBackground getBackground() { return background; }
+        public void setBackground(LeadBackground background) { this.background = background; }
     }
 }

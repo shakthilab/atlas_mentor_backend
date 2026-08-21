@@ -68,5 +68,24 @@ public class DayDetailResponse {
         /** This task's own Day Approval Workflow position - see DayApprovalService#applyStepLabels. */
         private String currentStep;
         private String nextStep;
+
+        // ---- Overdue rollover (V23) ----
+
+        /**
+         * True when this task doesn't actually belong to the requested day's own
+         * day_workspace - it's still OVERDUE/not-DONE from an earlier day and is only being
+         * carried forward into this list until it's completed (see
+         * EmployeeTreeService#getDayDetail). Its due_date/day_workspace_id are untouched -
+         * false for every task that's genuinely this day's own.
+         */
+        private boolean carriedOver;
+        /** This task's real, never-changing due date - distinct from the requested day when carriedOver is true. */
+        private LocalDate dueDate;
+        /** work_date of the day_workspace this task actually belongs to (differs from the requested day only when carriedOver). */
+        private LocalDate originalWorkDate;
+        /** Day number (within its own month) of the day_workspace this task actually belongs to. */
+        private Integer originalDayNumber;
+        /** When this task was actually marked DONE - independent of dueDate. Null until then. See Task#completedAt. */
+        private java.time.LocalDateTime completedAt;
     }
 }

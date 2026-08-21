@@ -4,7 +4,10 @@ import com.lab.atlasmentor.dto.LeadImportRawRow;
 import com.lab.atlasmentor.dto.LeadImportResponse;
 import com.lab.atlasmentor.dto.LeadImportRowResult;
 import com.lab.atlasmentor.dto.StudentOnboardingRequest;
+import com.lab.atlasmentor.enums.LeadBackground;
 import com.lab.atlasmentor.enums.LeadImportField;
+import com.lab.atlasmentor.enums.LeadPriority;
+import com.lab.atlasmentor.enums.LeadPrioritySubCategory;
 import com.lab.atlasmentor.exception.BusinessException;
 import com.lab.atlasmentor.model.Student;
 import com.lab.atlasmentor.repository.CountryRepository;
@@ -29,7 +32,8 @@ import java.util.regex.Pattern;
  * Row creation reuses {@code StudentService#createOrUpdateStudent} — the exact method
  * behind POST /api/students/onboarding — rather than parallel insert logic. The request
  * built per row carries personalInfo, destinationDetails, academicHistory, and source (all
- * 16 columns from {@link LeadImportField}); documents are never part of an import row.
+ * columns from {@link LeadImportField}, including leadClassification); documents are never
+ * part of an import row.
  *
  * One deliberate deviation from a byte-for-byte "just call the shared method for every
  * row": createOrUpdateStudent's own duplicate branch (email-then-phone match) doesn't skip
@@ -213,7 +217,63 @@ public class LeadImportService {
         request.setDestinationDetails(buildDestinationDetails(raw));
         request.setAcademicHistory(buildAcademicHistory(raw));
         request.setSource(isBlank(source) ? null : source.trim());
+        request.setLeadClassification(buildLeadClassification(raw));
         return request;
+    }
+
+    /**
+     * Priority / Priority Subcategory / Background, validated against the same
+     * LeadPriority/LeadPrioritySubCategory/LeadBackground enums the manual create/edit endpoint
+     * and the template generator use — a mismatched or unrecognized value fails the row with a
+     * specific reason rather than being silently dropped or silently corrected, same as the
+     * other required-field validation in this class. Case-insensitive on Priority and Priority
+     * Subcategory; Background accepts "Educated"/"Less Educated" case-insensitively too (all
+     * via each enum's fromText/fromTextAnyTier).
+     */
+    private StudentOnboardingRequest.LeadClassification buildLeadClassification(LeadImportRawRow raw) {
+        String priorityRaw = raw.values().get(LeadImportField.PRIORITY);
+        String subCategoryRaw = raw.values().get(LeadImportField.PRIORITY_SUB_CATEGORY);
+        String backgroundRaw = raw.values().get(LeadImportField.BACKGROUND);
+        if (isBlank(priorityRaw) && isBlank(subCategoryRaw) && isBlank(backgroundRaw)) {
+            return null;
+        }
+
+        StudentOnboardingRequest.LeadClassification classification = new StudentOnboardingRequest.LeadClassification();
+
+        LeadPriority priority = null;
+        if (!isBlank(priorityRaw)) {
+            priority = LeadPriority.fromText(priorityRaw);
+            if (priority == null) {
+                throw new RowValidationException(
+                        "'" + priorityRaw.trim() + "' is not a valid Priority (expected P1, P2, or P3)");
+            }
+            classification.setPriority(priority);
+        }
+
+        if (!isBlank(subCategoryRaw)) {
+            LeadPrioritySubCategory subCategory = LeadPrioritySubCategory.fromTextAnyTier(subCategoryRaw);
+            if (subCategory == null) {
+                throw new RowValidationException(
+                        "'" + subCategoryRaw.trim() + "' is not a recognized Priority Subcategory");
+            }
+            try {
+                LeadPrioritySubCategory.requireBelongsToTier(subCategory, priority);
+            } catch (IllegalArgumentException e) {
+                throw new RowValidationException(e.getMessage());
+            }
+            classification.setPrioritySubCategory(subCategory);
+        }
+
+        if (!isBlank(backgroundRaw)) {
+            LeadBackground background = LeadBackground.fromText(backgroundRaw);
+            if (background == null) {
+                throw new RowValidationException("'" + backgroundRaw.trim()
+                        + "' is not a valid Background (expected Educated or Less Educated)");
+            }
+            classification.setBackground(background);
+        }
+
+        return classification;
     }
 
     /**

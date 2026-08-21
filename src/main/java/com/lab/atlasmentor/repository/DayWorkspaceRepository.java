@@ -37,4 +37,14 @@ public interface DayWorkspaceRepository extends JpaRepository<DayWorkspace, Long
 
     /** Days currently awaiting review at a given stage, across all branches (Admin). */
     List<DayWorkspace> findByApprovalStageOrderByWorkDateAsc(String approvalStage);
+
+    /**
+     * Days currently awaiting review at any of several stages, scoped to one branch - used by
+     * Manager's pending-review queue, which now covers both COMPLETED (Branch Partner review
+     * is optional - Manager may act directly) and PARTNER_REVIEW (Branch Partner already acted).
+     */
+    List<DayWorkspace> findByApprovalStageInAndBranchIdOrderByWorkDateAsc(List<String> approvalStages, Long branchId);
+
+    /** Days currently awaiting review at any of several stages, across all branches (Admin). */
+    List<DayWorkspace> findByApprovalStageInOrderByWorkDateAsc(List<String> approvalStages);
 }
