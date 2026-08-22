@@ -1225,6 +1225,21 @@ public class StudentService {
     }
     
     @Transactional
+    public Student updateStudentSource(Long studentId, StudentSourceUpdateRequest request) {
+        var currentUserDetails = SecurityUtils.getCurrentUser();
+        User currentUser = userRepository.findById(currentUserDetails.getUserId())
+            .orElseThrow(() -> new RuntimeException("Current user not found"));
+
+        Student student = studentRepository.findById(studentId)
+            .orElseThrow(() -> new RuntimeException("Student not found with id: " + studentId));
+
+        student.setSource(request.getSource());
+        student.setUpdatedBy(currentUser.getId());
+
+        return studentRepository.save(student);
+    }
+
+    @Transactional
     public String updateStudentActiveStatus(Long studentId, String status) {
         Student student = studentRepository.findById(studentId)
             .orElseThrow(() -> new BusinessException("Student not found with id: " + studentId));

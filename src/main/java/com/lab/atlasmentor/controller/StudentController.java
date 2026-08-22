@@ -218,6 +218,19 @@ public class StudentController {
         }
     }
 
+    @PutMapping("/{id}/source")
+    public ResponseEntity<ApiResponse<StudentResponse>> updateStudentSource(@PathVariable Long id, @Valid @RequestBody StudentSourceUpdateRequest request) {
+        try {
+            Student student = studentService.updateStudentSource(id, request);
+            StudentResponse studentResponse = StudentResponse.fromEntity(student);
+            ApiResponse<StudentResponse> response = ApiResponse.success("Student source updated successfully", studentResponse);
+            return ResponseEntity.ok(response);
+        } catch (BusinessException e) {
+            ApiResponse<StudentResponse> response = ApiResponse.error(e.getMessage());
+            return ResponseEntity.badRequest().body(response);
+        }
+    }
+
     @PutMapping("/{id}/active-status")
     public ResponseEntity<ApiResponse<String>> updateStudentActiveStatus(
             @PathVariable Long id,
