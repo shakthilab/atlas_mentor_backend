@@ -231,6 +231,19 @@ public class StudentController {
         }
     }
 
+    @PutMapping("/{id}/priority")
+    public ResponseEntity<ApiResponse<StudentResponse>> updateStudentPriority(@PathVariable Long id, @Valid @RequestBody StudentPriorityUpdateRequest request) {
+        try {
+            Student student = studentService.updateStudentPriority(id, request);
+            StudentResponse studentResponse = StudentResponse.fromEntity(student);
+            ApiResponse<StudentResponse> response = ApiResponse.success("Student priority updated successfully", studentResponse);
+            return ResponseEntity.ok(response);
+        } catch (BusinessException e) {
+            ApiResponse<StudentResponse> response = ApiResponse.error(e.getMessage());
+            return ResponseEntity.badRequest().body(response);
+        }
+    }
+
     @PutMapping("/{id}/active-status")
     public ResponseEntity<ApiResponse<String>> updateStudentActiveStatus(
             @PathVariable Long id,

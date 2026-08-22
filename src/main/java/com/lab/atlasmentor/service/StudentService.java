@@ -13,6 +13,7 @@ import com.lab.atlasmentor.enums.SourceType;
 import com.lab.atlasmentor.enums.StudentPaymentStatus;
 import com.lab.atlasmentor.enums.ApprovalStatus;
 import com.lab.atlasmentor.enums.ClientPayoutStatus;
+import com.lab.atlasmentor.enums.LeadPriority;
 import com.lab.atlasmentor.enums.LeadPrioritySubCategory;
 import com.lab.atlasmentor.security.SecurityUtils;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -1234,6 +1235,44 @@ public class StudentService {
             .orElseThrow(() -> new RuntimeException("Student not found with id: " + studentId));
 
         student.setSource(request.getSource());
+        student.setUpdatedBy(currentUser.getId());
+
+        return studentRepository.save(student);
+    }
+
+    /**
+     * Priority and prioritySubCategory can each be changed independently or together — a field
+     * left null in the request keeps the student's current value. Whichever priority/subCategory
+     * ends up in effect (submitted or existing) is re-validated with the same shared tier check
+     * the create/edit path uses (see {@link #validateLeadClassification}), so e.g. moving
+     * priority to P1 while leaving a P2-only prioritySubCategory in place is rejected rather
+     * than silently stored.
+     */
+    @Transactional
+    public Student updateStudentPriority(Long studentId, StudentPriorityUpdateRequest request) {
+        if (request.getPriority() == null && request.getPrioritySubCategory() == null) {
+            throw new BusinessException("Provide priority and/or prioritySubCategory to update");
+        }
+
+        var currentUserDetails = SecurityUtils.getCurrentUser();
+        User currentUser = userRepository.findById(currentUserDetails.getUserId())
+            .orElseThrow(() -> new RuntimeException("Current user not found"));
+
+        Student student = studentRepository.findById(studentId)
+            .orElseThrow(() -> new RuntimeException("Student not found with id: " + studentId));
+
+        LeadPriority effectivePriority = request.getPriority() != null ? request.getPriority() : student.getPriority();
+        LeadPrioritySubCategory effectiveSubCategory = request.getPrioritySubCategory() != null
+                ? request.getPrioritySubCategory() : student.getPrioritySubCategory();
+
+        try {
+            LeadPrioritySubCategory.requireBelongsToTier(effectiveSubCategory, effectivePriority);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(e.getMessage());
+        }
+
+        student.setPriority(effectivePriority);
+        student.setPrioritySubCategory(effectiveSubCategory);
         student.setUpdatedBy(currentUser.getId());
 
         return studentRepository.save(student);
