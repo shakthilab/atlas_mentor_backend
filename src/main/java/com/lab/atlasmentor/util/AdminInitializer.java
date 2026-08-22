@@ -29,13 +29,15 @@ public class AdminInitializer implements CommandLineRunner {
             User admin = new User();
             admin.setFirstName("Jitesh");
             admin.setLastName("Kumar");
+            admin.setEmail("admin@yopmail.com");
+            admin.setPhone("0000000000");
 //            admin.setEmail("Jitesh.gupta@atlasmentor.com");
             admin.setEmail("admin@yopmail.com");
 
             admin.setPassword(passwordEncoder.encode("admin123"));
             admin.setIsVerified(true);
             admin.setPhone("9876543210");
-            
+
             // Get or create ADMIN role
             Role adminRole = roleRepository.findByName("ADMIN")
                 .orElseGet(() -> {
