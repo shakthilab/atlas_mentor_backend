@@ -66,10 +66,12 @@ public class RoleTemplateController {
     public ResponseEntity<ApiResponse<RoleTemplateTaskResponse>> addTaskToDay(
             @PathVariable Long templateId,
             @PathVariable Integer dayNumber,
+            @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) Integer year,
             @Valid @RequestBody RoleTemplateTaskRequest request) {
-        log.info("REST request to add task to template ID: {}, day: {}", templateId, dayNumber);
+        log.info("REST request to add task to template ID: {}, day: {}, month: {}, year: {}", templateId, dayNumber, month, year);
         Long currentUserId = SecurityUtils.getCurrentUserId();
-        RoleTemplateTaskResponse response = roleTemplateService.addTaskToDay(templateId, dayNumber, request, currentUserId);
+        RoleTemplateTaskResponse response = roleTemplateService.addTaskToDay(templateId, dayNumber, month, year, request, currentUserId);
         return ResponseEntity.ok(ApiResponse.success("Task added successfully", response));
     }
 

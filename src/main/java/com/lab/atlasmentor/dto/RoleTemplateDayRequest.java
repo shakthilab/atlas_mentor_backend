@@ -13,5 +13,9 @@ public class RoleTemplateDayRequest {
 
     private Boolean isWeeklyCheckpoint = false;
 
+    // Null = recurring day (applies every month). Set both to scope this day to one calendar month.
+    private Integer month;
+    private Integer year;
+
     private List<RoleTemplateTaskRequest> tasks;
 }

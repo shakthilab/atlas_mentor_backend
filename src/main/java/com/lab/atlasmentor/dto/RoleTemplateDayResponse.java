@@ -8,5 +8,7 @@ public class RoleTemplateDayResponse {
     private Long id;
     private Integer dayNumber;
     private Boolean isWeeklyCheckpoint;
+    private Integer month;
+    private Integer year;
     private List<RoleTemplateTaskResponse> tasks;
 }

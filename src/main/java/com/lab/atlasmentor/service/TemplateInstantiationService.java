@@ -101,10 +101,25 @@ public class TemplateInstantiationService {
         // DayWorkspace rows an employee happens to already have.
         int dayNumber = today.getDayOfMonth();
 
+        // A day can now be scoped to one specific calendar month (month/year both set) or
+        // recurring across every month (month/year both null - the legacy/default shape).
+        // Prefer an exact match for today's actual month/year; fall back to the recurring
+        // row so templates that have never been given a month-specific override keep
+        // instantiating exactly as before.
         List<TemplateDay> templateDays = templateDayRepository.findByRoleTemplateId(template.getId());
+        int todayMonth = today.getMonthValue();
+        int todayYear = today.getYear();
         Optional<TemplateDay> matchingDay = templateDays.stream()
-                .filter(d -> Objects.equals(d.getDayNumber(), dayNumber))
+                .filter(d -> Objects.equals(d.getDayNumber(), dayNumber)
+                        && Objects.equals(d.getMonth(), todayMonth)
+                        && Objects.equals(d.getYear(), todayYear))
                 .findFirst();
+        if (matchingDay.isEmpty()) {
+            matchingDay = templateDays.stream()
+                    .filter(d -> Objects.equals(d.getDayNumber(), dayNumber)
+                            && d.getMonth() == null && d.getYear() == null)
+                    .findFirst();
+        }
 
         // No TemplateDay at all for this day number: the employee has run past the end of
         // the template, so the cycle really is complete. Distinct from - and NOT to be

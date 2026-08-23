@@ -27,6 +27,14 @@ public class TemplateDay extends BaseEntity {
     @Column(name = "is_weekly_checkpoint", nullable = false)
     private Boolean isWeeklyCheckpoint = false;
 
+    // Null month/year = recurring day, applies to this dayNumber every month (legacy behavior).
+    // Both set = scoped day, applies only to that specific calendar month.
+    @Column(name = "month")
+    private Integer month;
+
+    @Column(name = "year")
+    private Integer year;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "role_template_id", nullable = false)
     @JsonIgnoreProperties({"executions", "tasks", "taskLists"})

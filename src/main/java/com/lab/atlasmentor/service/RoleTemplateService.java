@@ -58,6 +58,8 @@ public class RoleTemplateService {
                 TemplateDay day = new TemplateDay();
                 day.setDayNumber(dayReq.getDayNumber());
                 day.setIsWeeklyCheckpoint(dayReq.getIsWeeklyCheckpoint() != null ? dayReq.getIsWeeklyCheckpoint() : false);
+                day.setMonth(dayReq.getMonth());
+                day.setYear(dayReq.getYear());
                 day.setRoleTemplate(template);
                 day.setCreatedBy(currentUserId);
                 day.setUpdatedBy(currentUserId);
@@ -157,7 +159,9 @@ public class RoleTemplateService {
                     syncDay(existingDay, dayReq, currentUserId);
                 } else if (hasContent) {
                     TemplateDay matchedDay = template.getTemplateDays().stream()
-                            .filter(d -> Objects.equals(d.getDayNumber(), dayReq.getDayNumber()))
+                            .filter(d -> Objects.equals(d.getDayNumber(), dayReq.getDayNumber())
+                                    && Objects.equals(d.getMonth(), dayReq.getMonth())
+                                    && Objects.equals(d.getYear(), dayReq.getYear()))
                             .findFirst()
                             .orElse(null);
 
@@ -188,6 +192,8 @@ public class RoleTemplateService {
     private void syncDay(TemplateDay day, RoleTemplateDayRequest dayReq, Long currentUserId) {
         day.setDayNumber(dayReq.getDayNumber());
         day.setIsWeeklyCheckpoint(dayReq.getIsWeeklyCheckpoint() != null ? dayReq.getIsWeeklyCheckpoint() : false);
+        day.setMonth(dayReq.getMonth());
+        day.setYear(dayReq.getYear());
         day.setUpdatedBy(currentUserId);
 
         Map<Long, RoleTemplateTaskRequest> requestTasksMap = new HashMap<>();
@@ -263,7 +269,9 @@ public class RoleTemplateService {
             if (request.getTargetDayNumber() == null) {
                 throw new ValidationException("Target day number is required for SINGLE_DAY mode.");
             }
-            TemplateDay targetDay = findOrCreateDay(template, request.getTargetDayNumber(), currentUserId);
+            // Duplicate within the same month/year scope as the source day, so duplicating
+            // inside "August" never leaks a copy into another month's day of the same number.
+            TemplateDay targetDay = findOrCreateDay(template, request.getTargetDayNumber(), sourceDay.getMonth(), sourceDay.getYear(), currentUserId);
             duplicateTasksToDay(sourceDay, targetDay, currentUserId);
         } else if (request.getMode().equalsIgnoreCase("RANGE")) {
             if (request.getRangeLength() == null || request.getRangeLength() <= 0) {
@@ -272,7 +280,7 @@ public class RoleTemplateService {
             int startDayNumber = sourceDay.getDayNumber();
             for (int i = 1; i <= request.getRangeLength(); i++) {
                 int targetDayNumber = startDayNumber + i;
-                TemplateDay targetDay = findOrCreateDay(template, targetDayNumber, currentUserId);
+                TemplateDay targetDay = findOrCreateDay(template, targetDayNumber, sourceDay.getMonth(), sourceDay.getYear(), currentUserId);
                 duplicateTasksToDay(sourceDay, targetDay, currentUserId);
             }
         } else {
@@ -323,13 +331,17 @@ public class RoleTemplateService {
         List<TemplateDay> copiedDays = new ArrayList<>();
         if (source.getTemplateDays() != null) {
             List<TemplateDay> sourceDays = source.getTemplateDays().stream()
-                    .sorted(Comparator.comparing(TemplateDay::getDayNumber))
+                    .sorted(Comparator.comparing(TemplateDay::getDayNumber)
+                            .thenComparing(TemplateDay::getYear, Comparator.nullsFirst(Integer::compareTo))
+                            .thenComparing(TemplateDay::getMonth, Comparator.nullsFirst(Integer::compareTo)))
                     .collect(Collectors.toList());
 
             for (TemplateDay sourceDay : sourceDays) {
                 TemplateDay dayCopy = new TemplateDay();
                 dayCopy.setDayNumber(sourceDay.getDayNumber());
                 dayCopy.setIsWeeklyCheckpoint(sourceDay.getIsWeeklyCheckpoint());
+                dayCopy.setMonth(sourceDay.getMonth());
+                dayCopy.setYear(sourceDay.getYear());
                 dayCopy.setRoleTemplate(copy);
                 dayCopy.setCreatedBy(currentUserId);
                 dayCopy.setUpdatedBy(currentUserId);
@@ -494,9 +506,21 @@ public class RoleTemplateService {
         taskBundleRepository.delete(template);
     }
 
-    private TemplateDay findOrCreateDay(TaskBundle template, int dayNumber, Long currentUserId) {
+    /**
+     * Resolves the TemplateDay for a given dayNumber, optionally scoped to one calendar
+     * month. When month/year are supplied, an exact (dayNumber, month, year) match is
+     * preferred; if none exists yet, one is created rather than falling back to the
+     * recurring row - this is what makes edits made while viewing a specific month (e.g.
+     * "August 2026, Day 22") independent of every other month's Day 22 instead of silently
+     * mutating the shared recurring day.
+     * When month/year are both null, resolves (and creates, if missing) the recurring row
+     * that applies to this dayNumber in every month - the legacy/default behavior.
+     */
+    private TemplateDay findOrCreateDay(TaskBundle template, int dayNumber, Integer month, Integer year, Long currentUserId) {
         Optional<TemplateDay> existing = template.getTemplateDays().stream()
-                .filter(d -> d.getDayNumber() == dayNumber)
+                .filter(d -> d.getDayNumber() == dayNumber
+                        && Objects.equals(d.getMonth(), month)
+                        && Objects.equals(d.getYear(), year))
                 .findFirst();
 
         if (existing.isPresent()) {
@@ -506,6 +530,8 @@ public class RoleTemplateService {
         TemplateDay newDay = new TemplateDay();
         newDay.setDayNumber(dayNumber);
         newDay.setIsWeeklyCheckpoint(false); // default to false, can be updated later
+        newDay.setMonth(month);
+        newDay.setYear(year);
         newDay.setRoleTemplate(template);
         newDay.setCreatedBy(currentUserId);
         newDay.setUpdatedBy(currentUserId);
@@ -570,6 +596,8 @@ public class RoleTemplateService {
                         dayRes.setId(day.getId());
                         dayRes.setDayNumber(day.getDayNumber());
                         dayRes.setIsWeeklyCheckpoint(day.getIsWeeklyCheckpoint());
+                        dayRes.setMonth(day.getMonth());
+                        dayRes.setYear(day.getYear());
 
                         if (day.getTemplateTasks() != null) {
                             List<RoleTemplateTaskResponse> taskResponses = day.getTemplateTasks().stream()
@@ -582,7 +610,9 @@ public class RoleTemplateService {
                         }
                         return dayRes;
                     })
-                    .sorted(Comparator.comparing(RoleTemplateDayResponse::getDayNumber))
+                    .sorted(Comparator.comparing(RoleTemplateDayResponse::getDayNumber)
+                            .thenComparing(RoleTemplateDayResponse::getYear, Comparator.nullsFirst(Integer::compareTo))
+                            .thenComparing(RoleTemplateDayResponse::getMonth, Comparator.nullsFirst(Integer::compareTo)))
                     .collect(Collectors.toList());
             response.setDays(dayResponses);
         } else {
@@ -612,8 +642,8 @@ public class RoleTemplateService {
      * only then start adding tasks; the day itself is created on first use if needed.
      */
     @Transactional
-    public RoleTemplateTaskResponse addTaskToDay(Long templateId, Integer dayNumber, RoleTemplateTaskRequest request, Long currentUserId) {
-        log.info("Adding task to template ID: {}, day: {}", templateId, dayNumber);
+    public RoleTemplateTaskResponse addTaskToDay(Long templateId, Integer dayNumber, Integer month, Integer year, RoleTemplateTaskRequest request, Long currentUserId) {
+        log.info("Adding task to template ID: {}, day: {}, month: {}, year: {}", templateId, dayNumber, month, year);
         TaskBundle template = taskBundleRepository.findById(templateId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Role template not found with ID: " + templateId
@@ -627,7 +657,7 @@ public class RoleTemplateService {
             template.setTemplateDays(new ArrayList<>());
         }
 
-        TemplateDay day = findOrCreateDay(template, dayNumber, currentUserId);
+        TemplateDay day = findOrCreateDay(template, dayNumber, month, year, currentUserId);
         if (day.getTemplateTasks() == null) {
             day.setTemplateTasks(new ArrayList<>());
         }
@@ -652,7 +682,7 @@ public class RoleTemplateService {
     @Transactional
     public RoleTemplateTaskResponse updateTaskInDay(Long templateId, Integer dayNumber, Long taskId, RoleTemplateTaskRequest request, Long currentUserId) {
         log.info("Updating task ID: {} on template ID: {}, day: {}", taskId, templateId, dayNumber);
-        TemplateTask task = findTaskInDay(templateId, dayNumber, taskId);
+        TemplateTask task = findTaskInDay(templateId, taskId);
 
         task.setTitle(request.getTitle());
         task.setDescription(request.getDescription());
@@ -672,7 +702,7 @@ public class RoleTemplateService {
     @Transactional
     public void deleteTaskFromDay(Long templateId, Integer dayNumber, Long taskId) {
         log.info("Deleting task ID: {} on template ID: {}, day: {}", taskId, templateId, dayNumber);
-        TemplateTask task = findTaskInDay(templateId, dayNumber, taskId);
+        TemplateTask task = findTaskInDay(templateId, taskId);
         // Entity-based delete(task) is a silent no-op here: the task is reachable via
         // TemplateDay.templateTasks (cascade=ALL, orphanRemoval=true), and once it's loaded
         // through that association JpaRepository#delete never emits a DELETE statement.
@@ -680,7 +710,16 @@ public class RoleTemplateService {
         templateTaskRepository.deleteByTaskId(task.getId());
     }
 
-    private TemplateTask findTaskInDay(Long templateId, Integer dayNumber, Long taskId) {
+    /**
+     * Resolves a task purely by its own (globally unique) id, searching every day under the
+     * template rather than requiring the caller to know which day - recurring or
+     * month-scoped - currently holds it. The {@code dayNumber}/month/year on the update and
+     * delete routes are for URL context/logging only; once a template can have more than one
+     * day sharing a dayNumber (one recurring, others scoped to a specific month), matching a
+     * day first and then a task within it would be ambiguous, whereas the task id alone is
+     * never ambiguous.
+     */
+    private TemplateTask findTaskInDay(Long templateId, Long taskId) {
         TaskBundle template = taskBundleRepository.findById(templateId)
                 .orElseThrow(() -> new ResourceNotFoundException("Role template not found with ID: " + templateId));
 
@@ -688,14 +727,10 @@ public class RoleTemplateService {
             throw new ResourceNotFoundException("Role template not found with ID: " + templateId);
         }
 
-        TemplateDay day = (template.getTemplateDays() == null ? List.<TemplateDay>of() : template.getTemplateDays()).stream()
-                .filter(d -> Objects.equals(d.getDayNumber(), dayNumber))
-                .findFirst()
-                .orElseThrow(() -> new ResourceNotFoundException("Day " + dayNumber + " not found on template ID: " + templateId));
-
-        return (day.getTemplateTasks() == null ? List.<TemplateTask>of() : day.getTemplateTasks()).stream()
+        return (template.getTemplateDays() == null ? List.<TemplateDay>of() : template.getTemplateDays()).stream()
+                .flatMap(d -> (d.getTemplateTasks() == null ? List.<TemplateTask>of() : d.getTemplateTasks()).stream())
                 .filter(t -> t.getId().equals(taskId))
                 .findFirst()
-                .orElseThrow(() -> new ResourceNotFoundException("Task not found with ID: " + taskId + " on day " + dayNumber));
+                .orElseThrow(() -> new ResourceNotFoundException("Task not found with ID: " + taskId + " on template ID: " + templateId));
     }
 }
