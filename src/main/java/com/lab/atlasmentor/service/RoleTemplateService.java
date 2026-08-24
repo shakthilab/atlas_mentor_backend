@@ -269,6 +269,17 @@ public class RoleTemplateService {
             if (request.getTargetDayNumber() == null) {
                 throw new ValidationException("Target day number is required for SINGLE_DAY mode.");
             }
+            // Reject duplicating a day onto itself. duplicateTasksToDay() is written to
+            // survive sourceDay == targetDay without corrupting/looping (it snapshots the
+            // source task list before appending), but surviving safely isn't the same as
+            // being correct: it would still append a second copy of every existing task
+            // onto the same day (10 tasks -> 20), which is never a legitimate "duplicate"
+            // outcome - reject it outright instead of silently doubling the day's tasks.
+            // Target day is always resolved into sourceDay's own month/year scope (see
+            // findOrCreateDay call below), so day-number equality alone means "same day".
+            if (Objects.equals(request.getTargetDayNumber(), sourceDay.getDayNumber())) {
+                throw new ValidationException("Cannot duplicate day " + sourceDay.getDayNumber() + " onto itself.");
+            }
             // Duplicate within the same month/year scope as the source day, so duplicating
             // inside "August" never leaks a copy into another month's day of the same number.
             TemplateDay targetDay = findOrCreateDay(template, request.getTargetDayNumber(), sourceDay.getMonth(), sourceDay.getYear(), currentUserId);
@@ -644,6 +655,12 @@ public class RoleTemplateService {
     @Transactional
     public RoleTemplateTaskResponse addTaskToDay(Long templateId, Integer dayNumber, Integer month, Integer year, RoleTemplateTaskRequest request, Long currentUserId) {
         log.info("Adding task to template ID: {}, day: {}, month: {}, year: {}", templateId, dayNumber, month, year);
+        if (request.getTitle() == null || request.getTitle().isBlank()) {
+            // RoleTemplateTaskRequest.title is no longer @NotBlank at the DTO level (bulk mode
+            // via `tasks` has no top-level title), so single-task mode enforces it here instead.
+            throw new ValidationException("Title is required");
+        }
+
         TaskBundle template = taskBundleRepository.findById(templateId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Role template not found with ID: " + templateId
@@ -672,8 +689,111 @@ public class RoleTemplateService {
         task.setUpdatedBy(currentUserId);
         day.getTemplateTasks().add(task);
 
-        taskBundleRepository.save(template);
+        // Persist day and task directly rather than relying on taskBundleRepository.save(template)
+        // to cascade them: template is an already-managed entity here, so that save() goes
+        // through JPA merge() semantics, and merge()'s cascade to a brand-new child can persist
+        // a separate internal copy of it - the generated id lands there, not on this `task`
+        // reference, so the response below would come back with id: null even though the row
+        // was correctly written. Saving day/task directly uses persist() semantics instead
+        // (they're genuinely new/transient objects), which populates the id in place.
+        templateDayRepository.save(day);
+        templateTaskRepository.save(task);
         return convertTaskToResponse(task);
+    }
+
+    /**
+     * Bulk counterpart to {@link #addTaskToDay}: clones request.getTasks() onto every target
+     * day - the URL's own (dayNumber, month, year) plus each entry in request.getTargetDays() -
+     * in a single transaction. All-or-nothing: if any task or day fails validation/persistence,
+     * the whole call rolls back rather than leaving some days fully populated and others short,
+     * which is what happened when the frontend cloned tasks with one POST per task per day.
+     * Target days are de-duplicated on (dayNumber, month, year) so the same day is never
+     * populated twice even if the URL day is also listed in targetDays.
+     */
+    @Transactional
+    public List<RoleTemplateBulkTaskResponse> addTasksToDaysBulk(Long templateId, Integer dayNumber, Integer month, Integer year,
+                                                                   RoleTemplateTaskRequest request, Long currentUserId) {
+        for (RoleTemplateTaskRequest taskReq : request.getTasks()) {
+            if (taskReq.getTitle() == null || taskReq.getTitle().isBlank()) {
+                throw new ValidationException("Title is required for every task in a bulk request.");
+            }
+        }
+
+        TaskBundle template = taskBundleRepository.findById(templateId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Role template not found with ID: " + templateId
+                                + ". Save the template name before adding tasks."));
+
+        if (Boolean.TRUE.equals(template.getIsDeleted())) {
+            throw new ResourceNotFoundException("Role template not found with ID: " + templateId);
+        }
+
+        if (template.getTemplateDays() == null) {
+            template.setTemplateDays(new ArrayList<>());
+        }
+
+        RoleTemplateTaskTargetDayRequest primaryTarget = new RoleTemplateTaskTargetDayRequest();
+        primaryTarget.setDayNumber(dayNumber);
+        primaryTarget.setMonth(month);
+        primaryTarget.setYear(year);
+
+        List<RoleTemplateTaskTargetDayRequest> allTargets = new ArrayList<>();
+        allTargets.add(primaryTarget);
+        if (request.getTargetDays() != null) {
+            allTargets.addAll(request.getTargetDays());
+        }
+
+        Set<String> seenTargets = new LinkedHashSet<>();
+        List<RoleTemplateBulkTaskResponse> results = new ArrayList<>();
+
+        for (RoleTemplateTaskTargetDayRequest target : allTargets) {
+            if (target.getDayNumber() == null) {
+                throw new ValidationException("Day number is required for every target day in a bulk request.");
+            }
+            String dedupeKey = target.getDayNumber() + "|" + target.getMonth() + "|" + target.getYear();
+            if (!seenTargets.add(dedupeKey)) {
+                continue;
+            }
+
+            TemplateDay day = findOrCreateDay(template, target.getDayNumber(), target.getMonth(), target.getYear(), currentUserId);
+            if (day.getTemplateTasks() == null) {
+                day.setTemplateTasks(new ArrayList<>());
+            }
+            // Persisted before its tasks (below) for the same reason as addTaskToDay: a new
+            // day needs a real id before its tasks' FK can resolve, and saving it directly
+            // (persist() semantics, since it's genuinely new here) avoids the merge-cascade id
+            // loss explained there.
+            templateDayRepository.save(day);
+
+            int nextDisplayOrder = day.getTemplateTasks().size();
+            List<RoleTemplateTaskResponse> dayTaskResponses = new ArrayList<>();
+            for (RoleTemplateTaskRequest taskReq : request.getTasks()) {
+                TemplateTask task = new TemplateTask();
+                task.setTitle(taskReq.getTitle());
+                task.setDescription(taskReq.getDescription());
+                task.setPriority(taskReq.getPriority() != null ? taskReq.getPriority() : Priority.MEDIUM);
+                task.setDisplayOrder(taskReq.getDisplayOrder() != null ? taskReq.getDisplayOrder() : nextDisplayOrder++);
+                task.setTemplateDay(day);
+                task.setCreatedBy(currentUserId);
+                task.setUpdatedBy(currentUserId);
+                day.getTemplateTasks().add(task);
+                // See addTaskToDay: save directly rather than relying on the trailing
+                // taskBundleRepository.save(template) cascade, so the id this response reports
+                // is the one actually written, not null.
+                templateTaskRepository.save(task);
+                dayTaskResponses.add(convertTaskToResponse(task));
+            }
+
+            RoleTemplateBulkTaskResponse dayResponse = new RoleTemplateBulkTaskResponse();
+            dayResponse.setDayNumber(day.getDayNumber());
+            dayResponse.setMonth(day.getMonth());
+            dayResponse.setYear(day.getYear());
+            dayResponse.setTasks(dayTaskResponses);
+            results.add(dayResponse);
+        }
+
+        log.info("Bulk-added {} task(s) to {} target day(s) on template ID: {}", request.getTasks().size(), results.size(), templateId);
+        return results;
     }
 
     /**
@@ -682,6 +802,9 @@ public class RoleTemplateService {
     @Transactional
     public RoleTemplateTaskResponse updateTaskInDay(Long templateId, Integer dayNumber, Long taskId, RoleTemplateTaskRequest request, Long currentUserId) {
         log.info("Updating task ID: {} on template ID: {}, day: {}", taskId, templateId, dayNumber);
+        if (request.getTitle() == null || request.getTitle().isBlank()) {
+            throw new ValidationException("Title is required");
+        }
         TemplateTask task = findTaskInDay(templateId, taskId);
 
         task.setTitle(request.getTitle());

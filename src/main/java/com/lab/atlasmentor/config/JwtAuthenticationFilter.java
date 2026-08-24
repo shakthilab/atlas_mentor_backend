@@ -82,13 +82,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 response.getWriter().write("{\"error\": \"Invalid JWT signature\", \"message\": \"Token signature is invalid.\"}");
                 return;
             } catch (io.jsonwebtoken.MalformedJwtException e) {
-                // Malformed token - return 400 error (bad request)
+                // Malformed token is still an authentication failure, same as an invalid
+                // signature or any other unparseable token below - 401, not 400, so a client
+                // can branch on "not authenticated, log in again" the same way for all of them
+                // instead of treating this one shape of bad token as a different kind of error.
                 logger.error("JWT token malformed: " + e.getMessage());
                 String errorMessage = "Token format is invalid.";
                 if (e.getMessage().contains("Compact JWSs must contain exactly 2 period characters")) {
                     errorMessage = "Invalid JWT format. Token must contain exactly 2 period separators.";
                 }
-                response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                 response.setContentType("application/json");
                 response.getWriter().write("{\"error\": \"Malformed JWT token\", \"message\": \"" + errorMessage + "\"}");
                 return;

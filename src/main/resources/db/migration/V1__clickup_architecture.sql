@@ -16,9 +16,18 @@ ALTER TABLE task_bundles
     ADD COLUMN IF NOT EXISTS bundle_branch_id BIGINT,
     ADD COLUMN IF NOT EXISTS display_order INTEGER DEFAULT 0;
 
-ALTER TABLE task_bundles
-    ADD CONSTRAINT IF NOT EXISTS fk_task_bundles_branch
-        FOREIGN KEY (bundle_branch_id) REFERENCES branches(id) ON DELETE SET NULL;
+-- Postgres has no "ADD CONSTRAINT IF NOT EXISTS" (that syntax is only valid for
+-- columns/indexes/tables) - this never actually ran anywhere before it was caught, since
+-- no environment had gotten Flyway to run for real until now. pg_constraint check +
+-- DO block gets the same idempotent effect the header comment always claimed.
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_task_bundles_branch') THEN
+        ALTER TABLE task_bundles
+            ADD CONSTRAINT fk_task_bundles_branch
+                FOREIGN KEY (bundle_branch_id) REFERENCES branches(id) ON DELETE SET NULL;
+    END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_task_bundles_branch_id ON task_bundles(bundle_branch_id);
 CREATE INDEX IF NOT EXISTS idx_task_bundles_display_order ON task_bundles(display_order);
@@ -86,13 +95,24 @@ ALTER TABLE tasks
     ADD COLUMN IF NOT EXISTS estimated_minutes INTEGER,
     ADD COLUMN IF NOT EXISTS actual_minutes    INTEGER;
 
-ALTER TABLE tasks
-    ADD CONSTRAINT IF NOT EXISTS fk_tasks_task_list
-        FOREIGN KEY (task_list_id) REFERENCES task_lists(id) ON DELETE SET NULL;
+-- Same "ADD CONSTRAINT IF NOT EXISTS" fix as fk_task_bundles_branch above.
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_tasks_task_list') THEN
+        ALTER TABLE tasks
+            ADD CONSTRAINT fk_tasks_task_list
+                FOREIGN KEY (task_list_id) REFERENCES task_lists(id) ON DELETE SET NULL;
+    END IF;
+END $$;
 
-ALTER TABLE tasks
-    ADD CONSTRAINT IF NOT EXISTS fk_tasks_parent_task
-        FOREIGN KEY (parent_task_id) REFERENCES tasks(id) ON DELETE SET NULL;
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_tasks_parent_task') THEN
+        ALTER TABLE tasks
+            ADD CONSTRAINT fk_tasks_parent_task
+                FOREIGN KEY (parent_task_id) REFERENCES tasks(id) ON DELETE SET NULL;
+    END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_tasks_task_list_id   ON tasks(task_list_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_parent_task_id ON tasks(parent_task_id);

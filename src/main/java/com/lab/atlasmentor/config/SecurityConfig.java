@@ -28,6 +28,9 @@ public class SecurityConfig {
     @Autowired
     private JwtAuthenticationFilter jwtAuthenticationFilter;
 
+    @Autowired
+    private JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
+
     // ✅ Password encoder
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -54,6 +57,12 @@ public class SecurityConfig {
                 "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"
         ));
 
+        // Response headers beyond the CORS-safelisted set (Content-Type, etc.) are invisible
+        // to browser JS unless explicitly exposed here - Idempotent-Replayed (see
+        // IdempotencyService) needs to be readable so a caller can confirm a request was
+        // deduped rather than re-run.
+        configuration.setExposedHeaders(Arrays.asList("Idempotent-Replayed"));
+
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;
@@ -76,6 +85,11 @@ public class SecurityConfig {
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
+                // Without this, a request with no Authorization header at all falls back to
+                // Spring Security's default entry point - a bare 403 with no body, which
+                // reads as "forbidden" rather than "not authenticated". See
+                // JwtAuthenticationEntryPoint for why that distinction matters here.
+                .exceptionHandling(ex -> ex.authenticationEntryPoint(jwtAuthenticationEntryPoint))
                 .headers(headers -> {
                         headers.contentTypeOptions(Customizer.withDefaults());
                         headers.frameOptions(frame -> frame.deny());

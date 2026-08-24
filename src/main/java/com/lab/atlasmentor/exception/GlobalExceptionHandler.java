@@ -11,6 +11,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.util.stream.Collectors;
 
@@ -79,6 +80,18 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(IllegalArgumentException ex) {
         return badRequest(ex.getMessage());
+    }
+
+    /**
+     * A path/query parameter that couldn't be converted to its declared type - e.g.
+     * GET /api/role-templates/abc, where {id} is a Long. Without this handler it falls
+     * through to the generic RuntimeException handler below and surfaces as a raw 500,
+     * which is the wrong signal for what is really a malformed request from the caller.
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<Void>> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        String expectedType = ex.getRequiredType() != null ? ex.getRequiredType().getSimpleName() : "a different type";
+        return badRequest("Invalid value '" + ex.getValue() + "' for '" + ex.getName() + "' - expected " + expectedType + ".");
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)

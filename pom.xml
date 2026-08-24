@@ -93,6 +93,14 @@
 			<artifactId>postgresql</artifactId>
 			<scope>runtime</scope>
 		</dependency>
+		<!-- Spring Boot 4's autoconfiguration is split per-feature; flyway-core/flyway-database-postgresql
+		     below are just the raw Flyway library - without this module, FlywayAutoConfiguration is
+		     never on the classpath, so Flyway silently never runs at startup (no error, no
+		     flyway_schema_history table - it's simply not wired in). -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-flyway</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>org.flywaydb</groupId>
 			<artifactId>flyway-core</artifactId>
