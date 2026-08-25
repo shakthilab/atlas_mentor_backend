@@ -43,6 +43,9 @@ public class TaskComment extends BaseEntity {
     @JsonIgnoreProperties({"comment", "task"})
     private java.util.List<TaskAttachment> attachments;
 
+    @Column(name = "edited", nullable = false)
+    private boolean edited = false;
+
     public TaskComment() {}
 
     public TaskComment(Task task, String comment, User commentedBy) {

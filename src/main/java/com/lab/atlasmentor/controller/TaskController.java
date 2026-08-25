@@ -240,6 +240,20 @@ public class TaskController {
         return ResponseEntity.ok(response);
     }
 
+    @PutMapping("/{id}/comments/{commentId}")
+    public ResponseEntity<TaskCommentResponse> updateComment(
+            @PathVariable Long id,
+            @PathVariable Long commentId,
+            @RequestHeader("Authorization") String token,
+            @Valid @RequestBody UpdateCommentRequest request) {
+        log.info("Update comment {} request for task ID: {}", commentId, id);
+
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+
+        TaskCommentResponse response = taskService.updateComment(id, commentId, request, currentUserId);
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/{id}/attachments")
     public ResponseEntity<ApiResponse<List<TaskAttachmentResponse>>> getTaskAttachments(@PathVariable Long id) {
         log.info("Get attachments for task ID: {}", id);

@@ -12,6 +12,7 @@ public class TaskCommentResponse {
     private String commentedByName;
     private Long parentCommentId;
     private LocalDateTime createdAt;
+    private boolean edited;
 
     /** Nested replies (task_comments rows whose parent_comment_id = this comment's id). */
     private List<TaskCommentResponse> replies;

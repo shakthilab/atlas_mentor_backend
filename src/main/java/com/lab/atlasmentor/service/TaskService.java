@@ -329,6 +329,42 @@ public class TaskService {
         return convertToTaskCommentResponse(savedComment);
     }
 
+    public TaskCommentResponse updateComment(Long taskId, Long commentId, UpdateCommentRequest request, Long updatedByUserId) {
+        log.info("Updating comment {} on task {}", commentId, taskId);
+
+        TaskComment comment = taskCommentRepository.findById(commentId)
+                .orElseThrow(() -> new RuntimeException("Comment not found"));
+
+        if (comment.getTask() == null || !comment.getTask().getId().equals(taskId)) {
+            throw new BusinessException("Comment does not belong to this task");
+        }
+
+        if (comment.getCommentedBy() == null || !comment.getCommentedBy().getId().equals(updatedByUserId)) {
+            throw new BusinessException("You can only edit your own comments");
+        }
+
+        User updatedBy = userRepository.findById(updatedByUserId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        comment.setComment(request.getComment());
+        comment.setEdited(true);
+        comment.setUpdatedBy(updatedByUserId);
+        TaskComment savedComment = taskCommentRepository.save(comment);
+
+        TaskActivity activity = new TaskActivity(
+                comment.getTask(),
+                TaskAction.COMMENT_EDITED,
+                null,
+                null,
+                updatedBy
+        );
+        activity.setCreatedBy(updatedByUserId);
+        taskActivityRepository.save(activity);
+
+        log.info("Comment {} updated successfully on task {}", commentId, taskId);
+        return convertToTaskCommentResponse(savedComment);
+    }
+
     public TaskResponse updateTaskPriority(Long taskId, Priority newPriority, Long updatedByUserId) {
         log.info("Updating task {} priority to {}", taskId, newPriority);
 
@@ -1153,6 +1189,7 @@ public class TaskService {
         response.setCommentedByName(comment.getCommentedBy() != null ? comment.getCommentedBy().getFullName() : null);
         response.setParentCommentId(comment.getParentComment() != null ? comment.getParentComment().getId() : null);
         response.setCreatedAt(comment.getCreatedAt());
+        response.setEdited(comment.isEdited());
         return response;
     }
 
