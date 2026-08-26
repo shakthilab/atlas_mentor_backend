@@ -9,8 +9,8 @@
 -- every existing row. A row with both set applies only to that exact month, letting the
 -- admin UI (and TemplateInstantiationService) tell a specific month's "Day 22" apart from
 -- every other month's.
-ALTER TABLE template_days ADD COLUMN month INTEGER;
-ALTER TABLE template_days ADD COLUMN year INTEGER;
+ALTER TABLE template_days ADD COLUMN IF NOT EXISTS month INTEGER;
+ALTER TABLE template_days ADD COLUMN IF NOT EXISTS year INTEGER;
 
 -- template_days already carries a plain UNIQUE (role_template_id, day_number) constraint
 -- (uk_template_days_bundle_day) that predates this migration - absent from every migration
@@ -24,10 +24,10 @@ ALTER TABLE template_days ADD COLUMN year INTEGER;
 --   - at most one scoped row per (template, day_number, month, year)
 ALTER TABLE template_days DROP CONSTRAINT IF EXISTS uk_template_days_bundle_day;
 
-CREATE UNIQUE INDEX uk_template_days_recurring
+CREATE UNIQUE INDEX IF NOT EXISTS uk_template_days_recurring
     ON template_days (role_template_id, day_number)
     WHERE month IS NULL AND year IS NULL;
 
-CREATE UNIQUE INDEX uk_template_days_scoped
+CREATE UNIQUE INDEX IF NOT EXISTS uk_template_days_scoped
     ON template_days (role_template_id, day_number, month, year)
     WHERE month IS NOT NULL AND year IS NOT NULL;

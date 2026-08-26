@@ -1,18 +1,26 @@
--- Migrate referral_resources from single owner_id column to many-to-many join table
+-- V5__migrate_referral_resources_to_multi_owner.sql
+--
+-- Referral resources already use the many-to-many ownership model
+-- through referral_resource_owners.
+--
+-- The join table and existing owner mappings are already present,
+-- so no data migration is required here.
 
--- 1. Create the join table
+-- Ensure the join table exists for fresh databases.
 CREATE TABLE IF NOT EXISTS referral_resource_owners (
-    resource_id BIGINT NOT NULL,
-    owner_id    BIGINT NOT NULL,
-    CONSTRAINT referral_resource_owners_pkey PRIMARY KEY (resource_id, owner_id),
-    CONSTRAINT fk_rro_resource FOREIGN KEY (resource_id) REFERENCES referral_resources(id) ON DELETE CASCADE,
-    CONSTRAINT fk_rro_owner    FOREIGN KEY (owner_id)    REFERENCES users(id)              ON DELETE CASCADE
-);
+                                                        resource_id BIGINT NOT NULL,
+                                                        owner_id    BIGINT NOT NULL,
 
--- 2. Carry existing single-owner rows into the join table
-INSERT INTO referral_resource_owners (resource_id, owner_id)
-SELECT id, owner_id FROM referral_resources;
+                                                        CONSTRAINT referral_resource_owners_pkey
+                                                        PRIMARY KEY (resource_id, owner_id),
 
--- 3. Drop FK and column that are no longer needed
-ALTER TABLE referral_resources DROP CONSTRAINT IF EXISTS fk_referral_resources_owner;
-ALTER TABLE referral_resources DROP COLUMN IF EXISTS owner_id;
+    CONSTRAINT fk_rro_resource
+    FOREIGN KEY (resource_id)
+    REFERENCES referral_resources(id)
+    ON DELETE CASCADE,
+
+    CONSTRAINT fk_rro_owner
+    FOREIGN KEY (owner_id)
+    REFERENCES users(id)
+    ON DELETE CASCADE
+    );
