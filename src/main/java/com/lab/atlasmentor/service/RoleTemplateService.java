@@ -679,6 +679,21 @@ public class RoleTemplateService {
             day.setTemplateTasks(new ArrayList<>());
         }
 
+        // Persist the day BEFORE the new task is added to its collection, and before creating
+        // the task at all - same reasoning as addTasksToDaysBulk. day.getTemplateTasks() has
+        // cascade = CascadeType.ALL, and templateDayRepository.save(day) on an *existing* day
+        // (the common case - duplicating a task onto a day that already has one) goes through
+        // JPA merge() (Spring Data picks persist() vs merge() purely by whether the id is
+        // null), not persist(). merge()'s cascade to a brand-new, still-transient child in that
+        // collection creates a *separate internal copy* of it, which also gets inserted - so if
+        // the task were added to the collection first, saving the day here would silently write
+        // a duplicate row for it (the copy's id lands on that copy, never on `task` below, so
+        // this method wouldn't even see it happen). Saving the empty-of-new-tasks day first
+        // keeps that cascade a no-op; the task is then persisted exactly once by its own
+        // save() below (task.getId() is null there, so that one correctly goes through
+        // persist(), not merge()).
+        templateDayRepository.save(day);
+
         TemplateTask task = new TemplateTask();
         task.setTitle(request.getTitle());
         task.setDescription(request.getDescription());
@@ -689,14 +704,6 @@ public class RoleTemplateService {
         task.setUpdatedBy(currentUserId);
         day.getTemplateTasks().add(task);
 
-        // Persist day and task directly rather than relying on taskBundleRepository.save(template)
-        // to cascade them: template is an already-managed entity here, so that save() goes
-        // through JPA merge() semantics, and merge()'s cascade to a brand-new child can persist
-        // a separate internal copy of it - the generated id lands there, not on this `task`
-        // reference, so the response below would come back with id: null even though the row
-        // was correctly written. Saving day/task directly uses persist() semantics instead
-        // (they're genuinely new/transient objects), which populates the id in place.
-        templateDayRepository.save(day);
         templateTaskRepository.save(task);
         return convertTaskToResponse(task);
     }
