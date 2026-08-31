@@ -46,7 +46,7 @@ public class DayWorkspaceService {
      *
      * Submittability rules:
      * <ol>
-     *   <li>Every task on the day must be out of TODO/PENDING, i.e. actually started.
+     *   <li>Every task on the day must be out of TODO, i.e. actually started.
      *       DONE/COMPLETED/IN_PROGRESS/OVERDUE/REFLECT are all fine to submit with - OVERDUE
      *       and REFLECT are deliberately allowed through rather than blocking submission,
      *       since a reviewer may want to see the day as-is rather than have the employee
@@ -74,7 +74,7 @@ public class DayWorkspaceService {
 
         List<Task> tasks = taskRepository.findByDayWorkspaceId(workspace.getId());
         List<Task> notStarted = tasks.stream()
-                .filter(t -> t.getStatus() == TaskStatus.TODO || t.getStatus() == TaskStatus.PENDING)
+                .filter(t -> t.getStatus() == TaskStatus.TODO)
                 .toList();
         if (!notStarted.isEmpty()) {
             throw new BusinessException("Cannot submit day: " + notStarted.size()

@@ -303,7 +303,15 @@ public class TaskController {
     @GetMapping("/statuses")
     public ResponseEntity<ApiResponse<List<Map<String, String>>>> getTaskStatuses() {
         log.info("Get all task statuses");
-        List<Map<String, String>> statuses = Arrays.stream(TaskStatus.values())
+        // Deliberately not every TaskStatus value - this feeds the UI's status filter/picker,
+        // and OVERDUE/REFLECT/VERIFIED/CANCELLED/REVIEW are workflow-driven states the
+        // employee shouldn't be picking directly (see TaskService#validateStatusTransition).
+        // DONE, not COMPLETED - DONE is the value the actual TODO -> IN_PROGRESS -> DONE
+        // production flow ends on; COMPLETED is the legacy manual-flow synonym for it
+        // (see TaskService#validateStatusTransition's javadoc). The API itself still
+        // accepts/returns every status elsewhere; this list is just the selectable subset.
+        List<TaskStatus> selectableStatuses = List.of(TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.DONE);
+        List<Map<String, String>> statuses = selectableStatuses.stream()
                 .map(status -> Map.of(
                         "value", status.name(),
                         "label", formatEnumLabel(status.name())

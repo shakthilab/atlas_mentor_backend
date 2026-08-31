@@ -265,7 +265,7 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
            "GROUP BY u.id, emp_name ORDER BY total_tasks DESC LIMIT 5", nativeQuery = true)
     List<Object[]> findEmployeeTaskLoad(@Param("from") LocalDateTime from);
 
-    @Query(value = "SELECT COUNT(*) FROM tasks WHERE is_deleted = false AND status IN ('PENDING', 'IN_PROGRESS')", nativeQuery = true)
+    @Query(value = "SELECT COUNT(*) FROM tasks WHERE is_deleted = false AND status IN ('TODO', 'IN_PROGRESS')", nativeQuery = true)
     Long countActiveTasks();
 
     @Query(value = "SELECT COUNT(*) FROM tasks WHERE is_deleted = false AND status = 'OVERDUE'", nativeQuery = true)
@@ -303,7 +303,7 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
            "GROUP BY u.id, emp_name ORDER BY total_tasks DESC LIMIT 5", nativeQuery = true)
     List<Object[]> findEmployeeTaskLoadForBranch(@Param("branchId") Long branchId, @Param("from") LocalDateTime from);
 
-    @Query(value = "SELECT COUNT(*) FROM tasks WHERE is_deleted = false AND branch_id = :branchId AND status IN ('PENDING','IN_PROGRESS')", nativeQuery = true)
+    @Query(value = "SELECT COUNT(*) FROM tasks WHERE is_deleted = false AND branch_id = :branchId AND status IN ('TODO','IN_PROGRESS')", nativeQuery = true)
     Long countActiveTasksForBranch(@Param("branchId") Long branchId);
 
     @Query(value = "SELECT COUNT(*) FROM tasks WHERE is_deleted = false AND branch_id = :branchId AND status = 'OVERDUE'", nativeQuery = true)

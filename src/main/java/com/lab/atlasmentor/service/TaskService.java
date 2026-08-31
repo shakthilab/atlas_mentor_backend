@@ -913,7 +913,7 @@ public class TaskService {
         LocalDateTime lastWeekStart = thisWeekStart.minusWeeks(1);
         LocalDateTime lastWeekEnd = thisWeekStart.minusSeconds(1);
 
-        long openTasks = allTasks.stream().filter(t -> t.getStatus() == TaskStatus.PENDING).count();
+        long openTasks = allTasks.stream().filter(t -> t.getStatus() == TaskStatus.TODO).count();
         long inProgress = allTasks.stream().filter(t -> t.getStatus() == TaskStatus.IN_PROGRESS).count();
         long overdueCount = allTasks.stream().filter(t -> t.getStatus() == TaskStatus.OVERDUE).count();
 
@@ -930,12 +930,12 @@ public class TaskService {
                 .count();
 
         long thisWeekOpen = allTasks.stream()
-                .filter(t -> t.getStatus() == TaskStatus.PENDING
+                .filter(t -> t.getStatus() == TaskStatus.TODO
                         && t.getCreatedAt() != null
                         && !t.getCreatedAt().isBefore(thisWeekStart))
                 .count();
         long lastWeekOpen = allTasks.stream()
-                .filter(t -> t.getStatus() == TaskStatus.PENDING
+                .filter(t -> t.getStatus() == TaskStatus.TODO
                         && t.getCreatedAt() != null
                         && !t.getCreatedAt().isBefore(lastWeekStart)
                         && !t.getCreatedAt().isAfter(lastWeekEnd))
@@ -1373,17 +1373,17 @@ public class TaskService {
     /**
      * Validates status transition control with enforced workflow rules.
      *
-     * Valid Status Flow (day-workspace / template-generated tasks - the flow actually
-     * used in production, see TemplateInstantiationService which seeds every task at
-     * TODO): TODO → IN_PROGRESS → DONE, with OVERDUE reachable from TODO/IN_PROGRESS by
+     * Valid Status Flow: every task (manual or template-generated, see Task's
+     * constructors / TemplateInstantiationService) is seeded at TODO and follows
+     * TODO → IN_PROGRESS → DONE, with OVERDUE reachable from TODO/IN_PROGRESS by
      * the overdue scheduler and still resumable by the employee, and REFLECT reachable
      * only via the Day Approval Workflow's SEND_BACK action (DayApprovalService), never
      * directly through this employee-facing endpoint - REFLECT is resumed back to
      * IN_PROGRESS once the employee has addressed the reviewer's comment.
      *
-     * The legacy PENDING → IN_PROGRESS → COMPLETED flow (older/manual tasks created via
-     * TaskService#createTask, which still defaults new tasks to PENDING) is kept working
-     * unchanged alongside it.
+     * (PENDING used to be a separate legacy starting state duplicating TODO's "not
+     * started" meaning with a stricter transition rule of its own; it was retired and
+     * every task now goes through the single TODO-first flow above.)
      *
      * Rules:
      * - Terminal states (DONE/COMPLETED/VERIFIED) cannot be modified by non-admins.
@@ -1430,12 +1430,6 @@ public class TaskService {
         }
 
         switch (oldStatus) {
-            case PENDING:
-                if (newStatus != TaskStatus.IN_PROGRESS) {
-                    throw new InvalidStatusTransitionException("PENDING tasks can only transition to IN_PROGRESS");
-                }
-                break;
-
             case TODO:
                 // Employee can pick the task up, or mark it straight to done without
                 // passing through IN_PROGRESS.

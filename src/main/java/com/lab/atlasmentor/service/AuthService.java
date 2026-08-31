@@ -488,7 +488,7 @@ public class AuthService {
                 : null;
             
             // Get task counts for the employee
-            Long pendingTaskCount = taskRepository.countByAssignedToIdAndStatus(user.getId(), TaskStatus.PENDING);
+            Long pendingTaskCount = taskRepository.countByAssignedToIdAndStatus(user.getId(), TaskStatus.TODO);
             Long inProgressTaskCount = taskRepository.countByAssignedToIdAndStatus(user.getId(), TaskStatus.IN_PROGRESS);
             Long completedTaskCount = taskRepository.countByAssignedToIdAndStatus(user.getId(), TaskStatus.COMPLETED);
             
@@ -649,7 +649,7 @@ public class AuthService {
             : null;
 
         // Get task counts for the employee
-        Long pendingTaskCount = taskRepository.countByAssignedToIdAndStatus(user.getId(), TaskStatus.PENDING);
+        Long pendingTaskCount = taskRepository.countByAssignedToIdAndStatus(user.getId(), TaskStatus.TODO);
         Long inProgressTaskCount = taskRepository.countByAssignedToIdAndStatus(user.getId(), TaskStatus.IN_PROGRESS);
         Long completedTaskCount = taskRepository.countByAssignedToIdAndStatus(user.getId(), TaskStatus.COMPLETED);
 

@@ -63,7 +63,7 @@ public class Task extends BaseEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
-    private TaskStatus status = TaskStatus.PENDING;
+    private TaskStatus status = TaskStatus.TODO;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "priority", nullable = false)
@@ -205,7 +205,7 @@ public class Task extends BaseEntity {
         this.priority = priority != null ? priority : Priority.MEDIUM;
         this.dueDate = dueDate;
         this.branch = branch;
-        this.status = TaskStatus.PENDING;
+        this.status = TaskStatus.TODO;
         this.isDeleted = false;
         this.sourceType = TaskSource.MANUAL;
     }
@@ -219,7 +219,7 @@ public class Task extends BaseEntity {
         this.priority = priority != null ? priority : Priority.MEDIUM;
         this.dueDate = dueDate;
         this.branch = branch;
-        this.status = TaskStatus.PENDING;
+        this.status = TaskStatus.TODO;
         this.isDeleted = false;
         this.taskBundle = taskBundle;
         this.sourceType = sourceType != null ? sourceType : TaskSource.MANUAL;

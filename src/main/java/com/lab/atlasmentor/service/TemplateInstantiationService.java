@@ -179,12 +179,9 @@ public class TemplateInstantiationService {
                     task.setAssignedBy(systemUser);
                     task.setCreatedByUser(systemUser);
                     task.setPriority(templateTask.getPriority());
-                    // NOT TaskStatus.PENDING - tasks_status_check only allows TODO / IN_PROGRESS /
-                    // DONE / REVIEW / OVERDUE / CANCELLED. PENDING (Task's own field default, and
-                    // what TaskGenerationService/OverdueTaskSchedulerService/several queries still
-                    // use elsewhere) is not one of them; discovered here because it broke this
-                    // exact insert the same way the source_type mismatch did. Not fixed project-wide
-                    // in this change - see the accompanying report for that broader, separate bug.
+                    // Every task now starts at TODO - PENDING (which used to duplicate this
+                    // "not started" state under a separate, stricter transition rule) was
+                    // retired; see TaskService#validateStatusTransition's javadoc.
                     task.setStatus(TaskStatus.TODO);
                     task.setTaskBundle(template);
                     task.setSourceType(TaskSource.TEMPLATE_GENERATED);

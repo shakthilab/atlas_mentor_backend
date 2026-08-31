@@ -123,7 +123,7 @@ public class TaskGenerationService {
         task.setAssignedBy(assignedBy);
         task.setCreatedByUser(assignedBy);
         task.setPriority(bundleTask.getPriority());
-        task.setStatus(TaskStatus.PENDING);
+        task.setStatus(TaskStatus.TODO);
         task.setTaskBundle(bundle);
         task.setSourceType(TaskSource.TASK_BUNDLE);
         task.setExecutionDate(executionDate);
