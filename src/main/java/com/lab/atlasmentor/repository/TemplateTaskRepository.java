@@ -21,4 +21,12 @@ public interface TemplateTaskRepository extends JpaRepository<TemplateTask, Long
     @Modifying
     @Query("delete from TemplateTask t where t.id = :id")
     int deleteByTaskId(Long id);
+
+    /**
+     * Bulk delete of every task on one day, for the same reason as {@link #deleteByTaskId}:
+     * entity-based delete is unreliable once tasks are loaded via TemplateDay.templateTasks.
+     */
+    @Modifying
+    @Query("delete from TemplateTask t where t.templateDay.id = :templateDayId")
+    int deleteByTemplateDayId(Long templateDayId);
 }

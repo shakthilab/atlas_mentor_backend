@@ -25,7 +25,7 @@ public class RoleTemplateController {
     private final IdempotencyService idempotencyService;
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<ApiResponse<RoleTemplateResponse>> createTemplate(
             @Valid @RequestBody RoleTemplateRequest request) {
         log.info("REST request to create role template: {}", request.getName());
@@ -35,7 +35,7 @@ public class RoleTemplateController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<ApiResponse<RoleTemplateResponse>> getTemplateById(@PathVariable Long id) {
         log.info("REST request to get role template ID: {}", id);
         RoleTemplateResponse response = roleTemplateService.getTemplateById(id);
@@ -43,7 +43,7 @@ public class RoleTemplateController {
     }
 
     @GetMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<ApiResponse<List<RoleTemplateResponse>>> listTemplates(
             @RequestParam(required = false) Long roleId,
             @RequestParam(required = false) Long branchId,
@@ -54,7 +54,7 @@ public class RoleTemplateController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<ApiResponse<RoleTemplateResponse>> updateTemplate(
             @PathVariable Long id,
             @Valid @RequestBody RoleTemplateRequest request) {
@@ -85,7 +85,7 @@ public class RoleTemplateController {
      * behavior.
      */
     @PostMapping("/{templateId}/days/{dayNumber}/tasks")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<ApiResponse<Object>> addTaskToDay(
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @PathVariable Long templateId,
@@ -136,7 +136,7 @@ public class RoleTemplateController {
     }
 
     @PutMapping("/{templateId}/days/{dayNumber}/tasks/{taskId}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<ApiResponse<RoleTemplateTaskResponse>> updateTaskInDay(
             @PathVariable Long templateId,
             @PathVariable Integer dayNumber,
@@ -149,7 +149,7 @@ public class RoleTemplateController {
     }
 
     @DeleteMapping("/{templateId}/days/{dayNumber}/tasks/{taskId}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<ApiResponse<Void>> deleteTaskFromDay(
             @PathVariable Long templateId,
             @PathVariable Integer dayNumber,
@@ -160,13 +160,31 @@ public class RoleTemplateController {
     }
 
     /**
+     * Deletes every task on a day in one call. month/year work the same as on
+     * {@link #addTaskToDay}: omit both to target the recurring day for this dayNumber, or
+     * pass both to target the day scoped to that specific month. Never creates a day - if
+     * none matches, there's nothing to delete and this is a no-op.
+     */
+    @DeleteMapping("/{templateId}/days/{dayNumber}/tasks")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
+    public ResponseEntity<ApiResponse<Void>> deleteAllTasksFromDay(
+            @PathVariable Long templateId,
+            @PathVariable Integer dayNumber,
+            @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) Integer year) {
+        log.info("REST request to delete all tasks on template ID: {}, day: {}, month: {}, year: {}", templateId, dayNumber, month, year);
+        roleTemplateService.deleteAllTasksFromDay(templateId, dayNumber, month, year);
+        return ResponseEntity.ok(ApiResponse.success("Tasks deleted successfully", null));
+    }
+
+    /**
      * Accepts the same optional {@code Idempotency-Key} header as bulk task cloning above,
      * for the same reason: duplication here is additive too (RANGE mode especially fans out
      * to several days per call), so a retried or resubmitted request would otherwise
      * duplicate every task it touches again.
      */
     @PostMapping("/{id}/days/{dayId}/duplicate")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<ApiResponse<RoleTemplateResponse>> duplicateDayTasks(
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @PathVariable Long id,
@@ -208,7 +226,7 @@ public class RoleTemplateController {
      * a single existing template.
      */
     @PostMapping("/{templateId}/duplicate")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<ApiResponse<RoleTemplateResponse>> duplicateTemplate(
             @PathVariable Long templateId,
             @Valid @RequestBody DuplicateTemplateRequest request) {
@@ -219,7 +237,7 @@ public class RoleTemplateController {
     }
 
     @PatchMapping("/{id}/publish")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<ApiResponse<RoleTemplateResponse>> publishTemplate(@PathVariable Long id) {
         log.info("REST request to publish role template ID: {}", id);
         Long currentUserId = SecurityUtils.getCurrentUserId();
@@ -232,7 +250,7 @@ public class RoleTemplateController {
      * request body's status (ACTIVE or INACTIVE) says which way to flip it.
      */
     @PatchMapping("/{id}/status")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<ApiResponse<RoleTemplateResponse>> updateTemplateStatus(
             @PathVariable Long id,
             @Valid @RequestBody RoleTemplateStatusRequest request) {
@@ -246,7 +264,7 @@ public class RoleTemplateController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
     public ResponseEntity<ApiResponse<Void>> deleteTemplate(@PathVariable Long id) {
         log.info("REST request to delete role template ID: {}", id);
         roleTemplateService.deleteTemplate(id);

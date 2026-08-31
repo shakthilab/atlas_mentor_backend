@@ -498,11 +498,12 @@ public class RoleTemplateService {
      * nothing behind and cannot be undone.
      *
      * Deliberately runs the same "not ACTIVE" guard as the soft delete, since an ACTIVE
-     * template is expected to be deactivated first. If real employee tasks were already
-     * instantiated from this template while it was ACTIVE (task_bundle_id on task rows),
-     * the DB FK blocks the delete and it surfaces as the standard 409 data-conflict
-     * response rather than silently orphaning those rows - deactivate/reassign first in
-     * that case.
+     * template is expected to be deactivated first.
+     *
+     * Real employee tasks already instantiated from this template (task_bundle_id on task
+     * rows) do NOT block the delete (see V34 migration) - those tasks are kept, only their
+     * task_bundle_id link back to this now-deleted template is cleared (DB-level ON DELETE
+     * SET NULL), so their own history (status, activity log, etc.) is unaffected.
      */
     @Transactional
     public void hardDeleteTemplate(Long id) {
@@ -838,6 +839,37 @@ public class RoleTemplateService {
         // through that association JpaRepository#delete never emits a DELETE statement.
         // A direct bulk delete sidesteps that and reliably removes the row.
         templateTaskRepository.deleteByTaskId(task.getId());
+    }
+
+    /**
+     * Deletes every task on a day in one call, instead of requiring the caller to delete
+     * tasks one at a time via {@link #deleteTaskFromDay}. Resolves the day the same way
+     * {@link #findOrCreateDay} matches it - dayNumber plus optional month/year - but never
+     * creates one: if no day matches, there's nothing to delete and this is a no-op.
+     */
+    @Transactional
+    public void deleteAllTasksFromDay(Long templateId, Integer dayNumber, Integer month, Integer year) {
+        log.info("Deleting all tasks on template ID: {}, day: {}, month: {}, year: {}", templateId, dayNumber, month, year);
+        TaskBundle template = taskBundleRepository.findById(templateId)
+                .orElseThrow(() -> new ResourceNotFoundException("Role template not found with ID: " + templateId));
+
+        if (Boolean.TRUE.equals(template.getIsDeleted())) {
+            throw new ResourceNotFoundException("Role template not found with ID: " + templateId);
+        }
+
+        Optional<TemplateDay> day = (template.getTemplateDays() == null ? List.<TemplateDay>of() : template.getTemplateDays()).stream()
+                .filter(d -> d.getDayNumber() == dayNumber
+                        && Objects.equals(d.getMonth(), month)
+                        && Objects.equals(d.getYear(), year))
+                .findFirst();
+
+        if (day.isEmpty()) {
+            log.info("No day found for template ID: {}, day: {}, month: {}, year: {} - nothing to delete", templateId, dayNumber, month, year);
+            return;
+        }
+
+        int deleted = templateTaskRepository.deleteByTemplateDayId(day.get().getId());
+        log.info("Deleted {} task(s) from day ID: {} on template ID: {}", deleted, day.get().getId(), templateId);
     }
 
     /**
