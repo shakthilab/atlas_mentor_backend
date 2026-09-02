@@ -76,6 +76,10 @@ class TemplateInstantiationServiceTest {
         task.setId(1000L + dayNumber);
         task.setTitle("Day " + dayNumber + " task");
         task.setPriority(Priority.MEDIUM);
+        // Snapshot-copy check (V35): every dayWithOneTask() task requires proof, so
+        // createsTodaysCalendarDayRegardlessOfEmployeesPriorWorkspaceCount can assert
+        // it lands on the instantiated Task too.
+        task.setProofRequired(true);
 
         List<TemplateTask> tasks = new ArrayList<>();
         tasks.add(task);
@@ -116,6 +120,8 @@ class TemplateInstantiationServiceTest {
         // Backs uk_tasks_day_workspace_source_template_task - every template-generated
         // task must record which TemplateTask it came from.
         assertEquals(1007L, taskCaptor.getValue().getSourceTemplateTask().getId());
+        // proofRequired (V35) is copied as a one-time snapshot, same as title/priority above.
+        assertTrue(taskCaptor.getValue().getProofRequired());
 
         ArgumentCaptor<DayWorkspace> workspaceCaptor = ArgumentCaptor.forClass(DayWorkspace.class);
         verify(dayWorkspaceRepository).save(workspaceCaptor.capture());

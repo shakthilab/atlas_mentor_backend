@@ -36,6 +36,14 @@ public class TaskAttachment extends BaseEntity {
     @Column(name = "file_size")
     private Long fileSize;
 
+    /**
+     * Size in bytes before server-side compression (V36) - null for attachments
+     * registered via the older register-a-URL endpoint, which never receives the raw
+     * file. Lets us confirm compression is actually helping without guessing.
+     */
+    @Column(name = "original_file_size")
+    private Long originalFileSize;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "uploaded_by")
     @JsonIgnoreProperties({"reportingManager"})

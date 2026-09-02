@@ -194,6 +194,18 @@ public class Task extends BaseEntity {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
+    // ---- Proof requirement (V35) ----
+
+    /**
+     * Whether at least one proof-section attachment (task_attachments row with
+     * comment_id IS NULL) must exist before this task can be marked DONE - see
+     * TaskService#updateTaskStatus. Snapshot copied from
+     * TemplateTask#proofRequired at instantiation time for template-generated tasks
+     * (TemplateInstantiationService); false by default for manually-created tasks.
+     */
+    @Column(name = "proof_required", nullable = false)
+    private Boolean proofRequired = false;
+
     public Task() {}
 
     public Task(String title, String description, User assignedTo, User assignedBy, User createdByUser, Priority priority, LocalDate dueDate, Branch branch) {

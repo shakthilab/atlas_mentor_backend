@@ -256,6 +256,7 @@ public class EmployeeTreeService {
         summary.setTitle(task.getTitle());
         summary.setPriority(task.getPriority());
         summary.setStatus(task.getStatus());
+        summary.setProofRequired(Boolean.TRUE.equals(task.getProofRequired()));
         summary.setCurrentStep(task.getCurrentStep());
         summary.setNextStep(task.getNextStep());
         summary.setDueDate(task.getDueDate());

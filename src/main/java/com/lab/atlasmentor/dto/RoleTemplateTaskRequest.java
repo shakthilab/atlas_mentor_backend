@@ -29,6 +29,9 @@ public class RoleTemplateTaskRequest {
 
     private Integer displayOrder;
 
+    /** Whether the employee must attach proof before marking this task DONE. Defaults to false. */
+    private Boolean proofRequired;
+
     /** Bulk mode: one or more tasks to add. Non-empty here switches the whole request to bulk mode. */
     private List<RoleTemplateTaskRequest> tasks;
 

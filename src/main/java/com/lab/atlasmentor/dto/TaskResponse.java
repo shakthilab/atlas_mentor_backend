@@ -32,6 +32,8 @@ public class TaskResponse {
     private String createdByName;
     private Long updatedBy;
     private Boolean isDeleted;
+    /** Whether at least one proof-section attachment is required before this task can be marked DONE (V35). */
+    private Boolean proofRequired;
 
     // Additional fields for better API response
     private Long assignedToId;

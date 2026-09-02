@@ -12,6 +12,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.util.stream.Collectors;
 
@@ -54,6 +55,16 @@ public class GlobalExceptionHandler {
     @ExceptionHandler({InvalidAssignmentException.class, InvalidStatusTransitionException.class, ValidationException.class})
     public ResponseEntity<ApiResponse<Void>> handleDomainValidation(RuntimeException ex) {
         return badRequest(ex.getMessage());
+    }
+
+    /**
+     * Backstop above TaskAttachmentUploadService's own per-category size checks -
+     * trips only if a request exceeds spring.servlet.multipart.max-file-size/
+     * max-request-size (currently 30MB) before our code ever runs.
+     */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMaxUploadSizeExceeded(MaxUploadSizeExceededException ex) {
+        return badRequest("File is too large to upload.");
     }
 
     // ── Rate limiting ────────────────────────────────────────────────────────

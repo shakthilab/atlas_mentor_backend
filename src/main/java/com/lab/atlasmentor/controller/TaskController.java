@@ -5,12 +5,15 @@ import com.lab.atlasmentor.dto.*;
 import com.lab.atlasmentor.enums.TaskStatus;
 import com.lab.atlasmentor.enums.Priority;
 import com.lab.atlasmentor.service.TaskService;
+import com.lab.atlasmentor.service.TaskAttachmentUploadService;
 import com.lab.atlasmentor.security.SecurityUtils;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Arrays;
 import java.util.List;
@@ -28,6 +31,7 @@ import org.springframework.data.domain.Sort;
 public class TaskController {
 
     private final TaskService taskService;
+    private final TaskAttachmentUploadService taskAttachmentUploadService;
 
     // SecurityUtil removed - now using SecurityUtils directly
 
@@ -254,6 +258,19 @@ public class TaskController {
         return ResponseEntity.ok(response);
     }
 
+    @DeleteMapping("/{id}/comments/{commentId}")
+    public ResponseEntity<ApiResponse<Void>> deleteComment(
+            @PathVariable Long id,
+            @PathVariable Long commentId,
+            @RequestHeader("Authorization") String token) {
+        log.info("Delete comment {} request for task ID: {}", commentId, id);
+
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+
+        taskService.deleteComment(id, commentId, currentUserId);
+        return ResponseEntity.ok(ApiResponse.success("Comment deleted successfully", null));
+    }
+
     @GetMapping("/{id}/attachments")
     public ResponseEntity<ApiResponse<List<TaskAttachmentResponse>>> getTaskAttachments(@PathVariable Long id) {
         log.info("Get attachments for task ID: {}", id);
@@ -277,6 +294,26 @@ public class TaskController {
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * The shared upload endpoint for both attachment contexts (see
+     * TaskAttachmentUploadService's javadoc): the proof section calls this with
+     * commentId omitted, the comment section calls it with commentId set to the
+     * comment the file is attached to. Same file, same compression, same R2 upload
+     * either way - the two contexts differ only in what commentId is sent.
+     */
+    @PostMapping("/{id}/attachments/upload")
+    public ResponseEntity<TaskAttachmentResponse> uploadAttachment(
+            @PathVariable Long id,
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "commentId", required = false) Long commentId) {
+        log.info("Upload attachment request for task ID: {}, commentId: {}", id, commentId);
+
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+
+        TaskAttachmentResponse response = taskAttachmentUploadService.uploadAttachment(id, file, commentId, currentUserId);
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/{id}/activity")
     public ResponseEntity<ApiResponse<List<ActivityResponse>>> getTaskActivity(@PathVariable Long id) {
         log.info("Get task activity for ID: {}", id);
@@ -288,16 +325,37 @@ public class TaskController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteTask(
-            @PathVariable Long id,
-            @RequestHeader("Authorization") String token) {
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
+    public ResponseEntity<ApiResponse<Void>> deleteTask(@PathVariable Long id) {
         log.info("Delete task request for ID: {}", id);
 
         // Extract current user using SecurityUtils
         Long currentUserId = SecurityUtils.getCurrentUserId();
 
         taskService.deleteTask(id, currentUserId);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(ApiResponse.success("Task deleted successfully", null));
+    }
+
+    @PostMapping("/bulk-delete")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
+    public ResponseEntity<ApiResponse<BulkDeleteTaskResponse>> bulkDeleteTasks(
+            @Valid @RequestBody BulkDeleteTaskRequest request) {
+        log.info("REST request to bulk delete {} task(s)", request.getTaskIds().size());
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        BulkDeleteTaskResponse response = taskService.deleteTasks(request.getTaskIds(), currentUserId);
+        return ResponseEntity.ok(ApiResponse.success(
+                response.getDeletedCount() + " task(s) deleted successfully", response));
+    }
+
+    @DeleteMapping("/bulk")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'BRANCH_PARTNER', 'ADMINISTRATIVE_ASSISTANT')")
+    public ResponseEntity<ApiResponse<BulkDeleteTaskResponse>> bulkDeleteTasksViaDelete(
+            @Valid @RequestBody BulkDeleteTaskRequest request) {
+        log.info("REST request via DELETE to bulk delete {} task(s)", request.getTaskIds().size());
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        BulkDeleteTaskResponse response = taskService.deleteTasks(request.getTaskIds(), currentUserId);
+        return ResponseEntity.ok(ApiResponse.success(
+                response.getDeletedCount() + " task(s) deleted successfully", response));
     }
 
     @GetMapping("/statuses")

@@ -35,11 +35,11 @@ public class TaskComment extends BaseEntity {
     @JsonIgnoreProperties({"replies", "task"})
     private TaskComment parentComment;
 
-    @OneToMany(mappedBy = "parentComment", fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "parentComment", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonIgnoreProperties({"parentComment", "task"})
     private java.util.List<TaskComment> replies;
 
-    @OneToMany(mappedBy = "comment", fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "comment", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonIgnoreProperties({"comment", "task"})
     private java.util.List<TaskAttachment> attachments;
 

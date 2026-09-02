@@ -72,6 +72,7 @@ public class RoleTemplateService {
                         task.setDescription(taskReq.getDescription());
                         task.setPriority(taskReq.getPriority() != null ? taskReq.getPriority() : Priority.MEDIUM);
                         task.setDisplayOrder(taskReq.getDisplayOrder() != null ? taskReq.getDisplayOrder() : 0);
+                        task.setProofRequired(taskReq.getProofRequired() != null ? taskReq.getProofRequired() : false);
                         task.setTemplateDay(day);
                         task.setCreatedBy(currentUserId);
                         task.setUpdatedBy(currentUserId);
@@ -228,6 +229,7 @@ public class RoleTemplateService {
                     newTask.setDescription(taskReq.getDescription());
                     newTask.setPriority(taskReq.getPriority() != null ? taskReq.getPriority() : Priority.MEDIUM);
                     newTask.setDisplayOrder(taskReq.getDisplayOrder() != null ? taskReq.getDisplayOrder() : 0);
+                    newTask.setProofRequired(taskReq.getProofRequired() != null ? taskReq.getProofRequired() : false);
                     newTask.setTemplateDay(day);
                     newTask.setCreatedBy(currentUserId);
                     newTask.setUpdatedBy(currentUserId);
@@ -243,6 +245,7 @@ public class RoleTemplateService {
                     existingTask.setDescription(taskReq.getDescription());
                     existingTask.setPriority(taskReq.getPriority() != null ? taskReq.getPriority() : Priority.MEDIUM);
                     existingTask.setDisplayOrder(taskReq.getDisplayOrder() != null ? taskReq.getDisplayOrder() : 0);
+                    existingTask.setProofRequired(taskReq.getProofRequired() != null ? taskReq.getProofRequired() : false);
                     existingTask.setUpdatedBy(currentUserId);
                 }
             }
@@ -369,6 +372,7 @@ public class RoleTemplateService {
                         taskCopy.setDescription(sourceTask.getDescription());
                         taskCopy.setPriority(sourceTask.getPriority());
                         taskCopy.setDisplayOrder(sourceTask.getDisplayOrder());
+                        taskCopy.setProofRequired(sourceTask.getProofRequired());
                         taskCopy.setTemplateDay(dayCopy);
                         taskCopy.setCreatedBy(currentUserId);
                         taskCopy.setUpdatedBy(currentUserId);
@@ -571,6 +575,7 @@ public class RoleTemplateService {
                 targetTask.setDescription(srcTask.getDescription());
                 targetTask.setPriority(srcTask.getPriority());
                 targetTask.setDisplayOrder(nextDisplayOrder++);
+                targetTask.setProofRequired(srcTask.getProofRequired());
                 targetTask.setTemplateDay(targetDay);
                 targetTask.setCreatedBy(currentUserId);
                 targetTask.setUpdatedBy(currentUserId);
@@ -641,6 +646,7 @@ public class RoleTemplateService {
         taskRes.setDescription(task.getDescription());
         taskRes.setPriority(task.getPriority());
         taskRes.setDisplayOrder(task.getDisplayOrder());
+        taskRes.setProofRequired(task.getProofRequired());
         return taskRes;
     }
 
@@ -700,6 +706,7 @@ public class RoleTemplateService {
         task.setDescription(request.getDescription());
         task.setPriority(request.getPriority() != null ? request.getPriority() : Priority.MEDIUM);
         task.setDisplayOrder(request.getDisplayOrder() != null ? request.getDisplayOrder() : day.getTemplateTasks().size());
+        task.setProofRequired(request.getProofRequired() != null ? request.getProofRequired() : false);
         task.setTemplateDay(day);
         task.setCreatedBy(currentUserId);
         task.setUpdatedBy(currentUserId);
@@ -781,6 +788,7 @@ public class RoleTemplateService {
                 task.setDescription(taskReq.getDescription());
                 task.setPriority(taskReq.getPriority() != null ? taskReq.getPriority() : Priority.MEDIUM);
                 task.setDisplayOrder(taskReq.getDisplayOrder() != null ? taskReq.getDisplayOrder() : nextDisplayOrder++);
+                task.setProofRequired(taskReq.getProofRequired() != null ? taskReq.getProofRequired() : false);
                 task.setTemplateDay(day);
                 task.setCreatedBy(currentUserId);
                 task.setUpdatedBy(currentUserId);
@@ -821,6 +829,7 @@ public class RoleTemplateService {
         if (request.getDisplayOrder() != null) {
             task.setDisplayOrder(request.getDisplayOrder());
         }
+        task.setProofRequired(request.getProofRequired() != null ? request.getProofRequired() : false);
         task.setUpdatedBy(currentUserId);
 
         templateTaskRepository.save(task);

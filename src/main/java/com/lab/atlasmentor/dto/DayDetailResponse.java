@@ -64,6 +64,8 @@ public class DayDetailResponse {
         private String title;
         private Priority priority;
         private TaskStatus status;
+        /** Whether at least one proof-section attachment is required before this task can be marked DONE (V35). */
+        private Boolean proofRequired;
         private String latestCommentPreview;
         /** This task's own Day Approval Workflow position - see DayApprovalService#applyStepLabels. */
         private String currentStep;

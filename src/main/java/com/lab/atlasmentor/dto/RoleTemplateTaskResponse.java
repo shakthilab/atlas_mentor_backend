@@ -10,4 +10,5 @@ public class RoleTemplateTaskResponse {
     private String description;
     private Priority priority;
     private Integer displayOrder;
+    private Boolean proofRequired;
 }

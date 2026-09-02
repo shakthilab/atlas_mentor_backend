@@ -179,6 +179,9 @@ public class TemplateInstantiationService {
                     task.setAssignedBy(systemUser);
                     task.setCreatedByUser(systemUser);
                     task.setPriority(templateTask.getPriority());
+                    // Snapshot, not a live link (V35) - later edits to the template's
+                    // proofRequired never retroactively affect this already-instantiated task.
+                    task.setProofRequired(templateTask.getProofRequired());
                     // Every task now starts at TODO - PENDING (which used to duplicate this
                     // "not started" state under a separate, stricter transition rule) was
                     // retired; see TaskService#validateStatusTransition's javadoc.

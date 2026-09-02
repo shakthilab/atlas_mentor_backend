@@ -10,6 +10,7 @@ import com.lab.atlasmentor.repository.*;
 import com.lab.atlasmentor.security.AccessScopeService;
 import com.lab.atlasmentor.security.SecurityUtils;
 import com.lab.atlasmentor.exception.*;
+import com.lab.atlasmentor.util.AttachmentTypeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
@@ -143,6 +145,18 @@ public class TaskService {
             // current_step/next_step from the day's own approval_stage, same as the
             // approval-workflow path (DayApprovalService#approveResubmittedTasks).
             DayApprovalService.applyStepLabels(task);
+        }
+
+        // Proof requirement (V35): a task marked proofRequired on its Role Template task
+        // (snapshotted at instantiation) needs at least one proof-section attachment -
+        // task_attachments.comment_id IS NULL, i.e. attached directly to the task, not
+        // riding along on a chat comment - before it can be claimed DONE. COMPLETED is
+        // gated the same way since validateStatusTransition allows it as an equivalent
+        // "done" target from every non-terminal status above.
+        boolean targetsDone = newStatus == TaskStatus.DONE || newStatus == TaskStatus.COMPLETED;
+        if (targetsDone && Boolean.TRUE.equals(task.getProofRequired())
+                && !taskAttachmentRepository.existsByTaskIdAndCommentIsNull(taskId)) {
+            throw new BusinessException("This task requires proof — attach a file before marking it Done.");
         }
 
         task.setStatus(newStatus);
@@ -300,7 +314,11 @@ public class TaskService {
         User commentedBy = userRepository.findById(commentedByUserId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        TaskComment comment = new TaskComment(task, request.getComment(), commentedBy);
+        if (request.getComment() == null || request.getComment().trim().isEmpty()) {
+            throw new BusinessException("Comment cannot be empty");
+        }
+        String commentText = request.getComment().trim();
+        TaskComment comment = new TaskComment(task, commentText, commentedBy);
         if (request.getParentCommentId() != null) {
             TaskComment parent = taskCommentRepository.findById(request.getParentCommentId())
                     .orElseThrow(() -> new RuntimeException("Parent comment not found"));
@@ -332,6 +350,10 @@ public class TaskService {
     public TaskCommentResponse updateComment(Long taskId, Long commentId, UpdateCommentRequest request, Long updatedByUserId) {
         log.info("Updating comment {} on task {}", commentId, taskId);
 
+        if (request.getComment() == null || request.getComment().trim().isEmpty()) {
+            throw new BusinessException("Comment cannot be empty");
+        }
+
         TaskComment comment = taskCommentRepository.findById(commentId)
                 .orElseThrow(() -> new RuntimeException("Comment not found"));
 
@@ -346,7 +368,7 @@ public class TaskService {
         User updatedBy = userRepository.findById(updatedByUserId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        comment.setComment(request.getComment());
+        comment.setComment(request.getComment().trim());
         comment.setEdited(true);
         comment.setUpdatedBy(updatedByUserId);
         TaskComment savedComment = taskCommentRepository.save(comment);
@@ -363,6 +385,35 @@ public class TaskService {
 
         log.info("Comment {} updated successfully on task {}", commentId, taskId);
         return convertToTaskCommentResponse(savedComment);
+    }
+
+    @Transactional
+    public void deleteComment(Long taskId, Long commentId, Long requestedByUserId) {
+        log.info("Deleting comment {} on task {}", commentId, taskId);
+
+        TaskComment comment = taskCommentRepository.findById(commentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Comment not found with ID: " + commentId));
+
+        if (comment.getTask() == null || !comment.getTask().getId().equals(taskId)) {
+            throw new BusinessException("Comment does not belong to this task");
+        }
+
+        User requestedBy = userRepository.findById(requestedByUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + requestedByUserId));
+
+        boolean isAuthor = comment.getCommentedBy() != null && comment.getCommentedBy().getId().equals(requestedByUserId);
+        boolean isAdmin = requestedBy.getRole() != null && "ADMIN".equalsIgnoreCase(requestedBy.getRole().getName());
+
+        if (!isAuthor && !isAdmin) {
+            throw new BusinessException("You can only delete your own comments");
+        }
+
+        taskCommentRepository.delete(comment);
+        log.info("Comment {} deleted from task {}", commentId, taskId);
+    }
+
+    public void deleteEmptyComment(Long taskId, Long commentId, Long requestedByUserId) {
+        deleteComment(taskId, commentId, requestedByUserId);
     }
 
     public TaskResponse updateTaskPriority(Long taskId, Priority newPriority, Long updatedByUserId) {
@@ -464,14 +515,15 @@ public class TaskService {
         return convertToTaskResponse(savedTask);
     }
 
+    @Transactional
     public void deleteTask(Long taskId, Long deletedByUserId) {
         log.info("Soft deleting task {}", taskId);
 
         Task task = taskRepository.findActiveTaskById(taskId)
-                .orElseThrow(() -> new RuntimeException("Task not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Task not found with ID: " + taskId));
 
         User deletedBy = userRepository.findById(deletedByUserId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + deletedByUserId));
 
         // Validate update permissions based on roles (deleting is a form of updating)
         validateTaskUpdate(deletedBy, task);
@@ -482,6 +534,47 @@ public class TaskService {
         taskRepository.save(task);
 
         log.info("Task {} soft deleted successfully", taskId);
+    }
+
+    @Transactional
+    public BulkDeleteTaskResponse deleteTasks(List<Long> taskIds, Long deletedByUserId) {
+        log.info("Bulk soft deleting tasks: {} by user ID: {}", taskIds, deletedByUserId);
+
+        if (taskIds == null || taskIds.isEmpty()) {
+            throw new ValidationException("Task IDs list cannot be empty");
+        }
+
+        User deletedBy = userRepository.findById(deletedByUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + deletedByUserId));
+
+        List<Long> deletedTaskIds = new ArrayList<>();
+        List<Long> failedTaskIds = new ArrayList<>();
+
+        for (Long taskId : taskIds) {
+            try {
+                Task task = taskRepository.findActiveTaskById(taskId).orElse(null);
+                if (task == null) {
+                    log.warn("Task ID {} not found or already deleted", taskId);
+                    failedTaskIds.add(taskId);
+                    continue;
+                }
+
+                validateTaskUpdate(deletedBy, task);
+
+                task.setIsDeleted(true);
+                task.setUpdatedBy(deletedBy.getId());
+                taskRepository.save(task);
+
+                deletedTaskIds.add(taskId);
+            } catch (Exception e) {
+                log.warn("Failed to delete task ID: {} by user ID {}: {}", taskId, deletedByUserId, e.getMessage());
+                failedTaskIds.add(taskId);
+            }
+        }
+
+        log.info("Bulk delete complete: {} deleted, {} failed out of {} total",
+                deletedTaskIds.size(), failedTaskIds.size(), taskIds.size());
+        return new BulkDeleteTaskResponse(deletedTaskIds.size(), deletedTaskIds, failedTaskIds);
     }
 
     @Transactional(readOnly = true)
@@ -1178,6 +1271,7 @@ public class TaskService {
         response.setReflectResubmittedAt(task.getReflectResubmittedAt());
         response.setCurrentStep(task.getCurrentStep());
         response.setNextStep(task.getNextStep());
+        response.setProofRequired(task.getProofRequired());
         return response;
     }
 
@@ -1201,6 +1295,10 @@ public class TaskService {
         response.setFileUrl(attachment.getFileUrl());
         response.setFileSize(attachment.getFileSize());
         response.setFileSizeFormatted(formatFileSize(attachment.getFileSize()));
+        response.setOriginalFileSize(attachment.getOriginalFileSize());
+        AttachmentTypeUtil.Category category = AttachmentTypeUtil.categorize(attachment.getFileName());
+        response.setFileType(category != null ? category.name() : null);
+        response.setCommentId(attachment.getComment() != null ? attachment.getComment().getId() : null);
         response.setUploadedById(attachment.getUploadedBy() != null ? attachment.getUploadedBy().getId() : null);
         response.setUploadedByName(attachment.getUploadedBy() != null ? attachment.getUploadedBy().getFullName() : null);
         response.setUploadedAt(attachment.getUploadedAt());
@@ -1332,9 +1430,10 @@ public class TaskService {
                 break;
                 
             case "MANAGER":
+            case "BRANCH_PARTNER":
             case "ADMINISTRATIVE_ASSISTANT":
-                // Manager can update tasks WHERE branchId = user.branchId (already validated above)
-                log.info("MANAGER user ID {} updating task {} in branch {}", updatedBy.getId(), task.getId(), userBranchId);
+                // Manager/Branch Partner/Admin Assistant can update tasks WHERE branchId = user.branchId (already validated above)
+                log.info("{} user ID {} updating task {} in branch {}", userRole, updatedBy.getId(), task.getId(), userBranchId);
                 break;
                 
             case "SENIOR_COUNSELLOR":

@@ -39,5 +39,15 @@ public class TemplateTask extends BaseEntity {
     @JsonIgnoreProperties({"templateTasks", "roleTemplate"})
     private TemplateDay templateDay;
 
+    /**
+     * Whether an employee must attach at least one proof-section file (comment_id IS
+     * NULL on task_attachments) before a task instantiated from this template task can
+     * be marked DONE - see TaskService#updateTaskStatus. Copied as a one-time snapshot
+     * onto Task.proofRequired at instantiation (TemplateInstantiationService); editing
+     * this afterwards never retroactively affects already-assigned tasks.
+     */
+    @Column(name = "proof_required", nullable = false)
+    private Boolean proofRequired = false;
+
     public TemplateTask() {}
 }
