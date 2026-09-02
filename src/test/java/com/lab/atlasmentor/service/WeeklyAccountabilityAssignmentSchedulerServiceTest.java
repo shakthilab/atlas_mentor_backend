@@ -18,7 +18,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -51,6 +54,15 @@ class WeeklyAccountabilityAssignmentSchedulerServiceTest {
     private User employee;
 
     /**
+     * "Now" for the no-date-argument triggers (runStartupCatchUp/runPeriodicSafetyNet), which
+     * call {@code LocalDate.now(clock)} internally rather than taking a date parameter - pinned
+     * to the cycle month's first Saturday so those two triggers stay deterministic regardless of
+     * the real calendar date the suite happens to run on (unlike the {@code runAssignment(date,
+     * source)} tests below, which already pass an explicit date and were never affected by this).
+     */
+    private static final LocalDate FIXED_TODAY = LocalDate.of(2026, 8, 1);
+
+    /**
      * The real {@link WeeklyAccountabilityTemplateService}, not a mock - the Saturday-week
      * arithmetic ({@code computeSaturdayWeekNumber}) and week-by-number lookup it provides are
      * plain, deterministic logic worth exercising for real rather than stubbing away.
@@ -59,8 +71,9 @@ class WeeklyAccountabilityAssignmentSchedulerServiceTest {
     void setUp() {
         weeklyAccountabilityTemplateService = new WeeklyAccountabilityTemplateService(
                 templateRepository, null, null, assignmentRepository);
+        Clock fixedClock = Clock.fixed(FIXED_TODAY.atStartOfDay(ZoneId.systemDefault()).toInstant(), ZoneId.systemDefault());
         scheduler = new WeeklyAccountabilityAssignmentSchedulerService(
-                templateRepository, userRepository, weeklyAccountabilityTemplateService, assignmentRepository);
+                templateRepository, userRepository, weeklyAccountabilityTemplateService, assignmentRepository, fixedClock);
 
         Role role = new Role();
         role.setId(7L);
@@ -136,7 +149,7 @@ class WeeklyAccountabilityAssignmentSchedulerServiceTest {
         when(templateRepository.findByStatus(BundleStatus.ACTIVE)).thenReturn(List.of(template));
         WeeklyAccountabilityAssignment existing = new WeeklyAccountabilityAssignment();
         existing.setTemplate(template);
-        existing.setWeekNumber(weeklyAccountabilityTemplateService.computeSaturdayWeekNumber(template.getCycleMonth(), LocalDate.now()));
+        existing.setWeekNumber(weeklyAccountabilityTemplateService.computeSaturdayWeekNumber(template.getCycleMonth(), FIXED_TODAY));
         when(assignmentRepository.findByTemplate_Id(11L)).thenReturn(Optional.of(existing));
         when(userRepository.findByRoleIdAndStatus(7L, UserStatus.ACTIVE)).thenReturn(List.of(employee));
 

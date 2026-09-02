@@ -17,6 +17,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -75,24 +76,25 @@ public class WeeklyAccountabilityAssignmentSchedulerService {
     private final UserRepository userRepository;
     private final WeeklyAccountabilityTemplateService weeklyAccountabilityTemplateService;
     private final WeeklyAccountabilityAssignmentRepository assignmentRepository;
+    private final Clock clock;
 
     @Scheduled(cron = "0 0 0 * * SAT")
     @Transactional
     public void runSaturdayAssignment() {
-        runAssignment(LocalDate.now(), "cron");
+        runAssignment(LocalDate.now(clock), "cron");
     }
 
     @EventListener(ApplicationReadyEvent.class)
     @Transactional
     public void runStartupCatchUp() {
         log.info("Running startup catch-up weekly accountability assignment check");
-        runAssignment(LocalDate.now(), "startup-catch-up");
+        runAssignment(LocalDate.now(clock), "startup-catch-up");
     }
 
     @Scheduled(fixedRate = 1_800_000) // every 30 minutes
     @Transactional
     public void runPeriodicSafetyNet() {
-        runAssignment(LocalDate.now(), "periodic-safety-net");
+        runAssignment(LocalDate.now(clock), "periodic-safety-net");
     }
 
     public RunSummary runAssignment(LocalDate today, String triggerSource) {
