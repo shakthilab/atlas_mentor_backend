@@ -273,7 +273,13 @@ public class EmployeeTreeService {
         List<TaskComment> comments = taskCommentRepository.findByTaskIdOrderByCreatedAtDesc(task.getId());
         if (!comments.isEmpty()) {
             String preview = comments.get(0).getComment();
-            summary.setLatestCommentPreview(preview.length() > 140 ? preview.substring(0, 140) + "…" : preview);
+            // A voice-only comment (see AddCommentRequest) has no text - fall back to a
+            // placeholder instead of NPEing on preview.length().
+            if (preview == null || preview.isBlank()) {
+                summary.setLatestCommentPreview("🎤 Voice message");
+            } else {
+                summary.setLatestCommentPreview(preview.length() > 140 ? preview.substring(0, 140) + "…" : preview);
+            }
         }
         return summary;
     }

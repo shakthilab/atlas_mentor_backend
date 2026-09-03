@@ -22,7 +22,9 @@ public class TaskComment extends BaseEntity {
     @JsonIgnoreProperties({"comments", "taskComments"})
     private Task task;
 
-    @Column(name = "comment", nullable = false, columnDefinition = "TEXT")
+    // Nullable: a comment can be a voice note with no typed text - see
+    // V37__allow_voice_only_task_comments.sql and TaskAttachmentUploadService.
+    @Column(name = "comment", columnDefinition = "TEXT")
     private String comment;
 
     @ManyToOne(fetch = FetchType.LAZY)

@@ -39,6 +39,7 @@ public class TaskService {
     private final BranchRepository branchRepository;
     private final TaskDisplayIdService taskDisplayIdService;
     private final AccessScopeService accessScopeService;
+    private final R2StorageService r2StorageService;
 
     public TaskResponse createTask(CreateTaskRequest request, Long createdByUserId) {
         log.info("Creating new task with title: {}", request.getTitle());
@@ -314,10 +315,12 @@ public class TaskService {
         User commentedBy = userRepository.findById(commentedByUserId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        if (request.getComment() == null || request.getComment().trim().isEmpty()) {
-            throw new BusinessException("Comment cannot be empty");
-        }
-        String commentText = request.getComment().trim();
+        // Blank/null is allowed here: it's a voice-only comment, with the recording
+        // attached in a follow-up call to POST /attachments/upload using this
+        // comment's id (see TaskAttachmentUploadService).
+        String commentText = request.getComment() == null || request.getComment().trim().isEmpty()
+                ? null
+                : request.getComment().trim();
         TaskComment comment = new TaskComment(task, commentText, commentedBy);
         if (request.getParentCommentId() != null) {
             TaskComment parent = taskCommentRepository.findById(request.getParentCommentId())
@@ -406,6 +409,23 @@ public class TaskService {
 
         if (!isAuthor && !isAdmin) {
             throw new BusinessException("You can only delete your own comments");
+        }
+
+        // Delete the R2 object(s) backing this comment's attachments (e.g. a voice
+        // recording) before the row goes away - orphanRemoval on TaskComment#attachments
+        // only cleans up the task_attachments rows, not the actual file in the bucket.
+        // Best-effort per file: one bad/missing object shouldn't block deleting the
+        // comment itself.
+        List<TaskAttachment> attachments = comment.getAttachments();
+        if (attachments != null) {
+            for (TaskAttachment attachment : attachments) {
+                try {
+                    r2StorageService.delete(attachment.getFileUrl());
+                } catch (Exception e) {
+                    log.warn("Failed to delete R2 object for attachment {} (comment {}): {}",
+                            attachment.getId(), commentId, e.getMessage());
+                }
+            }
         }
 
         taskCommentRepository.delete(comment);

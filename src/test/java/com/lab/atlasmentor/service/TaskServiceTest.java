@@ -8,6 +8,7 @@ import com.lab.atlasmentor.enums.TaskStatus;
 import com.lab.atlasmentor.exception.BusinessException;
 import com.lab.atlasmentor.model.Role;
 import com.lab.atlasmentor.model.Task;
+import com.lab.atlasmentor.model.TaskAttachment;
 import com.lab.atlasmentor.model.TaskComment;
 import com.lab.atlasmentor.model.User;
 import com.lab.atlasmentor.repository.TaskActivityRepository;
@@ -51,6 +52,8 @@ class TaskServiceTest {
     private UserRepository userRepository;
     @Mock
     private AccessScopeService accessScopeService;
+    @Mock
+    private R2StorageService r2StorageService;
 
     @InjectMocks
     private TaskService taskService;
@@ -122,39 +125,56 @@ class TaskServiceTest {
         verifyNoInteractions(taskAttachmentRepository);
     }
 
-    // ---- Comment validation: empty/blank comments are strictly rejected ----
+    // ---- Comment validation: blank/null text is allowed - it's a voice-only
+    // comment, stored with no text and given a recording via a follow-up
+    // POST /attachments/upload call using the returned commentId. ----
 
     @Test
-    void nullCommentTextIsRejected() {
+    void nullCommentTextIsStoredAsVoiceOnlyComment() {
         AddCommentRequest request = new AddCommentRequest();
         request.setComment(null);
 
-        BusinessException ex = assertThrows(BusinessException.class,
-                () -> taskService.addComment(1L, request, 100L));
-        assertEquals("Comment cannot be empty", ex.getMessage());
-        verify(taskCommentRepository, never()).save(any(TaskComment.class));
+        when(taskCommentRepository.save(any(TaskComment.class))).thenAnswer(inv -> {
+            TaskComment saved = inv.getArgument(0);
+            saved.setId(503L);
+            return saved;
+        });
+
+        TaskCommentResponse response = taskService.addComment(1L, request, 100L);
+
+        assertEquals(null, response.getComment());
     }
 
     @Test
-    void emptyCommentTextIsRejected() {
+    void emptyCommentTextIsStoredAsVoiceOnlyComment() {
         AddCommentRequest request = new AddCommentRequest();
         request.setComment("");
 
-        BusinessException ex = assertThrows(BusinessException.class,
-                () -> taskService.addComment(1L, request, 100L));
-        assertEquals("Comment cannot be empty", ex.getMessage());
-        verify(taskCommentRepository, never()).save(any(TaskComment.class));
+        when(taskCommentRepository.save(any(TaskComment.class))).thenAnswer(inv -> {
+            TaskComment saved = inv.getArgument(0);
+            saved.setId(504L);
+            return saved;
+        });
+
+        TaskCommentResponse response = taskService.addComment(1L, request, 100L);
+
+        assertEquals(null, response.getComment());
     }
 
     @Test
-    void whitespaceOnlyCommentTextIsRejected() {
+    void whitespaceOnlyCommentTextIsStoredAsVoiceOnlyComment() {
         AddCommentRequest request = new AddCommentRequest();
         request.setComment("   ");
 
-        BusinessException ex = assertThrows(BusinessException.class,
-                () -> taskService.addComment(1L, request, 100L));
-        assertEquals("Comment cannot be empty", ex.getMessage());
-        verify(taskCommentRepository, never()).save(any(TaskComment.class));
+        when(taskCommentRepository.save(any(TaskComment.class))).thenAnswer(inv -> {
+            TaskComment saved = inv.getArgument(0);
+            saved.setId(505L);
+            return saved;
+        });
+
+        TaskCommentResponse response = taskService.addComment(1L, request, 100L);
+
+        assertEquals(null, response.getComment());
     }
 
     @Test
@@ -194,6 +214,40 @@ class TaskServiceTest {
         when(userRepository.findById(100L)).thenReturn(Optional.of(admin));
 
         taskService.deleteComment(1L, 600L, 100L);
+
+        verify(taskCommentRepository).delete(comment);
+    }
+
+    @Test
+    void deletingCommentAlsoDeletesItsAttachmentsFromR2() {
+        TaskComment comment = new TaskComment(task, null, admin);
+        comment.setId(602L);
+        TaskAttachment voiceNote = new TaskAttachment();
+        voiceNote.setId(700L);
+        voiceNote.setFileUrl("https://cdn.example.com/tasks/1/abc-note.m4a");
+        comment.setAttachments(java.util.List.of(voiceNote));
+        when(taskCommentRepository.findById(602L)).thenReturn(Optional.of(comment));
+        when(userRepository.findById(100L)).thenReturn(Optional.of(admin));
+
+        taskService.deleteComment(1L, 602L, 100L);
+
+        verify(r2StorageService).delete("https://cdn.example.com/tasks/1/abc-note.m4a");
+        verify(taskCommentRepository).delete(comment);
+    }
+
+    @Test
+    void aFailedR2DeleteDoesNotBlockDeletingTheComment() {
+        TaskComment comment = new TaskComment(task, null, admin);
+        comment.setId(605L);
+        TaskAttachment voiceNote = new TaskAttachment();
+        voiceNote.setId(701L);
+        voiceNote.setFileUrl("https://cdn.example.com/tasks/1/broken-note.m4a");
+        comment.setAttachments(java.util.List.of(voiceNote));
+        when(taskCommentRepository.findById(605L)).thenReturn(Optional.of(comment));
+        when(userRepository.findById(100L)).thenReturn(Optional.of(admin));
+        doThrow(new RuntimeException("R2 unreachable")).when(r2StorageService).delete(anyString());
+
+        taskService.deleteComment(1L, 605L, 100L);
 
         verify(taskCommentRepository).delete(comment);
     }

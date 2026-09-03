@@ -1,13 +1,16 @@
 package com.lab.atlasmentor.dto;
 
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 @Data
 public class AddCommentRequest {
-    @NotBlank(message = "Comment is required")
-    @Size(min = 1, max = 1000, message = "Comment must be between 1 and 1000 characters")
+    /**
+     * Optional - null/blank for a voice-only comment: the client creates the
+     * comment first to get a commentId, then attaches the recording via
+     * POST /api/tasks/{id}/attachments/upload with that commentId.
+     */
+    @Size(max = 1000, message = "Comment must be at most 1000 characters")
     private String comment;
 
     /**

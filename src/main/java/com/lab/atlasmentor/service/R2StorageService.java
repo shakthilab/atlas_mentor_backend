@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 /**
@@ -55,6 +56,45 @@ public class R2StorageService {
                         .build(),
                 RequestBody.fromBytes(content));
         return resolveUrl(key);
+    }
+
+    /**
+     * Deletes the object backing a previously-uploaded {@code file_url} (as returned by
+     * {@link #upload}). Used when an attachment's owning row (comment or task) is
+     * deleted, so the recording/photo/etc. doesn't linger in the bucket forever.
+     *
+     * Best-effort: an attachment registered via the older "just record a URL a client
+     * already uploaded elsewhere" path (see TaskService#addAttachment) may point outside
+     * this bucket entirely, so a URL that doesn't match either of our own key-encoding
+     * schemes is left alone rather than risking deleting the wrong thing - it was never
+     * ours to delete.
+     */
+    public void delete(String fileUrl) {
+        String key = keyFromUrl(fileUrl);
+        if (key == null) {
+            log.warn("Could not resolve an R2 key from file URL '{}' - skipping delete (attachment may live outside this bucket).", fileUrl);
+            return;
+        }
+        log.info("Deleting R2 object at key '{}' from bucket '{}'", key, bucketName);
+        s3ClientProvider.getObject().deleteObject(
+                DeleteObjectRequest.builder()
+                        .bucket(bucketName)
+                        .key(key)
+                        .build());
+    }
+
+    /** Inverse of {@link #resolveUrl} - null if fileUrl doesn't match either scheme it produces. */
+    private String keyFromUrl(String fileUrl) {
+        if (fileUrl == null || fileUrl.isBlank()) {
+            return null;
+        }
+        if (publicBaseUrl != null && !publicBaseUrl.isBlank()) {
+            String base = publicBaseUrl.endsWith("/") ? publicBaseUrl.substring(0, publicBaseUrl.length() - 1) : publicBaseUrl;
+            String prefix = base + "/";
+            return fileUrl.startsWith(prefix) ? fileUrl.substring(prefix.length()) : null;
+        }
+        String rawPrefix = "https://" + bucketName + "." + accountId + ".r2.cloudflarestorage.com/";
+        return fileUrl.startsWith(rawPrefix) ? fileUrl.substring(rawPrefix.length()) : null;
     }
 
     private String resolveUrl(String key) {
